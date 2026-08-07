@@ -1,0 +1,130 @@
+/**
+ * Minimal zh/en copy for the sidebar. The plugin renders outside the slot
+ * system's locale seat, so it reads the browser language directly (the DSH
+ * locale preference and the browser language agree in practice; both default
+ * from navigator.language anyway).
+ */
+
+const zh = {
+  explorer: '资源管理器',
+  git: '源代码管理',
+  terminal: '终端',
+  editor: '编辑器',
+  newTab: '新建标签页',
+  openExplorer: '资源管理器',
+  openGit: 'Git 面板',
+  newTerminal: '新终端',
+  terminalLimit: '终端数量已达上限 (3)',
+  close: '关闭',
+  refresh: '刷新',
+  save: '保存',
+  saved: '已保存',
+  unsaved: '未保存',
+  saveFailed: '保存失败',
+  truncation: '文件过大，仅显示前 512KB',
+  binary: '二进制文件，无法预览',
+  loading: '加载中…',
+  error: '加载失败',
+  retry: '重试',
+  emptyPane: '此分栏为空 — 从资源管理器或 + 菜单打开内容',
+  splitLeft: '向左分栏',
+  splitRight: '向右分栏',
+  splitUp: '向上分栏',
+  splitDown: '向下分栏',
+  notRepo: '当前目录不是 git 仓库',
+  noChanges: '没有变更',
+  stage: '暂存',
+  unstage: '取消暂存',
+  stageAll: '全部暂存',
+  unstageAll: '全部取消暂存',
+  commitPlaceholder: '提交信息 (Ctrl+Enter)',
+  commit: '提交',
+  commitError: '提交失败',
+  branch: '分支',
+  checkoutError: '切换分支失败',
+  history: '历史',
+  changes: '变更',
+  staged: '已暂存',
+  unstaged: '未暂存',
+  produced: '本次产出',
+  producedOpen: '在侧边栏中打开',
+  disconnected: '终端连接断开，重连中…',
+  exited: '终端进程已退出',
+  noSession: '选择一个会话以使用侧边栏',
+  hiddenFiles: '隐藏文件',
+  parent: '上级目录',
+  copied: '已复制',
+  copy: '复制',
+  newFile: '新文件',
+  openEditor: '打开编辑器',
+  gitDetail: '查看变更详情',
+}
+
+const en: Record<keyof typeof zh, string> = {
+  explorer: 'Explorer',
+  git: 'Source Control',
+  terminal: 'Terminal',
+  editor: 'Editor',
+  newTab: 'New tab',
+  openExplorer: 'Explorer',
+  openGit: 'Git panel',
+  newTerminal: 'New terminal',
+  terminalLimit: 'Terminal limit reached (3)',
+  close: 'Close',
+  refresh: 'Refresh',
+  save: 'Save',
+  saved: 'Saved',
+  unsaved: 'Unsaved',
+  saveFailed: 'Save failed',
+  truncation: 'File too large — showing the first 512KB',
+  binary: 'Binary file, preview unavailable',
+  loading: 'Loading…',
+  error: 'Failed to load',
+  retry: 'Retry',
+  emptyPane: 'This pane is empty — open something from the explorer or the + menu',
+  splitLeft: 'Split left',
+  splitRight: 'Split right',
+  splitUp: 'Split up',
+  splitDown: 'Split down',
+  notRepo: 'This directory is not a git repository',
+  noChanges: 'No changes',
+  stage: 'Stage',
+  unstage: 'Unstage',
+  stageAll: 'Stage all',
+  unstageAll: 'Unstage all',
+  commitPlaceholder: 'Commit message (Ctrl+Enter)',
+  commit: 'Commit',
+  commitError: 'Commit failed',
+  branch: 'Branch',
+  checkoutError: 'Branch switch failed',
+  history: 'History',
+  changes: 'Changes',
+  staged: 'Staged',
+  unstaged: 'Unstaged',
+  produced: 'Produced',
+  producedOpen: 'Open in sidebar',
+  disconnected: 'Terminal disconnected, reconnecting…',
+  exited: 'Terminal process exited',
+  noSession: 'Select a conversation to use the sidebar',
+  hiddenFiles: 'Hidden files',
+  parent: 'Parent directory',
+  copied: 'Copied',
+  copy: 'Copy',
+  newFile: 'New file',
+  openEditor: 'Open editor',
+  gitDetail: 'View change details',
+}
+
+/** Translate a copy key in the browser's language (zh → zh, else en). */
+export type CopyKey = keyof typeof zh
+
+export function t(key: CopyKey): string {
+  const lang = typeof navigator !== 'undefined' ? navigator.language : 'en'
+  const dict = lang.toLowerCase().startsWith('zh') ? zh : en
+  return dict[key]
+}
+
+/** Whether the browser language is Chinese (used for selectors). */
+export function isZh(): boolean {
+  return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh')
+}
