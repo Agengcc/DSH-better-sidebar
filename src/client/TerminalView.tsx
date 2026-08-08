@@ -9,16 +9,56 @@
  * attempts, so the banner never spins forever.
  */
 import { useEffect, useRef, useState } from 'react'
-import { Terminal } from 'xterm'
+import { Terminal, type ITheme } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
 import { sidebarStore } from './state.ts'
+import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
 import css from './sidebar.module.css'
 
 /** How many consecutive unreasoned failures before showing the error banner. */
 const FAILURE_LIMIT = 3
+
+/**
+ * Curated ANSI palettes for the terminal. The surface colors (background,
+ * foreground, cursor, selection) ride the theme tokens so the terminal
+ * blends with the panel in both schemes; the 16 ANSI colors are the same
+ * designed palettes the app's code surfaces use (one-dark family for dark,
+ * one-light family for light), read live so a scheme flip re-themes in
+ * place.
+ */
+const ANSI_DARK: Record<string, string> = {
+  black: '#282c34', red: '#e06c75', green: '#98c379', yellow: '#e5c07b',
+  blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#abb2bf',
+  brightBlack: '#5c6370', brightRed: '#e06c75', brightGreen: '#98c379',
+  brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2', brightWhite: '#ffffff',
+}
+
+const ANSI_LIGHT: Record<string, string> = {
+  black: '#383a42', red: '#e45649', green: '#50a14f', yellow: '#c18401',
+  blue: '#0184bc', magenta: '#a626a4', cyan: '#0997b3', white: '#a0a1a7',
+  brightBlack: '#4f525e', brightRed: '#e45649', brightGreen: '#50a14f',
+  brightYellow: '#c18401', brightBlue: '#0184bc', brightMagenta: '#a626a4',
+  brightCyan: '#0997b3', brightWhite: '#fafafa',
+}
+
+/** The xterm theme for the current scheme (surface from tokens, ANSI curated). */
+function xtermTheme(): ITheme {
+  const dark = isDarkScheme()
+  const background = tokenValue('--dsw-alias-bg-base') || (dark ? '#111114' : '#ffffff')
+  const foreground = tokenValue('--dsw-alias-label-primary') || (dark ? '#e6e6e6' : '#1a1a1a')
+  return {
+    background,
+    foreground,
+    cursor: foreground,
+    cursorAccent: background,
+    selectionBackground: dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)',
+    ...(dark ? ANSI_DARK : ANSI_LIGHT),
+  }
+}
 
 export function TerminalView(props: { scope: SessionScope; tabId: string }) {
   const { scope, tabId } = props
@@ -34,15 +74,22 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: '"SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+      fontFamily: tokenValue('--ds-font-family-code') || '"SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
       allowTransparency: true,
       convertEol: false,
       scrollback: 4000,
+      theme: xtermTheme(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
     fit.fit()
+    // Re-theme in place when the app's scheme flips (tokens + palette).
+    const applyTheme = (): void => {
+      term.options.theme = xtermTheme()
+      term.refresh(0, term.rows - 1)
+    }
+    const schemeSub = subscribeColorScheme(applyTheme)
 
     let socket: WebSocket | null = null
     let closed = false
@@ -125,6 +172,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
       closed = true
       window.clearTimeout(retry)
       observer.disconnect()
+      schemeSub()
       inputSub.dispose()
       // The close frame tells the host the owning tab is GONE (immediate
       // quota release). A bare unmount — conversation switch, re-render,

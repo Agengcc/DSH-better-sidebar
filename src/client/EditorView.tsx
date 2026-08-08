@@ -12,10 +12,11 @@ import clsx from 'clsx'
 import { EditorState } from '@codemirror/state'
 import { EditorView as CodeMirrorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { IconCheckOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, mediaUrl, type SessionScope } from './api.ts'
 import { languageForPath } from './lang.ts'
+import { cmSurfaceTheme, CmThemeCompartment } from './cm-themes.ts'
+import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
 
@@ -42,6 +43,12 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<CodeMirrorView | null>(null)
   const savingRef = useRef(false)
+  /** The theme compartment of the current view (reconfigured on scheme flip). */
+  const themeCompRef = useRef<CmThemeCompartment | null>(null)
+  /** The app's resolved color scheme; the editor re-themes in place on flips. */
+  const [dark, setDark] = useState(() => isDarkScheme())
+
+  useEffect(() => subscribeColorScheme(() => { setDark(isDarkScheme()) }), [])
 
   useEffect(() => {
     let cancelled = false
@@ -77,12 +84,16 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
   // Create the CodeMirror editor once the file is loaded. The view owns the
   // document; React only tracks dirty/draft state through the update
   // listener. For markdown the view stays mounted while previewing (hidden),
-  // so unsaved edits survive the preview/edit toggle.
+  // so unsaved edits survive the preview/edit toggle. The theme + syntax
+  // colors live in a compartment so a scheme flip reconfigures only that
+  // part — the document, undo history and scroll position survive.
   useEffect(() => {
     if (load.status !== 'ready' || (load.kind !== 'text' && load.kind !== 'md')) return
     const host = hostRef.current
     if (host === null) return
     const language = languageForPath(path)
+    const themeComp = new CmThemeCompartment()
+    themeCompRef.current = themeComp
     const state = EditorState.create({
       doc: load.content,
       extensions: [
@@ -90,13 +101,9 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
         history(),
         EditorState.tabSize.of(2),
         CodeMirrorView.contentAttributes.of({ spellcheck: 'false' }),
-        CodeMirrorView.theme({
-          '&': { height: '100%', fontSize: '13px', backgroundColor: 'transparent' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: '"SF Mono", Menlo, Consolas, "Liberation Mono", monospace' },
-          '.cm-content': { caretColor: 'var(--dsw-alias-label-primary)' },
-        }),
+        cmSurfaceTheme,
+        themeComp.of(dark),
         ...(language !== null ? [language] : []),
-        oneDark,
         CodeMirrorView.updateListener.of((update) => {
           if (update.docChanged) {
             setDraft(update.state.doc.toString())
@@ -119,8 +126,21 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     return () => {
       view.destroy()
       viewRef.current = null
+      themeCompRef.current = null
     }
+    // The keymap's save() reads live refs; scope/path are stable for a
+    // tab's lifetime, and the dark flip is handled by the reconfigure
+    // effect below (recreating the view here would drop the draft).
   }, [load])
+
+  // Scheme flip: re-theme in place (the compartment holds only the
+  // scheme-dependent extensions; everything else is untouched).
+  useEffect(() => {
+    const view = viewRef.current
+    const themeComp = themeCompRef.current
+    if (view === null || themeComp === null) return
+    view.dispatch({ effects: themeComp.reconfigure(dark) })
+  }, [dark])
 
   // The editor may have been display:none while previewing; re-measure when
   // it becomes visible again (CodeMirror sizes itself on reveal).
