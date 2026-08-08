@@ -2,6 +2,9 @@
 
 DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资源管理器、文件编辑/预览、交互式终端、Git 面板，**按会话（conversation）记忆与隔离**。样式完全复用 `--dsw-*` 主题变量与 `@deepseek-ai/dsh-client-ui-primitives`，观感与 GUI 原生一致。
 
+<img width="411" height="274" alt="image" src="https://github.com/user-attachments/assets/d3914fa3-c3d8-4988-8500-af5a901c3cd9" />
+<img width="257" height="259" alt="image" src="https://github.com/user-attachments/assets/40f511c7-5542-468a-bdee-1572419df8ca" />
+
 ## 功能
 
 ### 文件资源管理器（Explorer）
