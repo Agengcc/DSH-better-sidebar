@@ -2,8 +2,10 @@
  * The interactive terminal: xterm.js over a WebSocket to the host pty.
  * The host replays the session's transcript on connect, then streams live
  * output; input frames are raw text, resize frames are JSON with
- * type:"resize". Disconnects (page refresh, host restart) reconnect with a
- * delay — the pty process survives the socket.
+ * type:"resize". Transient disconnects (page refresh, host restart) reconnect
+ * automatically; a server-side refusal (close code 1011 with a reason, e.g.
+ * a failed pty spawn) stops the loop and shows the reason with a manual
+ * retry, so the banner never spins forever.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from 'xterm'
@@ -16,6 +18,8 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
   const { sessionId, tabId } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
+  const [fatal, setFatal] = useState<string | null>(null)
+  const connectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
@@ -54,19 +58,27 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
       socket = new WebSocket(wsUrl())
       socket.onopen = () => {
         setConnected(true)
+        setFatal(null)
         sendResize()
       }
       socket.onmessage = (event) => {
         if (typeof event.data === 'string') term.write(event.data)
       }
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnected(false)
+        // A server-side refusal carries a close code + reason; retrying it
+        // forever would only spin the banner, so surface it with a retry.
+        if (event.code === 1011 && event.reason !== '') {
+          setFatal(event.reason)
+          return
+        }
         if (!closed) retry = window.setTimeout(connect, 2000)
       }
       socket.onerror = () => {
         socket?.close()
       }
     }
+    connectRef.current = connect
 
     const inputSub = term.onData((data) => {
       if (socket !== null && socket.readyState === WebSocket.OPEN) socket.send(data)
@@ -89,12 +101,25 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
       inputSub.dispose()
       socket?.close()
       term.dispose()
+      connectRef.current = null
     }
   }, [sessionId, tabId])
 
   return (
     <div className={css.terminalWrap}>
-      {!connected && <div className={css.terminalBanner}>{t('disconnected')}</div>}
+      {fatal !== null && (
+        <div className={css.terminalBanner}>
+          {t('terminalError')}: {fatal}
+          <button
+            type="button"
+            className={css.terminalRetry}
+            onClick={() => { setFatal(null); connectRef.current?.() }}
+          >
+            {t('terminalRetry')}
+          </button>
+        </div>
+      )}
+      {fatal === null && !connected && <div className={css.terminalBanner}>{t('disconnected')}</div>}
       <div ref={hostRef} className={css.terminal} />
     </div>
   )

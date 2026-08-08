@@ -64,14 +64,16 @@ function uid(prefix: string): string {
   return `${prefix}:${nextIdCounter}`
 }
 
-/** A fresh default state: open, default width, one explorer tab in one pane. */
-export function makeDefaultState(): SidebarState {
+/** A fresh default state: open, one explorer tab in one pane. `width` is
+ * the caller's preferred panel width (default PANEL_DEFAULT); the store
+ * seeds new sessions with half the viewport. */
+export function makeDefaultState(width = PANEL_DEFAULT): SidebarState {
   const leaf: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [], active: null }
   leaf.tabs = [{ id: uid('tab'), type: 'explorer', title: 'Explorer' }]
   leaf.active = leaf.tabs[0]!.id
   return {
     panelOpen: true,
-    width: PANEL_DEFAULT,
+    width,
     activePane: leaf.id,
     nextTerminal: 1,
     expanded: [],
@@ -315,9 +317,11 @@ export function togglePanel(state: SidebarState): SidebarState {
   return { ...state, panelOpen: !state.panelOpen }
 }
 
-/** Set the panel width (clamped to the contract range). */
+/** Set the panel width (clamped to the contract range; the upper bound is
+ * the viewport so the fullscreen expansion can fill the window). */
 export function setWidth(state: SidebarState, width: number): SidebarState {
-  return { ...state, width: Math.min(PANEL_MAX, Math.max(PANEL_MIN, Math.round(width))) }
+  const max = typeof window !== 'undefined' ? Math.max(PANEL_MIN, window.innerWidth) : PANEL_MAX
+  return { ...state, width: Math.min(max, Math.max(PANEL_MIN, Math.round(width))) }
 }
 
 /** Toggle a directory in the explorer expansion set. */
@@ -368,7 +372,9 @@ function loadState(sessionId: string): SidebarState {
   } catch {
     // Corrupt or unavailable storage: fall through to the default.
   }
-  return makeDefaultState()
+  // New sessions open at half the viewport (VSCode-like default split).
+  const half = typeof window !== 'undefined' ? Math.max(PANEL_MIN, Math.round(window.innerWidth / 2)) : PANEL_DEFAULT
+  return makeDefaultState(half)
 }
 
 /** The session-scoped store: one state per conversation, localStorage-backed. */

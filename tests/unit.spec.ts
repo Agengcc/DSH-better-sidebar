@@ -6,6 +6,7 @@ import {
   resizeSplit, splitPane, toggleExpanded, type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
+import { defaultShell, ensureSpawnHelper } from '../src/pty-manager.ts'
 
 describe('fs-tree', () => {
   it('sorts directories first, then names case-insensitively', () => {
@@ -172,6 +173,37 @@ describe('sidebar state', () => {
     const tabId = leaf.tabs[0]!.id
     const after = activateTab(s, leaf.id, tabId)
     expect((after.splits as { active: string | null }).active).toBe(tabId)
+  })
+})
+
+describe('pty helpers', () => {
+  it('falls back from an empty SHELL to a usable shell', () => {
+    const previous = process.env.SHELL
+    try {
+      process.env.SHELL = ''
+      expect(defaultShell()).toBe('/bin/bash')
+      delete process.env.SHELL
+      expect(defaultShell()).toBe('/bin/bash')
+    } finally {
+      if (previous === undefined) delete process.env.SHELL
+      else process.env.SHELL = previous
+    }
+  })
+
+  it('restores the spawn-helper executable bit idempotently', () => {
+    // On non-Windows the helper must exist and be executable after the fix.
+    if (process.platform === 'win32') return
+    ensureSpawnHelper()
+    ensureSpawnHelper()
+    const { existsSync } = require('node:fs') as typeof import('node:fs')
+    const { dirname, join } = require('node:path') as typeof import('node:path')
+    const { createRequire } = require('node:module') as typeof import('node:module')
+    const entry = createRequire(import.meta.url).resolve('node-pty')
+    const root = dirname(dirname(entry))
+    const helper = join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper')
+    expect(existsSync(helper)).toBe(true)
+    const { statSync } = require('node:fs') as typeof import('node:fs')
+    expect((statSync(helper).mode & 0o111) !== 0).toBe(true)
   })
 })
 

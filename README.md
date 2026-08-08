@@ -61,6 +61,8 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 ## 依赖说明
 
 - `node-pty` / `ws` / `xterm` / `@xterm/addon-fit` / `clsx`：npm 常规依赖（node-pty 使用随包预编译二进制，无源码编译）。
+- pnpm 会剥离 node-pty 预编译 `spawn-helper` 的可执行位（`posix_spawnp failed`）；插件启动时自动恢复（
+  `ensureSpawnHelper`，与 `@deepseek-ai/dsh-pty-local` 的 postinstall 同思路，对 link 安装也生效）。
 - `@deepseek-ai/*` 包仅以 `link:` 指向 `~/.dsh/source/current`（DSH 源码 checkout，构建产物已存在），仅用于类型；运行时只经模块表消费 `dsh-client-ui-primitives`。
 
 ## 安全边界

@@ -19,7 +19,7 @@ import type { Context } from './context-types.ts'
 import { parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
 import { isTrustedApiRequest } from './trust-fence.ts'
 import * as git from './git.ts'
-import { defaultShell, PtyManager } from './pty-manager.ts'
+import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
 /** Plugin identity for cordis.yml rows. */
@@ -194,6 +194,9 @@ function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMetho
  * @param ctx - host plugin context (httpServer, sessions, loader).
  */
 export function apply(ctx: Context): void {
+  // pnpm strips the executable bit from node-pty's prebuilt spawn-helper;
+  // restore it before any terminal can spawn (idempotent).
+  ensureSpawnHelper()
   const trustedHosts = trustedHostsOf(ctx)
   const fence = (req: IncomingMessage): boolean => isTrustedApiRequest(req, trustedHosts)
   const ptyManager = new PtyManager(defaultShell(), TERMINALS_PER_SESSION)

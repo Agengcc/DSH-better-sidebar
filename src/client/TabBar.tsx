@@ -96,6 +96,13 @@ export function TabBar(props: {
               if (payload !== null) onDropTab(payload, tab.id)
             }}
             onClick={() => { onActivate(tab.id) }}
+            onAuxClick={(event) => {
+              // Middle-click closes the tab (and suppresses autoscroll).
+              if (event.button === 1) {
+                event.preventDefault()
+                onClose(tab.id)
+              }
+            }}
           >
             <span className={css.tabTitle}>{tab.title}</span>
             <button

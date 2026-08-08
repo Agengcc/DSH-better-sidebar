@@ -6,11 +6,39 @@
  * connection replays history before live data. Sessions die only when the
  * tab is closed or the plugin tears down.
  */
+import { chmodSync, existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { createRequire } from 'node:module'
 import * as nodePty from 'node-pty'
 import { SidebarError } from './wire.ts'
 
 /** Per-terminal transcript bound (bytes kept for replay). */
 const TRANSCRIPT_LIMIT = 1 << 20
+
+/**
+ * Restore the executable bit pnpm strips from node-pty's prebuilt
+ * spawn-helper (the macOS helper that forks and sets up the pty). Without it
+ * every spawn fails with `posix_spawnp failed`. Idempotent; mirrors
+ * @deepseek-ai/dsh-pty-local's ensure-spawn-helper postinstall, run at
+ * plugin activation so link-installed deployments get the fix too.
+ */
+export function ensureSpawnHelper(): void {
+  if (process.platform === 'win32') return
+  try {
+    const require = createRequire(import.meta.url)
+    const entry = require.resolve('node-pty')
+    const packageRoot = dirname(dirname(entry))
+    const candidates = [
+      join(packageRoot, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
+      join(packageRoot, 'build', 'Release', 'spawn-helper'),
+    ]
+    for (const helper of candidates) {
+      if (existsSync(helper)) chmodSync(helper, 0o755)
+    }
+  } catch {
+    // Resolution or chmod failure: the terminal surfaces its own spawn error.
+  }
+}
 
 /** One live terminal. */
 export interface SidebarPty {
@@ -115,8 +143,9 @@ export class PtyManager {
   }
 }
 
-/** The interactive shell for this platform. */
+/** The interactive shell for this platform (empty SHELL falls back). */
 export function defaultShell(): string {
   if (process.platform === 'win32') return 'powershell.exe'
-  return process.env.SHELL ?? '/bin/bash'
+  const shell = process.env.SHELL
+  return shell !== undefined && shell.trim() !== '' ? shell : '/bin/bash'
 }

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
-import { IconChevronRightOutline14, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
 import {
   allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
@@ -100,6 +100,9 @@ export function Sidebar(props: { ctx: Context }) {
   // Panel width drag (left edge strip).
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
   const [draggingWidth, setDraggingWidth] = useState(false)
+
+  // Whether the panel currently fills the viewport (fullscreen expansion).
+  const fullscreen = state !== undefined && window.innerWidth - state.width < 8
 
   const actions: WorkbenchActions = useMemo(() => ({
     closeTab: (paneId, tabId) => { sidebarStore.reduce(s => closeTab(s, paneId, tabId)) },
@@ -215,6 +218,18 @@ export function Sidebar(props: { ctx: Context }) {
             }}
           />
           <div className={css.panelHeader}>
+            <button
+              type="button"
+              className={css.iconButton}
+              aria-label={fullscreen ? t('restoreFullscreen') : t('expandFullscreen')}
+              title={fullscreen ? t('restoreFullscreen') : t('expandFullscreen')}
+              onClick={() => {
+                const viewport = window.innerWidth
+                sidebarStore.reduce(s => setWidth(s, fullscreen ? Math.round(viewport / 2) : viewport))
+              }}
+            >
+              <IconFullscreenOutline16 />
+            </button>
             <span className={css.panelTitle}>
               {t('explorer')}
               {cwd !== undefined ? ` · ${cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}` : ''}
