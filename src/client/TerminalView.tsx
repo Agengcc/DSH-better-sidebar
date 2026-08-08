@@ -24,6 +24,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
+  const [lastUrl, setLastUrl] = useState<string | null>(null)
   const connectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -48,10 +49,15 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
     let failures = 0
 
     const wsUrl = (): string => {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       const params = new URLSearchParams({ sessionId: scope.sessionId, tab: tabId })
       if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
-      return `${proto}//${location.host}/sidebar/ws/terminal?${params.toString()}`
+      // Same construction the app's own downlink WebSockets use (new URL
+      // over location.origin + protocol swap): whatever the environment
+      // does to the app's websockets applies identically here.
+      const url = new URL('/sidebar/ws/terminal', location.origin)
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+      url.search = params.toString()
+      return url.toString()
     }
 
     const sendResize = (): void => {
@@ -62,7 +68,9 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
 
     const connect = (): void => {
       if (closed) return
-      socket = new WebSocket(wsUrl())
+      const url = wsUrl()
+      setLastUrl(url)
+      socket = new WebSocket(url)
       socket.onopen = () => {
         failures = 0
         setConnected(true)
@@ -86,6 +94,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
         failures += 1
         if (failures >= FAILURE_LIMIT) {
           const detail = event.reason !== '' ? ` (${event.code}: ${event.reason})` : ` (${event.code})`
+          console.error('[dsh-better-sidebar] terminal connection failed:', event.code, event.reason, url)
           setFatal(`${t('terminalConnectFailed')}${detail}`)
           return
         }
@@ -133,6 +142,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
       {fatal !== null && (
         <div className={css.terminalBanner}>
           {t('terminalError')}: {fatal}
+          {lastUrl !== null && <div className={css.terminalBannerUrl}>{lastUrl}</div>}
           <button
             type="button"
             className={css.terminalRetry}
