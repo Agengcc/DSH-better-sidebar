@@ -22,6 +22,8 @@ import {
 import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import type { NewTabOption } from './TabBar.tsx'
 import type { TabDragPayload } from './TabBar.tsx'
+import { tabTypeIcon } from './icons.tsx'
+import { relativeTo } from './paths.ts'
 import { ExplorerView } from './ExplorerView.tsx'
 import { EditorView } from './EditorView.tsx'
 import { TerminalView } from './TerminalView.tsx'
@@ -38,9 +40,10 @@ function TabContent(props: {
   cwd: string | undefined
   expanded: string[]
   onToggleDir: (path: string) => void
+  onReferenceFile: (path: string) => void
   ctx: Context
 }) {
-  const { tab, sessionId, cwd, expanded, onToggleDir, ctx } = props
+  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx } = props
   const scope = { sessionId, cwd }
   switch (tab.type) {
     case 'explorer':
@@ -51,6 +54,7 @@ function TabContent(props: {
           expanded={expanded}
           onToggle={onToggleDir}
           onOpenFile={(path) => { openSidebarFile(ctx, sessionId, path) }}
+          onReferenceFile={onReferenceFile}
         />
       )
     case 'git':
@@ -68,12 +72,13 @@ function buildNewTabOptions(state: SidebarState): NewTabOption[] {
     .flatMap(leaf => leaf.tabs)
     .filter(tab => tab.type === 'terminal').length
   return [
-    { id: 'explorer', label: t('openExplorer') },
-    { id: 'git', label: t('openGit') },
+    { id: 'explorer', label: t('openExplorer'), icon: tabTypeIcon('explorer', 16) },
+    { id: 'git', label: t('openGit'), icon: tabTypeIcon('git', 16) },
     {
       id: 'terminal',
       label: terminalCount >= TERMINAL_LIMIT ? `${t('newTerminal')} (${t('terminalLimit')})` : t('newTerminal'),
       disabled: terminalCount >= TERMINAL_LIMIT,
+      icon: tabTypeIcon('terminal', 16),
     },
   ]
 }
@@ -214,6 +219,25 @@ export function Sidebar(props: { ctx: Context }) {
     })
   }
 
+  /**
+   * The explorer's @-reference button: append `@<relative path>` to the
+   * session's composer draft (space-separated). Resolves the session-scope
+   * ctx and the conversation input service at click time; a missing service
+   * or scope degrades to a logged no-op, never a crash.
+   */
+  const referenceInChat = useCallback((path: string): void => {
+    try {
+      const actx = ctx.sessions.scope(sessionId)
+      if (actx === undefined) return
+      const input = ctx.conversation.input.for(actx)
+      const mention = `@${relativeTo(cwd ?? '', path)}`
+      const draft = input.state.getSnapshot().draft
+      input.setDraft(draft.trim() === '' ? mention : `${draft} ${mention}`)
+    } catch (error) {
+      console.warn('[dsh-better-sidebar] reference insert failed:', error)
+    }
+  }, [ctx, sessionId, cwd])
+
   const renderTab = (tab: SidebarTab) => (
     <TabContent
       tab={tab}
@@ -221,6 +245,7 @@ export function Sidebar(props: { ctx: Context }) {
       cwd={cwd}
       expanded={state.expanded}
       onToggleDir={(path) => { sidebarStore.reduce(s => toggleExpanded(s, path)) }}
+      onReferenceFile={referenceInChat}
       ctx={ctx}
     />
   )

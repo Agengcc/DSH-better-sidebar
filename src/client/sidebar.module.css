@@ -502,6 +502,39 @@
   text-overflow: ellipsis;
 }
 
+/* The hover-revealed @-reference button at the row's far right (and the
+   transient "copied" label that replaces it after a copy). Hidden rows
+   keep the name at full width; hovering or focusing the row reveals it. */
+.explorerRef {
+  flex: none;
+  display: none;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-strong-11);
+  cursor: pointer;
+}
+
+.explorerRef:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.explorerRow:hover .explorerRef,
+.explorerRow:focus-within .explorerRef {
+  display: inline-flex;
+}
+
+.explorerCopied {
+  flex: none;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .explorerError {
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-state-error-primary);
@@ -998,6 +1031,7 @@
 .tabBarPlus:focus-visible,
 .paneCard:focus-visible,
 .explorerRow:focus-visible,
+.explorerRef:focus-visible,
 .gitRowMain:focus-visible,
 .gitLink:focus-visible,
 .gitCommitButton:focus-visible,

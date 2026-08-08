@@ -7,6 +7,7 @@ import {
   type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
+import { relativeTo } from '../src/client/paths.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
 import { defaultShell, ensureSpawnHelper } from '../src/pty-manager.ts'
 
@@ -315,6 +316,25 @@ describe('persisted state sanitization', () => {
     const withBadActive = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withBadActive.splits.active = 'ghost-tab'
     expect(sanitizeState(withBadActive)).toBeUndefined()
+  })
+})
+
+describe('path helpers', () => {
+  it('derives relative paths under the cwd (and "." for the cwd itself)', () => {
+    expect(relativeTo('/Users/me/code', '/Users/me/code/src/main.ts')).toBe('src/main.ts')
+    expect(relativeTo('/Users/me/code', '/Users/me/code')).toBe('.')
+    expect(relativeTo('/Users/me/code/', '/Users/me/code/src/a/b.ts')).toBe('src/a/b.ts')
+  })
+
+  it('falls back to the path unchanged when it lies outside the cwd', () => {
+    expect(relativeTo('/Users/me/code', '/Users/other/x.ts')).toBe('/Users/other/x.ts')
+    expect(relativeTo('/Users/me/code', '/Users/me/codex/y.ts')).toBe('/Users/me/codex/y.ts')
+  })
+
+  it('handles windows roots and mixed separators', () => {
+    expect(relativeTo('C:\\Users\\me', 'C:\\Users\\me\\src\\a.ts')).toBe('src/a.ts')
+    expect(relativeTo('C:\\Users\\me', 'C:/Users/me/src/a.ts')).toBe('src/a.ts')
+    expect(relativeTo('C:\\Users\\me\\', 'C:\\Users\\me')).toBe('.')
   })
 })
 

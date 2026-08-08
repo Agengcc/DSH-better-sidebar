@@ -11,6 +11,7 @@ import {
   IconCloseFill14, IconPlusOutline16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarTab } from './state.ts'
+import { tabTypeIcon } from './icons.tsx'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
 
@@ -19,6 +20,8 @@ export interface NewTabOption {
   id: string
   label: string
   disabled?: boolean
+  /** Leading icon (Menu row). */
+  icon?: ReactNode
 }
 
 /** Drag payload for tab moves (HTML5 DnD dataTransfer). */
@@ -109,6 +112,7 @@ export function TabBar(props: {
               }
             }}
           >
+            {tabTypeIcon(tab.type, 14)}
             <span className={css.tabTitle}>{tab.title}</span>
             <button
               type="button"
@@ -135,6 +139,7 @@ export function TabBar(props: {
             id: option.id,
             label: option.label,
             ...(option.disabled === true ? { disabled: true } : {}),
+            ...(option.icon !== undefined ? { icon: option.icon } : {}),
           }))}
           onSelect={(id) => {
             onNewTab(id)

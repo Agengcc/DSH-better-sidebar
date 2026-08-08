@@ -11,6 +11,8 @@ DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资�
 - 懒加载目录树，根目录 = 当前会话工作目录（cwd）
 - 目录优先排序、隐藏文件（点开头）变暗显示、每层 1000 项上限
 - 点击文件在侧边栏打开编辑器；刷新按钮重载
+- **右键行**弹出菜单：复制相对地址 / 复制绝对地址（复制成功后行内短暂显示"已复制"）
+- **悬浮行尾的 `@文件` 按钮**：点击把 `@相对路径` 追加到输入框草稿（如 `@src/main.ts`）
 
 ### 文件编辑与预览（Editor）
 - **CodeMirror 6** 编辑器：**自动换行** + 按扩展名**语法高亮**（js/ts/jsx/tsx、json、python、html、css、xml、yaml、sql、java、c/c++、rust、go、php、shell、toml、nginx、dockerfile、properties…），**明暗主题自适应**（跟随应用色系，切换时文档/撤销/滚动不丢）
@@ -33,6 +35,7 @@ DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资�
 
 ### Tab 栏
 - Tab 最大宽度 160px、横向滚动；**`+` 按钮紧贴最右 Tab**（溢出时吸附右缘）
+- **Tab 与 `+` 菜单均带类型图标**（Explorer=文件夹、Git=分支、终端=终端、编辑器=代码文件）
 - `+` 菜单新建 Tab（Explorer / Git / 终端，终端受 3 个上限约束）；**中键点击关闭 Tab**
 - 空分栏不再显示空提示，而是**可打开类型卡片**（点击即开）
 

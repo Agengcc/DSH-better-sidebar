@@ -66,6 +66,9 @@ const zh = {
   newFile: '新文件',
   openEditor: '打开编辑器',
   gitDetail: '查看变更详情',
+  referenceFile: '@文件',
+  copyRelative: '复制相对地址',
+  copyAbsolute: '复制绝对地址',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -129,6 +132,9 @@ const en: Record<keyof typeof zh, string> = {
   newFile: 'New file',
   openEditor: 'Open editor',
   gitDetail: 'View change details',
+  referenceFile: '@file',
+  copyRelative: 'Copy relative path',
+  copyAbsolute: 'Copy absolute path',
 }
 
 /** Translate a copy key in the browser's language (zh → zh, else en). */

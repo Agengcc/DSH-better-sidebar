@@ -12,12 +12,10 @@
 import { Fragment, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import {
-  IconBranchOutline16, IconCodeOutline16, IconFolderOpen16,
-} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
 import type { DropZone } from './state.ts'
 import { TabBar, type NewTabOption, parseDrag, type TabDragPayload } from './TabBar.tsx'
+import { tabTypeIcon } from './icons.tsx'
 import css from './sidebar.module.css'
 
 /** Actions the workbench needs (bound to the store by the sidebar shell). */
@@ -82,15 +80,6 @@ function zoneAt(event: React.DragEvent, pane: HTMLElement): DropZone {
 }
 
 /** The icon of one openable type card (mirror of the + menu options). */
-function optionIcon(optionId: string): ReactNode {
-  switch (optionId) {
-    case 'explorer': return <IconFolderOpen16 size={16} />
-    case 'git': return <IconBranchOutline16 size={16} />
-    case 'terminal': return <IconCodeOutline16 size={16} />
-    default: return <IconCodeOutline16 size={16} />
-  }
-}
-
 /**
  * An empty pane's welcome cards: the openable types as cards, clicked to
  * open (instead of a bare "this pane is empty" message).
@@ -111,7 +100,7 @@ function PaneEmptyCards(props: {
           title={option.label}
           onClick={() => { onNewTab(option.id) }}
         >
-          {optionIcon(option.id)}
+          {option.icon ?? tabTypeIcon(option.id as SidebarTab['type'], 16)}
           <span>{option.label}</span>
         </button>
       ))}
