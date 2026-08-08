@@ -1,6 +1,6 @@
 # dsh-better-sidebar
 
-DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资源管理器、文件编辑/预览、交互式终端、Git 面板，**按会话（conversation）记忆与隔离**。样式完全复用 `--dsw-*` 主题变量与 `@deepseek-ai/dsh-client-ui-primitives`，观感与 GUI 原生一致。
+DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资源管理器、文件编辑/预览、交互式终端、Git 面板，**按会话（conversation）记忆与隔离**。样式完全复用 `--dsw-*` 主题变量与 `@deepseek-ai/dsh-client-ui-primitives`，观感与 GUI 原生一致，且**明暗主题自适应**（终端与编辑器就地重着色）。
 
 <img width="411" height="274" alt="image" src="https://github.com/user-attachments/assets/d3914fa3-c3d8-4988-8500-af5a901c3cd9" />
 <img width="257" height="259" alt="image" src="https://github.com/user-attachments/assets/40f511c7-5542-468a-bdee-1572419df8ca" />
@@ -13,14 +13,15 @@ DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资�
 - 点击文件在侧边栏打开编辑器；刷新按钮重载
 
 ### 文件编辑与预览（Editor）
-- **CodeMirror 6** 编辑器：**自动换行** + 按扩展名**语法高亮**（js/ts/jsx/tsx、json、python、html、css、xml、yaml、sql、java、c/c++、rust、go、php、shell、toml、nginx、dockerfile、properties…），one-dark 深色主题
+- **CodeMirror 6** 编辑器：**自动换行** + 按扩展名**语法高亮**（js/ts/jsx/tsx、json、python、html、css、xml、yaml、sql、java、c/c++、rust、go、php、shell、toml、nginx、dockerfile、properties…），**明暗主题自适应**（跟随应用色系，切换时文档/撤销/滚动不丢）
 - 脏点标记 + **Ctrl/Cmd+S 保存**（原子写入）；512KB 截断横幅、二进制文件提示
 - 图片直接预览（媒体路由）；**Markdown 支持 预览/编辑 切换**——预览实时渲染未保存草稿，切换不丢编辑状态
 - 编辑器/终端/资源管理器在**切换 Tab 时不卸载**：终端保持连接与回滚，编辑器保留草稿
 
 ### 终端（Terminal）
-- xterm.js + node-pty（真实 shell），**每会话最多 3 个**；进程跨页面刷新存活（断线自动重连 + 转录回放）
-- 关闭 Tab 立即释放配额；连续失败后停止重连并显示原因与重试按钮
+- xterm.js + node-pty（真实 shell），**每会话最多 3 个**；**Tab 打开期间一直保活**：切换 Tab/分栏、切换会话（30 秒内返回）、刷新页面都重连到**同一个 shell 进程**并回放转录，不受激活状态影响
+- 真正关闭 Tab **立即释放配额**（socket 断开时也由 `pty.close` API 兜底释放）；连续失败后停止重连并显示原因与重试按钮
+- 明暗主题自适应（表面色取自主题 token + one-dark/one-light ANSI 色板）
 
 ### Git 面板
 - status（暂存/未暂存分组）、按文件 diff（HEAD vs 工作区/暂存区）、stage/unstage（单个与全部）、commit、分支切换、提交历史——基础集
@@ -39,6 +40,10 @@ DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件：文件资�
 - 侧边栏布局/分栏/Tab/目录展开按会话持久化（localStorage），切换会话即切换整套状态
 - 侧边栏**占用布局**（挤窄对话列而非悬浮遮挡，动画过渡）；宽度永不超过视口，陈旧状态自动净化
 - 拦截对话"产出文件"行：点击改为在侧边栏打开，而不是系统默认程序
+
+### 界面风格（对标 GUI 原生）
+- 行/按钮/间距/动效对齐应用自身组件：34px 圆角树行 + 22px 缩进步长 + 挂载淡入、28px 圆形图标按钮、36px 分节头部节奏
+- 键盘焦点可见（focus-visible 环）、`prefers-reduced-motion` 下关闭全部动画
 
 ## 从源码安装
 
@@ -107,7 +112,7 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 | host | `src/index.ts` → `lib/index.js` | cordis 插件：`/sidebar/api/*` JSON API、`/sidebar/file` 媒体路由、`/sidebar/ws/terminal` WebSocket；fs / git / pty 服务 |
 | client | `src/client/index.tsx` → `lib/client.js` | 浏览器 bundle（`__ModuleLoader__.load` 闭包工厂）：portal 侧边栏 + 各视图 + turnTail 拦截 |
 
-- 所有 API 携带 `sessionId`；cwd 权威值取自会话 header，会话未附加（页面加载竞态）时回退客户端摘要 cwd，再回退进程 cwd；终端按 `${sessionId}:${tabId}` 键控
+- 所有 API 携带 `sessionId`；cwd 权威值取自会话 header，会话未附加（页面加载竞态）时回退客户端摘要 cwd，再回退进程 cwd；终端按 `${sessionId}:${tabId}` 键控，重连时若权威 cwd 变化则重启 shell 到正确目录
 - 路由与 `/api` 同款信任围栏（Host 头 loopback / `connection.trustedHosts`，`src/trust-fence.ts`，拷贝自 `@deepseek-ai/dsh-client-connection`，BSD-3-Clause）
 - client 状态按会话持久化到 `localStorage`（`dsh-sidebar:v1:<sessionId>`），读取时结构校验 + 宽度钳制视口
 - client bundle externals 仅模块表词条（react/cordis/ui-primitives 等），xterm/CodeMirror 等全部内联
@@ -122,5 +127,5 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 
 - Git 无 push/pull/fetch；无文件 watcher（手动刷新）
 - 工具行内的文件打开按钮（核心代码）不可拦截，仅"产出文件"行被接管
-- 终端 Tab 拖拽到另一分栏时会重挂载（shell 重开）；切换 Tab 不会
+- 终端 Tab **拖拽到另一分栏**时会重挂载（shell 重开）；切换 Tab / 切换会话（30 秒内返回）/ 刷新页面不会
 - 仅验证 macOS（node-pty 预编译二进制平台相关）
