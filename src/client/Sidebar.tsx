@@ -205,7 +205,6 @@ export function Sidebar(props: { ctx: Context }) {
 
   const renderTab = (tab: SidebarTab) => (
     <TabContent
-      key={tab.id}
       tab={tab}
       sessionId={sessionId}
       cwd={cwd}

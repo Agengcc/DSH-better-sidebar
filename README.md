@@ -11,7 +11,7 @@ control panel — **isolated per conversation session**.
 - Git: status / diff / stage / commit / branch / history（基础集）
 - 分栏工作台: VSCode 式拖拽分栏（拖 Tab 到分栏边缘即左右/上下拆分，拖到中间合并）、
   分隔线拖拽、面板宽度拖拽；折叠后右缘展开按钮常驻
-- Tab 栏: 最大宽度 160px、横向滚动、`+` 紧贴最右 Tab（溢出时吸附右缘）、`+` 菜单新建 Tab；空分栏显示可打开类型卡片（点击即开）
+- Tab 栏: 最大宽度 160px、横向滚动、`+` 紧贴最右 Tab（溢出时吸附右缘）、`+` 菜单新建 Tab；空分栏显示可打开类型卡片（点击即开）；切换 Tab 不卸载内容（终端保持连接与回滚、编辑器保留未保存草稿）
 - 拦截: 对话"产出文件"行点击改为在侧边栏打开
 - 样式完全复用 `--dsw-*` 主题变量与 `@deepseek-ai/dsh-client-ui-primitives`
 

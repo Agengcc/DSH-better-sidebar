@@ -173,7 +173,23 @@ function LeafView(props: {
         }}
       />
       {leaf.tabs.length > 0 ? (
-        <div className={css.paneContent}>{activeTab !== undefined ? renderTab(activeTab) : null}</div>
+        /*
+          Every tab stays MOUNTED (inactive ones hidden), so switching tabs
+          never tears down the content: a terminal keeps its pty connection
+          and scrollback, an editor keeps its CodeMirror view and unsaved
+          draft, explorer/git keep their loaded data. The unmount (and the
+          terminal's close frame) happens only when a tab is truly closed.
+        */
+        <div className={css.paneContent}>
+          {leaf.tabs.map(tab => (
+            <div
+              key={tab.id}
+              className={clsx(css.paneTab, tab.id !== activeTab?.id && css.paneTabHidden)}
+            >
+              {renderTab(tab)}
+            </div>
+          ))}
+        </div>
       ) : (
         <PaneEmptyCards newTabOptions={newTabOptions} onNewTab={onNewTab} />
       )}
