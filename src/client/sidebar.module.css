@@ -100,7 +100,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px 6px 12px;
+  height: 36px;
+  padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   flex: none;
 }
@@ -119,17 +120,20 @@
   display: flex;
 }
 
+/* Icon button: the app's own icon-button pattern (ui-workspace) — a 28px
+   circle, secondary label, hover fill; no border so the icon alone is the
+   affordance. */
 .iconButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   flex: none;
 }
@@ -440,7 +444,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px 6px 12px;
+  height: 36px;
+  padding: 0 8px 0 12px;
 }
 
 .explorerRoot {
@@ -455,16 +460,20 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 8px;
+  padding: 2px 6px 8px;
 }
 
+/* One tree row: the app's tree-row cell (34px, radius 8, inset, hover
+   fill, 22px indent step) with a mount fade so expanding a directory
+   reveals its children gently (stable keys keep existing rows from
+   replaying it). */
 .explorerRow {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 24px;
-  padding: 0 8px;
+  height: 34px;
+  padding: 0 6px;
   border: none;
   background: transparent;
   font: var(--dsw-font-xxs-12);
@@ -472,6 +481,8 @@
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  border-radius: 8px;
+  animation: dsh-row-in 150ms var(--ds-ease-in-out);
 }
 
 .explorerRow:hover {
@@ -495,6 +506,11 @@
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-state-error-primary);
   cursor: default;
+}
+
+/* Mount fade for tree rows (the app's session-row reveal). */
+@keyframes dsh-row-in {
+  from { opacity: 0; }
 }
 
 .explorerEmpty {
@@ -740,7 +756,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 12px;
+  height: 36px;
+  padding: 0 8px 0 12px;
 }
 
 .gitBranchSelect {
@@ -791,7 +808,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 2px 12px;
+  min-height: 34px;
+  margin: 0 6px;
+  padding: 0 6px 0 12px;
+  border-radius: 8px;
+  animation: dsh-row-in 150ms var(--ds-ease-in-out);
 }
 
 .gitRow:hover {
@@ -799,7 +820,7 @@
 }
 
 .gitRowSelected {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--dsw-alias-interactive-bg-active);
 }
 
 .gitRowMain {
@@ -964,4 +985,40 @@
 .producedMore {
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* ── Shared interaction rules ──────────────────────────────────────────── */
+
+/* Keyboard focus stays visible on every interactive control (the styling
+   policy requires focus visibility; the accent token doubles as the ring). */
+.toggleButton:focus-visible,
+.iconButton:focus-visible,
+.tab:focus-visible,
+.tabClose:focus-visible,
+.tabBarPlus:focus-visible,
+.paneCard:focus-visible,
+.explorerRow:focus-visible,
+.gitRowMain:focus-visible,
+.gitLink:focus-visible,
+.gitCommitButton:focus-visible,
+.terminalRetry:focus-visible,
+.editorModeButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent);
+  outline-offset: -1px;
+}
+
+/* Reduced motion: no slides, fades or color transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panelHidden,
+  .toggleButton,
+  .tab,
+  .tabBarPlus,
+  .paneCard,
+  .explorerRow,
+  .gitRow,
+  .divider {
+    transition: none;
+    animation: none;
+  }
 }

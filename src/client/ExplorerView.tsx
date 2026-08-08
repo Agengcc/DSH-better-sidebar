@@ -66,11 +66,11 @@ export function ExplorerView(props: {
   const renderLevel = (dir: string, depth: number): ReactNode => {
     const level = data[dir]
     if (level === undefined) {
-      return <div className={css.explorerRow} style={{ paddingLeft: depth * 14 + 8 }}>{t('loading')}</div>
+      return <div className={css.explorerRow} style={{ paddingLeft: depth * 22 + 6 }}>{t('loading')}</div>
     }
     if (level.error !== undefined) {
       return (
-        <div className={clsx(css.explorerRow, css.explorerError)} style={{ paddingLeft: depth * 14 + 8 }}>
+        <div className={clsx(css.explorerRow, css.explorerError)} style={{ paddingLeft: depth * 22 + 6 }}>
           {level.error}
         </div>
       )
@@ -84,7 +84,7 @@ export function ExplorerView(props: {
             <button
               type="button"
               className={clsx(css.explorerRow, css.explorerDir, entry.hidden && css.explorerHidden)}
-              style={{ paddingLeft: depth * 14 + 8 }}
+              style={{ paddingLeft: depth * 22 + 6 }}
               onClick={() => { onToggle(entry.path) }}
             >
               {isOpen ? <IconFolderOpen16 size={14} /> : <IconFolderClose16 size={14} />}
@@ -99,7 +99,7 @@ export function ExplorerView(props: {
           key={entry.path}
           type="button"
           className={clsx(css.explorerRow, entry.hidden && css.explorerHidden)}
-          style={{ paddingLeft: depth * 14 + 8 }}
+          style={{ paddingLeft: depth * 22 + 6 }}
           title={entry.path}
           onClick={() => { onOpenFile(entry.path) }}
         >
@@ -133,7 +133,7 @@ export function ExplorerView(props: {
           <div className={css.explorerEmpty}>{t('noSession')}</div>
         ) : (
           <>
-            <div className={css.explorerRow} style={{ paddingLeft: 8 }}>
+            <div className={css.explorerRow} style={{ paddingLeft: 6 }}>
               <IconFolderOpen16 size={14} />
               <span className={css.explorerName}>{baseName(root)}</span>
             </div>
