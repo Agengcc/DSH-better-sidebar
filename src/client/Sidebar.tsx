@@ -101,6 +101,19 @@ export function Sidebar(props: { ctx: Context }) {
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
   const [draggingWidth, setDraggingWidth] = useState(false)
 
+  // Layout push: the app shell gives up the panel's width while it is open
+  // (0 while collapsed), so the conversation and input bar are squeezed
+  // instead of covered. Dragging disables the layout transition.
+  useEffect(() => {
+    const width = snapshot.state?.panelOpen === true ? snapshot.state.width : 0
+    document.documentElement.style.setProperty('--dsh-sidebar-width', `${width}px`)
+  }, [snapshot.state?.panelOpen, snapshot.state?.width])
+  useEffect(() => {
+    if (draggingWidth) document.body.setAttribute('data-dsh-sidebar-dragging', '')
+    else document.body.removeAttribute('data-dsh-sidebar-dragging')
+  }, [draggingWidth])
+
+
   // Whether the panel currently fills the viewport (fullscreen expansion).
   const fullscreen = state !== undefined && window.innerWidth - state.width < 8
 

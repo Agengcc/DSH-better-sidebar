@@ -1,0 +1,28 @@
+/**
+ * Layout push: when the sidebar is open it OCCUPIES the layout instead of
+ * floating over it — the app shell (#root, the AppFrame three-column grid)
+ * gives up the panel's width on the right. Only the center column is
+ * flexible (1fr), so the squeeze lands exactly on the conversation output
+ * and the input bar, like a VSCode sidebar. The fixed panel covers the
+ * vacated strip, which looks seamless because #root's background is the
+ * theme base.
+ *
+ * The width rides a CSS variable updated by the Sidebar shell (0 while
+ * collapsed); expand/collapse animates both the margin and the panel slide
+ * on the same theme duration. Width drags disable the transition so the
+ * layout tracks the pointer.
+ */
+#root {
+  margin-right: var(--dsh-sidebar-width, 0px);
+  transition: margin-right var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+body[data-dsh-sidebar-dragging] #root {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root {
+    transition: none;
+  }
+}

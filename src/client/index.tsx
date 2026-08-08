@@ -12,6 +12,7 @@ import { Sidebar } from './Sidebar.tsx'
 import { registerTurnTailInterception } from './intercept.tsx'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
+import './layout.css'
 
 /** Services required before mounting (provided by the client runtime). */
 export const inject = ['slots', 'sessions']
