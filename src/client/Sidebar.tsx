@@ -196,8 +196,15 @@ export function Sidebar(props: { ctx: Context }) {
           </Tooltip>
         </div>
       )}
-      {state.panelOpen && (
-        <div className={css.panel} style={{ width: state.width }} data-dragging={draggingWidth || undefined}>
+      {/*
+        The panel stays mounted while collapsed (hidden off-screen) so the
+        slide in/out can animate; visibility hides it after the slide settles.
+      */}
+      <div
+        className={clsx(css.panel, !state.panelOpen && css.panelHidden)}
+        style={{ width: state.width }}
+        data-dragging={draggingWidth || undefined}
+      >
           <div
             className={clsx(css.panelResize, draggingWidth && css.panelResizeActive)}
             onPointerDown={(event) => {
@@ -225,7 +232,9 @@ export function Sidebar(props: { ctx: Context }) {
               title={fullscreen ? t('restoreFullscreen') : t('expandFullscreen')}
               onClick={() => {
                 const viewport = window.innerWidth
-                sidebarStore.reduce(s => setWidth(s, fullscreen ? Math.round(viewport / 2) : viewport))
+                sidebarStore.reduce(s => setWidth(s, fullscreen
+                  ? Math.max(280, Math.round((viewport - 320) / 2))
+                  : viewport))
               }}
             >
               <IconFullscreenOutline16 />
@@ -244,17 +253,16 @@ export function Sidebar(props: { ctx: Context }) {
               <IconChevronRightOutline14 />
             </button>
           </div>
-          <div className={css.panelBody}>
-            <Workbench
-              state={state}
-              newTabOptions={buildNewTabOptions(state)}
-              actions={actions}
-              onNewTab={onNewTab}
-              renderTab={renderTab}
-            />
-          </div>
+        <div className={css.panelBody}>
+          <Workbench
+            state={state}
+            newTabOptions={buildNewTabOptions(state)}
+            actions={actions}
+            onNewTab={onNewTab}
+            renderTab={renderTab}
+          />
         </div>
-      )}
+      </div>
     </>
   )
 }

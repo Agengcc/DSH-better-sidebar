@@ -54,6 +54,8 @@ export interface SidebarState {
 export const PANEL_MIN = 280
 export const PANEL_MAX = 640
 export const PANEL_DEFAULT = 400
+/** Approximate default width of the host's left sidebar (columns.ts SIDEBAR_DEFAULT). */
+export const LEFT_SIDEBAR_DEFAULT = 320
 export const TAB_MAX_WIDTH = 160
 export const TERMINAL_LIMIT = 3
 
@@ -372,9 +374,13 @@ function loadState(sessionId: string): SidebarState {
   } catch {
     // Corrupt or unavailable storage: fall through to the default.
   }
-  // New sessions open at half the viewport (VSCode-like default split).
-  const half = typeof window !== 'undefined' ? Math.max(PANEL_MIN, Math.round(window.innerWidth / 2)) : PANEL_DEFAULT
-  return makeDefaultState(half)
+  // New sessions open at half the CONTENT area (the viewport minus the
+  // left sidebar's default width), so the panel never swallows half the
+  // whole window; the same default applies to every session.
+  const contentHalf = typeof window !== 'undefined'
+    ? Math.max(PANEL_MIN, Math.round((window.innerWidth - LEFT_SIDEBAR_DEFAULT) / 2))
+    : PANEL_DEFAULT
+  return makeDefaultState(contentHalf)
 }
 
 /** The session-scoped store: one state per conversation, localStorage-backed. */

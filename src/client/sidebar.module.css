@@ -57,6 +57,27 @@
   background: var(--dsw-alias-bg-layer-1);
   border-left: 1px solid var(--dsw-alias-border-l2);
   box-shadow: var(--dsw-shadow-lv2);
+  /* Expand/collapse slides the panel; fullscreen animates the width. */
+  transition:
+    transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    width var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* Collapsed: slid off-screen, interactive nothing, hidden after the slide. */
+.panelHidden {
+  transform: translateX(102%);
+  pointer-events: none;
+  box-shadow: none;
+  visibility: hidden;
+  transition:
+    transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    width var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    visibility 0s linear var(--ds-transition-duration-slow);
+}
+
+/* Width drags write at pointer cadence; easing would detach the edge. */
+.panel[data-dragging] {
+  transition: none;
 }
 
 .panelResize {

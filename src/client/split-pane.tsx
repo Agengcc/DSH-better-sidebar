@@ -114,23 +114,26 @@ function LeafView(props: {
       }}
     >
       {dropZone !== null && <div className={clsx(css.dropOverlay, css[`drop${dropZone[0]!.toUpperCase()}${dropZone.slice(1)}`])} />}
+      {/*
+        The tab strip renders even for an empty pane: the + menu must stay
+        reachable when the pane has no tabs (fresh split, or the last tab was
+        dragged out), so a new tab can always be created or dragged in.
+      */}
+      <TabBar
+        paneId={leaf.id}
+        tabs={leaf.tabs}
+        active={leaf.active}
+        onActivate={(tabId) => { actions.activateTab(leaf.id, tabId) }}
+        onClose={(tabId) => { actions.closeTab(leaf.id, tabId) }}
+        onNewTab={onNewTab}
+        newTabOptions={newTabOptions}
+        onDropTab={(payload, before) => {
+          if (before === null) actions.moveTabToEdge(payload, leaf.id, 'center')
+          else actions.moveTabBefore(payload, leaf.id, before)
+        }}
+      />
       {leaf.tabs.length > 0 ? (
-        <>
-          <TabBar
-            paneId={leaf.id}
-            tabs={leaf.tabs}
-            active={leaf.active}
-            onActivate={(tabId) => { actions.activateTab(leaf.id, tabId) }}
-            onClose={(tabId) => { actions.closeTab(leaf.id, tabId) }}
-            onNewTab={onNewTab}
-            newTabOptions={newTabOptions}
-            onDropTab={(payload, before) => {
-              if (before === null) actions.moveTabToEdge(payload, leaf.id, 'center')
-              else actions.moveTabBefore(payload, leaf.id, before)
-            }}
-          />
-          <div className={css.paneContent}>{activeTab !== undefined ? renderTab(activeTab) : null}</div>
-        </>
+        <div className={css.paneContent}>{activeTab !== undefined ? renderTab(activeTab) : null}</div>
       ) : (
         <div className={css.paneEmpty}>{t('emptyPane')}</div>
       )}
