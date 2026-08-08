@@ -99,6 +99,12 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
       window.clearTimeout(retry)
       observer.disconnect()
       inputSub.dispose()
+      // Tell the host the owning tab is gone so it releases the terminal
+      // quota immediately (best effort; a dropped socket gets the grace
+      // period on the host side instead).
+      if (socket !== null && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'close' }))
+      }
       socket?.close()
       term.dispose()
       connectRef.current = null

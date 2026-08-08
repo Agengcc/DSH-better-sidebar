@@ -60,6 +60,7 @@ export interface SidebarPty {
  */
 export class PtyManager {
   private readonly sessions = new Map<string, SidebarPty>()
+  private readonly pendingCloses = new Map<string, ReturnType<typeof setTimeout>>()
 
   constructor(
     private readonly shell: string,
@@ -76,7 +77,11 @@ export class PtyManager {
   }
 
   /**
-   * Open (or reuse) the terminal for a session/tab key.
+   * Open (or reuse) the terminal for a session/tab key. A handle whose
+   * process already exited is replaced with a fresh spawn (reconnecting a
+   * dead terminal must yield a live shell, not an input sink). Reopening
+   * also cancels any pending scheduled close (a reconnect within the grace
+   * window keeps the process alive).
    * @param sessionId - conversation id.
    * @param tabId - client tab id.
    * @param cwd - initial working directory (the session's cwd).
@@ -87,8 +92,10 @@ export class PtyManager {
    */
   open(sessionId: string, tabId: string, cwd: string, cols: number, rows: number): SidebarPty {
     const key = `${sessionId}:${tabId}`
+    this.cancelClose(key)
     const existing = this.sessions.get(key)
-    if (existing !== undefined) return existing
+    if (existing !== undefined && !existing.exited) return existing
+    if (existing !== undefined) this.close(key)
     if (this.keysOf(sessionId).length >= this.maxPerSession) {
       throw new SidebarError('pty-error', `terminal limit reached (${this.maxPerSession}) for this session`, 400)
     }
@@ -120,6 +127,29 @@ export class PtyManager {
     return handle
   }
 
+  /**
+   * Schedule the terminal's destruction after `delayMs`. A tab close sends
+   * delay 0 (release the quota immediately); a bare socket drop (refresh,
+   * crash) uses the grace period so a quick reconnect keeps the process.
+   * `open()` cancels any pending close.
+   */
+  scheduleClose(key: string, delayMs: number): void {
+    const handle = this.sessions.get(key)
+    if (handle === undefined) return
+    this.cancelClose(key)
+    const timer = setTimeout(() => { this.close(key) }, delayMs)
+    this.pendingCloses.set(key, timer)
+  }
+
+  /** Cancel a pending scheduled close (the terminal is being reopened). */
+  cancelClose(key: string): void {
+    const timer = this.pendingCloses.get(key)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      this.pendingCloses.delete(key)
+    }
+  }
+
   /** Resolve a live handle by key, or undefined. */
   get(key: string): SidebarPty | undefined {
     return this.sessions.get(key)
@@ -127,6 +157,7 @@ export class PtyManager {
 
   /** Close a terminal and drop its state (the owning tab was closed). */
   close(key: string): void {
+    this.cancelClose(key)
     const handle = this.sessions.get(key)
     if (handle === undefined) return
     this.sessions.delete(key)
@@ -139,6 +170,8 @@ export class PtyManager {
 
   /** Close every terminal (plugin teardown). */
   disposeAll(): void {
+    for (const timer of this.pendingCloses.values()) clearTimeout(timer)
+    this.pendingCloses.clear()
     for (const key of [...this.sessions.keys()]) this.close(key)
   }
 }

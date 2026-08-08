@@ -36,6 +36,8 @@ const MEDIA_LIMIT = 20 * 1024 * 1024
 const LIST_LIMIT = 1000
 /** Terminals per session. */
 const TERMINALS_PER_SESSION = 3
+/** How long a disconnected terminal process survives awaiting a reconnect. */
+const TERMINAL_RECONNECT_GRACE_MS = 30_000
 
 /** Content types for the media route, by extension. */
 const MEDIA_TYPES: Record<string, string> = {
@@ -325,7 +327,6 @@ async function attachTerminal(
     const exitSub = handle.pty.onExit(onExit)
     ws.on('message', (data) => {
       const text = data.toString('utf8')
-      if (handle.exited) return
       // Control frames are JSON with a known shape; anything else (including
       // JSON that is not a recognized control) is terminal input, verbatim.
       let control: { type?: unknown; cols?: unknown; rows?: unknown } | null = null
@@ -337,8 +338,14 @@ async function attachTerminal(
       } catch {
         // Not JSON: terminal input.
       }
+      if (control !== null && control.type === 'close') {
+        // The owning tab was closed: release the quota immediately.
+        ptyManager.scheduleClose(handle.key, 0)
+        return
+      }
+      if (handle.exited) return
       if (
-        control !== null && typeof control === 'object'
+        control !== null
         && control.type === 'resize'
         && typeof control.cols === 'number' && typeof control.rows === 'number'
       ) {
@@ -350,6 +357,10 @@ async function attachTerminal(
     ws.on('close', () => {
       dataSub.dispose()
       exitSub.dispose()
+      // A bare socket drop (refresh, tab switch) leaves the process alive
+      // for a grace period so a quick reconnect keeps it; the reconnect's
+      // open() cancels the pending close.
+      ptyManager.scheduleClose(handle.key, TERMINAL_RECONNECT_GRACE_MS)
     })
   } catch (error) {
     ws.close(1011, error instanceof Error ? error.message : String(error))

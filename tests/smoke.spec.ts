@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { apply } from '../src/index.ts'
 import * as git from '../src/git.ts'
 import { listDirectory } from '../src/fs-tree.ts'
+import { defaultShell, PtyManager } from '../src/pty-manager.ts'
 import type { SidebarWebRoute, SidebarWebUpgradeRoute } from '../src/context-types.ts'
 
 interface FakeContext {
@@ -56,6 +57,47 @@ describe('host plugin smoke', () => {
     expect(log[0]!.hash).toMatch(/^[0-9a-f]{7,}$/)
     const branches = await git.branches(cwd)
     expect(branches.names).toContain(branches.current)
+  })
+
+  it('pty manager releases the quota on close and respawns after exit', async () => {
+    const manager = new PtyManager(defaultShell(), 3)
+    try {
+      const first = manager.open('s1', 't1', process.cwd(), 80, 24)
+      expect(manager.keysOf('s1')).toHaveLength(1)
+      // Tab-close semantics (close frame): quota released immediately.
+      manager.scheduleClose(first.key, 0)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(manager.keysOf('s1')).toHaveLength(0)
+      // Reopen spawns a fresh process.
+      const second = manager.open('s1', 't1', process.cwd(), 80, 24)
+      expect(second).not.toBe(first)
+      expect(manager.keysOf('s1')).toHaveLength(1)
+      // After the shell exits, a reconnect respawns instead of reusing the dead handle.
+      second.pty.write('exit\r')
+      const deadline = Date.now() + 5000
+      while (!second.exited && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      expect(second.exited).toBe(true)
+      const third = manager.open('s1', 't1', process.cwd(), 80, 24)
+      expect(third.exited).toBe(false)
+      expect(third).not.toBe(second)
+    } finally {
+      manager.disposeAll()
+    }
+  })
+
+  it('pty manager: a reconnect within the grace period cancels the pending close', async () => {
+    const manager = new PtyManager(defaultShell(), 3)
+    try {
+      const handle = manager.open('s2', 't1', process.cwd(), 80, 24)
+      manager.scheduleClose(handle.key, 200)
+      manager.open('s2', 't1', process.cwd(), 80, 24)
+      await new Promise(resolve => setTimeout(resolve, 400))
+      expect(manager.get(handle.key)).toBeDefined()
+    } finally {
+      manager.disposeAll()
+    }
   })
 
   it('lists the repository root level', async () => {
