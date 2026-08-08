@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { Context } from '../context-types.ts'
+import type { Context, SidebarConversation } from '../context-types.ts'
 import {
   allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
   resizeSplit, sidebarStore, setWidth, toggleExpanded, togglePanel,
@@ -187,18 +187,21 @@ export function Sidebar(props: { ctx: Context }) {
 
   /**
    * The explorer's @-reference button: append `@<relative path>` to the
-   * session's composer draft (space-separated). Resolves the session-scope
-   * ctx and the conversation input service at click time; a missing service
-   * or scope degrades to a logged no-op, never a crash. Defined above the
-   * no-session early return — a hook must never sit behind a conditional
-   * return (React counts hooks per render).
+   * session's composer draft (space-separated). The conversation service is
+   * resolved lazily through `ctx.get` (the inject-free read — the app's own
+   * plugins read 'conversation' the same way); a missing service or scope
+   * degrades to a logged no-op, never a crash. Defined above the no-session
+   * early return — a hook must never sit behind a conditional return
+   * (React counts hooks per render).
    */
   const referenceInChat = useCallback((path: string): void => {
     if (sessionId === undefined) return
     try {
       const actx = ctx.sessions.scope(sessionId)
       if (actx === undefined) return
-      const input = ctx.conversation.input.for(actx)
+      const conversation = ctx.get('conversation') as SidebarConversation | undefined
+      if (conversation === undefined) return
+      const input = conversation.input.for(actx)
       const mention = `@${relativeTo(cwd ?? '', path)}`
       const draft = input.state.getSnapshot().draft
       input.setDraft(draft.trim() === '' ? mention : `${draft} ${mention}`)

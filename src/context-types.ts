@@ -9,7 +9,9 @@
  * - httpServer: @deepseek-ai/dsh-host-webserver
  * - sessions: host side @deepseek-ai/dsh-session (SessionStore), client
  *   side the runtime ISessions list feed
- * - conversation: client side ui-conversation's IConversation (composer draft)
+ * - conversation: client side ui-conversation's IConversation (composer
+ *   draft), read lazily through `ctx.get` — cross-plugin service reads need
+ *   an inject declaration, so the direct property is never typed here
  * - loader: @cordisjs/plugin-loader (entry options)
  * - slots: the client runtime SlotsService
  * - effect: the DSH-vendored cordis lifecycle helper
@@ -116,7 +118,7 @@ export interface SidebarSessionInput {
   setDraft(text: string): void
 }
 
-/** The conversation service face (mirror of ui-conversation's IConversation). */
+/** The composer draft face the sidebar reaches through `ctx.get('conversation')`. */
 export interface SidebarConversation {
   input: {
     for(actx: Context): SidebarSessionInput
@@ -127,7 +129,6 @@ declare module 'cordis' {
   interface Context {
     httpServer: SidebarHttpServer
     sessions: SidebarSessionStore & SidebarSessionsService
-    conversation: SidebarConversation
     loader: SidebarLoader
     slots: SidebarSlotsService
     /**
