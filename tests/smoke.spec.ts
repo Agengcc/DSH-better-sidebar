@@ -87,6 +87,25 @@ describe('host plugin smoke', () => {
     }
   })
 
+  it('pty manager: exited zombie handles do not consume the quota', async () => {
+    const manager = new PtyManager(defaultShell(), 1)
+    try {
+      const first = manager.open('s3', 't1', process.cwd(), 80, 24)
+      first.pty.write('exit\r')
+      const deadline = Date.now() + 5000
+      while (!first.exited && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      expect(first.exited).toBe(true)
+      // Quota is 1; the exited handle is swept, so a NEW tab can still spawn.
+      const second = manager.open('s3', 't2', process.cwd(), 80, 24)
+      expect(second.exited).toBe(false)
+      expect(manager.keysOf('s3')).toHaveLength(1)
+    } finally {
+      manager.disposeAll()
+    }
+  })
+
   it('pty manager: a reconnect within the grace period cancels the pending close', async () => {
     const manager = new PtyManager(defaultShell(), 3)
     try {

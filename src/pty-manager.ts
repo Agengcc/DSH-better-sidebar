@@ -96,6 +96,11 @@ export class PtyManager {
     const existing = this.sessions.get(key)
     if (existing !== undefined && !existing.exited) return existing
     if (existing !== undefined) this.close(key)
+    // Zombie cleanup: a session's exited handles (shell closed, tab dropped
+    // on an old host without the close frame) must not eat the quota.
+    for (const [candidate, handle] of [...this.sessions]) {
+      if (handle.sessionId === sessionId && handle.exited) this.close(candidate)
+    }
     if (this.keysOf(sessionId).length >= this.maxPerSession) {
       throw new SidebarError('pty-error', `terminal limit reached (${this.maxPerSession}) for this session`, 400)
     }

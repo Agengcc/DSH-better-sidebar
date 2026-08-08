@@ -64,12 +64,17 @@ export function TabBar(props: {
     <div
       className={clsx(css.tabBar, dragOver && css.tabBarDrop)}
       onDragOver={(event) => {
+        // The strip owns drops on itself (merge into this pane); stopping
+        // propagation keeps the pane root from also running its edge-zone
+        // handler on the same drop.
         event.preventDefault()
+        event.stopPropagation()
         setDragOver(true)
       }}
       onDragLeave={() => { setDragOver(false) }}
       onDrop={(event) => {
         event.preventDefault()
+        event.stopPropagation()
         setDragOver(false)
         const raw = event.dataTransfer.getData(TAB_DRAG_TYPE)
         const payload = parseDrag(raw)
