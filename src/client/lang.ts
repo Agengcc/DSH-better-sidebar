@@ -6,6 +6,7 @@
 import { Language, LanguageSupport, StreamLanguage } from '@codemirror/language'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
+import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
@@ -39,6 +40,7 @@ export function languageKeyForExt(ext: string): string | null {
     case 'ts': case 'mts': case 'cts': return 'ts'
     case 'tsx': return 'tsx'
     case 'json': case 'jsonc': return 'json'
+    case 'md': case 'markdown': return 'md'
     case 'py': case 'pyw': return 'python'
     case 'html': case 'htm': return 'html'
     case 'css': return 'css'
@@ -66,6 +68,7 @@ const FACTORIES: Record<string, () => Language | LanguageSupport> = {
   ts: () => javascript({ typescript: true }),
   tsx: () => javascript({ typescript: true, jsx: true }),
   json: () => json(),
+  md: () => markdown(),
   python: () => python(),
   html: () => html(),
   css: () => css(),

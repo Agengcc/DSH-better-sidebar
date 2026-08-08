@@ -123,8 +123,11 @@ export function TabBar(props: {
             </button>
           </div>
         ))}
-      </div>
-      <div className={css.tabBarActions}>
+        {/*
+          The + sits immediately after the rightmost tab (sticky at the
+          right edge of the scrollport when the tabs overflow, so it stays
+          reachable no matter how many tabs are open).
+        */}
         <Menu
           open={menuOpen}
           onClose={() => { setMenuOpen(false) }}
@@ -142,7 +145,7 @@ export function TabBar(props: {
           anchor={(
             <button
               type="button"
-              className={css.tabBarButton}
+              className={css.tabBarPlus}
               aria-label={t('newTab')}
               title={t('newTab')}
               onClick={() => { setMenuOpen(v => !v) }}

@@ -269,15 +269,39 @@
   overflow: hidden;
 }
 
-.paneEmpty {
+.paneEmptyCards {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+}
+
+.paneCard {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 16px;
-  text-align: center;
-  font: var(--dsw-font-xxs-12);
-  color: var(--dsw-alias-label-tertiary);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-strong-12);
+  cursor: pointer;
+  text-align: left;
+}
+
+.paneCard:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.paneCard:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ── Tab strip ─────────────────────────────────────────────────────────── */
@@ -362,29 +386,28 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.tabBarActions {
+.tabBarPlus {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 6px;
-}
-
-.tabBarButton {
+  align-self: center;
+  /* Adjacent to the rightmost tab; sticky so overflowing tab rows keep it
+     visible at the right edge of the scrollport. */
+  position: sticky;
+  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
+  margin: 0 6px;
   padding: 0;
   border: none;
   border-radius: 5px;
-  background: transparent;
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
-.tabBarButton:hover {
+.tabBarPlus:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
@@ -545,6 +568,10 @@
   background: transparent;
 }
 
+.editorCmHidden {
+  display: none;
+}
+
 /* CodeMirror fills the pane; the theme supplies its own token palette
    (a designed dark theme, same policy as the xterm palette). */
 .editorCm :global(.cm-editor) {
@@ -553,6 +580,37 @@
 
 .editorCm :global(.cm-editor.cm-focused) {
   outline: none;
+}
+
+/* Preview / edit segmented toggle (markdown and other previewable files). */
+.editorModeToggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.editorModeButton {
+  padding: 2px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+
+.editorModeButton:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.editorModeActive {
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
 }
 
 .editorImageWrap {

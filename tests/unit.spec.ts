@@ -310,6 +310,7 @@ describe('editor language mapping', () => {
     expect(languageKeyForExt('py')).toBe('python')
     expect(languageKeyForExt('yaml')).toBe('yaml')
     expect(languageKeyForExt('sh')).toBe('shell')
+    expect(languageKeyForExt('md')).toBe('md')
     expect(languageKeyForExt('txt')).toBeNull()
     expect(languageKeyForExt('log')).toBeNull()
     expect(languageKeyForExt('')).toBeNull()

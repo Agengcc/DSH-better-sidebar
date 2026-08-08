@@ -1,9 +1,11 @@
 /**
  * The file editor tab: a CodeMirror 6 editor with line wrapping and syntax
  * highlighting (extension-keyed language), a dirty dot and Ctrl/Cmd+S save,
- * image viewing through the media route, Markdown preview through the shared
- * MarkdownText component, and a plain notice for binary files. Reads cap at
- * the host's 512KB bound (a banner marks truncation).
+ * image viewing through the media route, and a plain notice for binary
+ * files. Markdown files open in rendered preview with a preview/edit toggle:
+ * edit mode shows the source in the editor, preview renders the live draft,
+ * and unsaved edits survive the toggle. Reads cap at the host's 512KB bound
+ * (a banner marks truncation).
  */
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
@@ -26,9 +28,15 @@ type EditorLoad =
   | { status: 'ready'; kind: 'text' | 'image' | 'md'; content: string; truncated: boolean }
   | { status: 'binary' }
 
+/** Previewable files (rendered output vs source editing). */
+type ViewMode = 'preview' | 'edit'
+
 export function EditorView(props: { scope: SessionScope; path: string; title: string }) {
   const { scope, path, title } = props
   const [load, setLoad] = useState<EditorLoad>({ status: 'loading' })
+  const [mode, setMode] = useState<ViewMode>('preview')
+  /** The editor's current text (null while clean); preview renders this. */
+  const [draft, setDraft] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
   const hostRef = useRef<HTMLDivElement>(null)
@@ -38,6 +46,8 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
   useEffect(() => {
     let cancelled = false
     setLoad({ status: 'loading' })
+    setMode('preview')
+    setDraft(null)
     setDirty(false)
     setSaveState('idle')
     api.fsRead(scope, path).then((result) => {
@@ -64,10 +74,12 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     return () => { cancelled = true }
   }, [scope.sessionId, scope.cwd, path])
 
-  // Create the CodeMirror editor once the text is loaded. The view owns the
-  // document; React only tracks dirty/save state through the update listener.
+  // Create the CodeMirror editor once the file is loaded. The view owns the
+  // document; React only tracks dirty/draft state through the update
+  // listener. For markdown the view stays mounted while previewing (hidden),
+  // so unsaved edits survive the preview/edit toggle.
   useEffect(() => {
-    if (load.status !== 'ready' || load.kind !== 'text') return
+    if (load.status !== 'ready' || (load.kind !== 'text' && load.kind !== 'md')) return
     const host = hostRef.current
     if (host === null) return
     const language = languageForPath(path)
@@ -86,7 +98,10 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
         ...(language !== null ? [language] : []),
         oneDark,
         CodeMirrorView.updateListener.of((update) => {
-          if (update.docChanged) setDirty(true)
+          if (update.docChanged) {
+            setDraft(update.state.doc.toString())
+            setDirty(true)
+          }
         }),
         keymap.of([
           {
@@ -107,6 +122,12 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     }
   }, [load])
 
+  // The editor may have been display:none while previewing; re-measure when
+  // it becomes visible again (CodeMirror sizes itself on reveal).
+  useEffect(() => {
+    if (mode === 'edit') viewRef.current?.requestMeasure()
+  }, [mode])
+
   const save = (): void => {
     const view = viewRef.current
     if (view === null || savingRef.current) return
@@ -114,6 +135,7 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     setSaveState('saving')
     api.fsWrite(scope, path, view.state.doc.toString()).then(() => {
       savingRef.current = false
+      setDraft(null)
       setDirty(false)
       setSaveState('saved')
     }).catch(() => {
@@ -122,14 +144,34 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     })
   }
 
+  const previewable = load.status === 'ready' && load.kind === 'md'
+  const editable = load.status === 'ready' && (load.kind === 'text' || load.kind === 'md')
   const saveLabel = saveState === 'saving' ? t('loading') : saveState === 'saved' ? t('saved') : saveState === 'failed' ? t('saveFailed') : ''
 
   return (
     <div className={css.editor}>
       <div className={css.editorHeader}>
         <span className={css.editorTitle} title={path}>{title}</span>
+        {previewable && (
+          <div className={css.editorModeToggle}>
+            <button
+              type="button"
+              className={clsx(css.editorModeButton, mode === 'preview' && css.editorModeActive)}
+              onClick={() => { setMode('preview') }}
+            >
+              {t('preview')}
+            </button>
+            <button
+              type="button"
+              className={clsx(css.editorModeButton, mode === 'edit' && css.editorModeActive)}
+              onClick={() => { setMode('edit') }}
+            >
+              {t('edit')}
+            </button>
+          </div>
+        )}
         {dirty && <span className={css.dirtyDot} title={t('unsaved')} />}
-        {load.status === 'ready' && load.kind === 'text' && (
+        {editable && (
           <button
             type="button"
             className={css.iconButton}
@@ -145,10 +187,13 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
       {load.status === 'loading' && <div className={css.editorPlaceholder}>{t('loading')}</div>}
       {load.status === 'error' && <div className={css.editorError}>{load.message}</div>}
       {load.status === 'binary' && <div className={css.editorPlaceholder}>{t('binary')}</div>}
-      {load.status === 'ready' && load.kind === 'text' && (
+      {editable && (
         <>
-          {load.truncated && <div className={css.editorBanner}>{t('truncation')}</div>}
-          <div className={css.editorCm} ref={hostRef} />
+          {load.truncated && mode === 'edit' && <div className={css.editorBanner}>{t('truncation')}</div>}
+          <div
+            className={clsx(css.editorCm, previewable && mode === 'preview' && css.editorCmHidden)}
+            ref={hostRef}
+          />
         </>
       )}
       {load.status === 'ready' && load.kind === 'image' && (
@@ -156,9 +201,9 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
           <img className={css.editorImage} src={mediaUrl(scope, path)} alt={title} />
         </div>
       )}
-      {load.status === 'ready' && load.kind === 'md' && (
+      {previewable && mode === 'preview' && (
         <div className={css.editorMd}>
-          <MarkdownText text={load.content} />
+          <MarkdownText text={draft ?? load.content} />
         </div>
       )}
     </div>

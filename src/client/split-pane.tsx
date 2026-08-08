@@ -12,9 +12,11 @@
 import { Fragment, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
+import {
+  IconBranchOutline16, IconCodeOutline16, IconFolderOpen16,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
 import type { DropZone } from './state.ts'
-import { t } from './locales.ts'
 import { TabBar, type NewTabOption, parseDrag, type TabDragPayload } from './TabBar.tsx'
 import css from './sidebar.module.css'
 
@@ -79,6 +81,44 @@ function zoneAt(event: React.DragEvent, pane: HTMLElement): DropZone {
   return 'center'
 }
 
+/** The icon of one openable type card (mirror of the + menu options). */
+function optionIcon(optionId: string): ReactNode {
+  switch (optionId) {
+    case 'explorer': return <IconFolderOpen16 size={16} />
+    case 'git': return <IconBranchOutline16 size={16} />
+    case 'terminal': return <IconCodeOutline16 size={16} />
+    default: return <IconCodeOutline16 size={16} />
+  }
+}
+
+/**
+ * An empty pane's welcome cards: the openable types as cards, clicked to
+ * open (instead of a bare "this pane is empty" message).
+ */
+function PaneEmptyCards(props: {
+  newTabOptions: NewTabOption[]
+  onNewTab: (optionId: string) => void
+}) {
+  const { newTabOptions, onNewTab } = props
+  return (
+    <div className={css.paneEmptyCards}>
+      {newTabOptions.map(option => (
+        <button
+          key={option.id}
+          type="button"
+          className={css.paneCard}
+          disabled={option.disabled === true}
+          title={option.label}
+          onClick={() => { onNewTab(option.id) }}
+        >
+          {optionIcon(option.id)}
+          <span>{option.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** A leaf: tab strip + active content + VSCode-style drop target for tabs. */
 function LeafView(props: {
   leaf: { id: string; tabs: SidebarTab[]; active: string | null }
@@ -135,7 +175,7 @@ function LeafView(props: {
       {leaf.tabs.length > 0 ? (
         <div className={css.paneContent}>{activeTab !== undefined ? renderTab(activeTab) : null}</div>
       ) : (
-        <div className={css.paneEmpty}>{t('emptyPane')}</div>
+        <PaneEmptyCards newTabOptions={newTabOptions} onNewTab={onNewTab} />
       )}
     </div>
   )
