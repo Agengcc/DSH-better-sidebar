@@ -3,8 +3,9 @@ import { compareEntries, parentOf, rootLabel, requireAbsolute } from '../src/fs-
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
   activateTab, closeTab, makeDefaultState, moveTab, moveTabToEdge, openTab,
-  resizeSplit, splitPane, toggleExpanded, type SidebarState, type SplitNode,
+  resizeSplit, sanitizeState, splitPane, toggleExpanded, type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
+import { extOf, languageKeyForExt } from '../src/client/lang.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
 import { defaultShell, ensureSpawnHelper } from '../src/pty-manager.ts'
 
@@ -258,5 +259,59 @@ describe('produced-files derivation', () => {
     expect(resolveSidebarPath('/work/proj', 'src/a.ts')).toBe('/work/proj/src/a.ts')
     expect(resolveSidebarPath('/work/proj', '/abs/x.ts')).toBe('/abs/x.ts')
     expect(resolveSidebarPath(undefined, 'a.ts')).toBe('a.ts')
+  })
+})
+
+describe('persisted state sanitization', () => {
+  it('accepts a well-formed state unchanged (node environment: no width clamp)', () => {
+    const state = makeDefaultState(400)
+    const clean = sanitizeState(JSON.parse(JSON.stringify(state)))
+    expect(clean).toEqual(state)
+  })
+
+  it('clamps undersized widths to the panel minimum', () => {
+    const state = { ...makeDefaultState(400), width: 10 }
+    const clean = sanitizeState(JSON.parse(JSON.stringify(state)))
+    expect(clean?.width).toBe(280)
+  })
+
+  it('rejects malformed shapes instead of crashing the panel', () => {
+    expect(sanitizeState(null)).toBeUndefined()
+    expect(sanitizeState('nope')).toBeUndefined()
+    expect(sanitizeState({})).toBeUndefined()
+    expect(sanitizeState({ ...makeDefaultState(400), width: 'wide' })).toBeUndefined()
+    expect(sanitizeState({ ...makeDefaultState(400), panelOpen: 1 })).toBeUndefined()
+    // A split whose sizes do not match its children is rejected.
+    const withSplit = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    withSplit.splits = { kind: 'split', id: 's1', dir: 'row', sizes: [0.5], children: [] }
+    expect(sanitizeState(withSplit)).toBeUndefined()
+    // Unknown tab types (older layouts) are rejected.
+    const withBadTab = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    withBadTab.splits.tabs[0].type = 'watcher'
+    expect(sanitizeState(withBadTab)).toBeUndefined()
+    // An active id that no tab carries is rejected.
+    const withBadActive = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    withBadActive.splits.active = 'ghost-tab'
+    expect(sanitizeState(withBadActive)).toBeUndefined()
+  })
+})
+
+describe('editor language mapping', () => {
+  it('derives extensions from paths', () => {
+    expect(extOf('/a/b/main.tsx')).toBe('tsx')
+    expect(extOf('README.MD')).toBe('md')
+    expect(extOf('/a/b/.gitignore')).toBe('gitignore')
+    expect(extOf('noext')).toBe('')
+  })
+
+  it('maps common extensions to languages and falls back to plain text', () => {
+    expect(languageKeyForExt('tsx')).toBe('tsx')
+    expect(languageKeyForExt('js')).toBe('js')
+    expect(languageKeyForExt('py')).toBe('python')
+    expect(languageKeyForExt('yaml')).toBe('yaml')
+    expect(languageKeyForExt('sh')).toBe('shell')
+    expect(languageKeyForExt('txt')).toBeNull()
+    expect(languageKeyForExt('log')).toBeNull()
+    expect(languageKeyForExt('')).toBeNull()
   })
 })

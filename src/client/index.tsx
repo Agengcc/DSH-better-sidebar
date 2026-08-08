@@ -57,20 +57,52 @@ class SidebarBoundary extends Component<{ children: ReactNode }, { error: string
  * @param ctx - the client cordis context (slots, sessions).
  */
 export function apply(ctx: Context): void {
-  ctx.effect(() => {
-    const host = document.createElement('div')
-    host.setAttribute('data-dsh-better-sidebar', '')
-    document.body.appendChild(host)
-    const root = createRoot(host)
-    root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx })))
-    return () => {
-      root.unmount()
-      host.remove()
+  // A failure anywhere in the client lifecycle must never take the app down
+  // silently: log with the plugin prefix and pin a visible diagnostic strip
+  // to the page so a blank panel is never the only symptom.
+  const fail = (phase: string, error: unknown): void => {
+    console.error(`[dsh-better-sidebar] ${phase} error:`, error)
+    try {
+      const bar = document.createElement('div')
+      bar.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483000;max-width:70vw;padding:8px 12px;'
+        + 'font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#f2a1a1;background:#1b1b22;'
+        + 'border:1px solid #f2a1a1;border-radius:8px;white-space:pre-wrap'
+      bar.textContent = `[dsh-better-sidebar] ${phase} error: ${error instanceof Error ? error.message : String(error)}`
+      document.body.appendChild(bar)
+    } catch {
+      // Nothing left to report with.
     }
-  }, 'dsh-better-sidebar: sidebar mount')
+  }
+  try {
+    ctx.effect(() => {
+      try {
+        const host = document.createElement('div')
+        host.setAttribute('data-dsh-better-sidebar', '')
+        document.body.appendChild(host)
+        const root = createRoot(host)
+        root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx })))
+        return () => {
+          root.unmount()
+          host.remove()
+        }
+      } catch (error) {
+        fail('mount', error)
+        return undefined
+      }
+    }, 'dsh-better-sidebar: sidebar mount')
 
-  ctx.effect(
-    () => registerTurnTailInterception(ctx),
-    'dsh-better-sidebar: turn-tail interception',
-  )
+    ctx.effect(
+      () => {
+        try {
+          return registerTurnTailInterception(ctx)
+        } catch (error) {
+          fail('interception', error)
+          return undefined
+        }
+      },
+      'dsh-better-sidebar: turn-tail interception',
+    )
+  } catch (error) {
+    fail('load', error)
+  }
 }

@@ -538,19 +538,21 @@
   background: var(--dsw-alias-state-warn-tertiary);
 }
 
-.editorTextarea {
+.editorCm {
   flex: 1;
   min-height: 0;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  outline: none;
-  resize: none;
+  overflow: hidden;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: var(--dsw-font-markdown-code-block-small);
-  tab-size: 2;
-  white-space: pre;
+}
+
+/* CodeMirror fills the pane; the theme supplies its own token palette
+   (a designed dark theme, same policy as the xterm palette). */
+.editorCm :global(.cm-editor) {
+  height: 100%;
+}
+
+.editorCm :global(.cm-editor.cm-focused) {
+  outline: none;
 }
 
 .editorImageWrap {

@@ -16,7 +16,7 @@ interface FakeContext {
     register: (route: SidebarWebRoute) => () => void
     registerUpgrade: (route: SidebarWebUpgradeRoute) => () => void
   }
-  sessions: { get: (id: string) => undefined }
+  sessions: { get: (id: string) => { header: { cwd?: string } } | undefined }
   effect: (fn: () => void | (() => void), label?: string) => void
 }
 
@@ -124,5 +124,76 @@ describe('host plugin smoke', () => {
     expect(listing.entries.some(entry => entry.name === 'src' && entry.isDir)).toBe(true)
     expect(listing.entries.some(entry => entry.name === 'package.json' && !entry.isDir)).toBe(true)
     expect(listing.truncated).toBe(false)
+  })
+})
+
+describe('session cwd resolution over the API route', () => {
+  interface CtxOverrides {
+    sessions?: { get: (id: string) => { header: { cwd?: string } } | undefined }
+  }
+
+  const mount = (overrides: CtxOverrides = {}): SidebarWebRoute => {
+    const routes: SidebarWebRoute[] = []
+    const ctx = {
+      loader: { entries: () => [] },
+      httpServer: {
+        register: (route: SidebarWebRoute) => { routes.push(route); return () => {} },
+        registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
+      },
+      sessions: overrides.sessions ?? { get: () => undefined },
+      // The vendored cordis runs registration effects immediately.
+      effect: (fn: () => void | (() => void)) => { fn() },
+    }
+    apply(ctx as never)
+    return routes.find(route => route.path === '/sidebar/api')!
+  }
+
+  const invoke = async (route: SidebarWebRoute, payload: unknown): Promise<{ ok: boolean; value?: { cwd: string }; error?: { message: string } }> => {
+    const body = Buffer.from(JSON.stringify(payload))
+    const req = {
+      method: 'POST',
+      url: '/sidebar/api/session.cwd',
+      headers: { host: '127.0.0.1:3080' },
+      [Symbol.asyncIterator]: async function* () { yield body },
+    } as never
+    const out: { status: number; body: string } = { status: 200, body: '' }
+    const res = {
+      writeHead: (status: number) => { out.status = status },
+      end: (chunk: unknown) => { out.body += String(chunk ?? '') },
+    } as never
+    await route.handler(req, res)
+    return JSON.parse(out.body) as { ok: boolean; value?: { cwd: string }; error?: { message: string } }
+  }
+
+  it('uses the client summary cwd while the session is detached', async () => {
+    const route = mount()
+    const result = await invoke(route, { sessionId: 's-detached', cwd: '/tmp/summary-cwd' })
+    expect(result.ok).toBe(true)
+    expect(result.value?.cwd).toBe('/tmp/summary-cwd')
+  })
+
+  it('falls back to the process cwd with no summary cwd', async () => {
+    const route = mount()
+    const result = await invoke(route, { sessionId: 's-unknown' })
+    expect(result.ok).toBe(true)
+    expect(result.value?.cwd).toBe(process.cwd())
+  })
+
+  it('prefers the attached session header over the client summary', async () => {
+    const route = mount({
+      sessions: {
+        get: (id) => id === 's-attached' ? { header: { cwd: '/attached-cwd' } } : undefined,
+      },
+    })
+    const result = await invoke(route, { sessionId: 's-attached', cwd: '/tmp/summary-cwd' })
+    expect(result.ok).toBe(true)
+    expect(result.value?.cwd).toBe('/attached-cwd')
+  })
+
+  it('rejects a non-absolute client cwd', async () => {
+    const route = mount()
+    const result = await invoke(route, { sessionId: 's-detached', cwd: 'relative/path' })
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/invalid working directory/)
   })
 })

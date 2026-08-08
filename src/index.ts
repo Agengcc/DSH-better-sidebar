@@ -63,14 +63,28 @@ function trustedHostsOf(ctx: Context): string[] {
   return []
 }
 
-/** Resolve a session's authoritative working directory or throw not-found. */
-function sessionCwdOf(ctx: Context, sessionId: string): string {
+/**
+ * Resolve a session's authoritative working directory. The attached session
+ * header wins; while the session is still hydrating from persistence (the
+ * web client attaches the current conversation a moment after page load, so
+ * the very first sidebar requests can arrive detached) the caller's own
+ * list-summary cwd is used; the process cwd is the last resort (blank
+ * sessions have no cwd anywhere yet). Never throws for a missing cwd, so
+ * explorer/git/terminal work from first paint instead of surfacing
+ * "session ... has no working directory".
+ */
+function sessionCwdOf(ctx: Context, sessionId: string, clientCwd?: string): string {
   const session = ctx.sessions.get(sessionId)
-  const cwd = session?.header.cwd
-  if (cwd === undefined) {
-    throw new SidebarError('not-found', `session "${sessionId}" has no working directory`, 404)
+  const headerCwd = session?.header.cwd
+  if (headerCwd !== undefined && headerCwd !== '') return headerCwd
+  if (clientCwd !== undefined && clientCwd !== '') {
+    try {
+      return requireAbsolute(clientCwd)
+    } catch {
+      throw new SidebarError('bad-request', `invalid working directory "${clientCwd}"`)
+    }
   }
-  return cwd
+  return process.cwd()
 }
 
 /** Text read of a file with the size cap; binary detection via NUL probe. */
@@ -104,7 +118,9 @@ type ApiMethod = (payload: unknown) => Promise<unknown> | unknown
 function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMethod> {
   const cwdOf = (payload: unknown): { sessionId: string; cwd: string } => {
     const sessionId = requireString(payload, 'sessionId')
-    return { sessionId, cwd: sessionCwdOf(ctx, sessionId) }
+    const record = payload as { cwd?: unknown } | null
+    const clientCwd = typeof record?.cwd === 'string' && record.cwd !== '' ? record.cwd : undefined
+    return { sessionId, cwd: sessionCwdOf(ctx, sessionId, clientCwd) }
   }
   return {
     'session.cwd': (payload) => {
@@ -256,7 +272,7 @@ export function apply(ctx: Context): void {
         const sessionId = url.searchParams.get('sessionId')
         const raw = url.searchParams.get('path')
         if (sessionId === null || raw === null) throw new SidebarError('bad-request', 'sessionId and path are required')
-        const cwd = sessionCwdOf(ctx, sessionId)
+        const cwd = sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined)
         const path = requireAbsolute(raw)
         if (!path.startsWith(cwd)) {
           // Only files under the session cwd are served as media (the editor
@@ -311,7 +327,7 @@ async function attachTerminal(
       ws.close(1008, 'sessionId and tab are required')
       return
     }
-    const cwd = sessionCwdOf(ctx, sessionId)
+    const cwd = sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined)
     const handle = ptyManager.open(sessionId, tabId, cwd, 80, 24)
     // Replay the transcript, then follow live output.
     if (handle.transcript !== '') ws.send(handle.transcript)

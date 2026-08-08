@@ -27,6 +27,7 @@ import { EditorView } from './EditorView.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { GitView } from './GitView.tsx'
 import { t } from './locales.ts'
+import { api } from './api.ts'
 import { openSidebarFile } from './intercept.tsx'
 import css from './sidebar.module.css'
 
@@ -40,6 +41,7 @@ function TabContent(props: {
   ctx: Context
 }) {
   const { tab, sessionId, cwd, expanded, onToggleDir, ctx } = props
+  const scope = { sessionId, cwd }
   switch (tab.type) {
     case 'explorer':
       return (
@@ -52,11 +54,11 @@ function TabContent(props: {
         />
       )
     case 'git':
-      return <GitView sessionId={sessionId} />
+      return <GitView scope={scope} />
     case 'terminal':
-      return <TerminalView sessionId={sessionId} tabId={tab.id} />
+      return <TerminalView scope={scope} tabId={tab.id} />
     case 'editor':
-      return <EditorView sessionId={sessionId} path={tab.path ?? ''} title={tab.title} />
+      return <EditorView scope={scope} path={tab.path ?? ''} title={tab.title} />
   }
 }
 
@@ -95,7 +97,23 @@ export function Sidebar(props: { ctx: Context }) {
 
   const state = snapshot.state
   const sessionId = snapshot.sessionId
-  const cwd = sessionId === undefined ? undefined : sessionList.byId[sessionId]?.cwd
+  const summaryCwd = sessionId === undefined ? undefined : sessionList.byId[sessionId]?.cwd
+
+  // While the session's header is still hydrating (or the session is blank),
+  // the list summary may carry no cwd; ask the host once (it falls back to
+  // the process cwd) so the explorer root and terminal cwd are real from
+  // first paint instead of showing "no session".
+  const [fetchedCwd, setFetchedCwd] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    setFetchedCwd(undefined)
+    if (sessionId === undefined || summaryCwd !== undefined) return
+    let cancelled = false
+    api.sessionCwd({ sessionId })
+      .then(result => { if (!cancelled) setFetchedCwd(result.cwd) })
+      .catch(() => { /* the explorer/git rows surface their own errors */ })
+    return () => { cancelled = true }
+  }, [sessionId, summaryCwd])
+  const cwd = summaryCwd ?? fetchedCwd
 
   // Panel width drag (left edge strip).
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
@@ -103,9 +121,13 @@ export function Sidebar(props: { ctx: Context }) {
 
   // Layout push: the app shell gives up the panel's width while it is open
   // (0 while collapsed), so the conversation and input bar are squeezed
-  // instead of covered. Dragging disables the layout transition.
+  // instead of covered. The margin is capped at the viewport so a stale
+  // persisted width (e.g. fullscreen on a bigger window) can never crush
+  // the app shell to zero. Dragging disables the layout transition.
   useEffect(() => {
-    const width = snapshot.state?.panelOpen === true ? snapshot.state.width : 0
+    const width = snapshot.state?.panelOpen === true
+      ? Math.min(snapshot.state.width, window.innerWidth)
+      : 0
     document.documentElement.style.setProperty('--dsh-sidebar-width', `${width}px`)
   }, [snapshot.state?.panelOpen, snapshot.state?.width])
   useEffect(() => {
@@ -215,7 +237,7 @@ export function Sidebar(props: { ctx: Context }) {
       */}
       <div
         className={clsx(css.panel, !state.panelOpen && css.panelHidden)}
-        style={{ width: state.width }}
+        style={{ width: Math.min(state.width, window.innerWidth) }}
         data-dragging={draggingWidth || undefined}
       >
           <div

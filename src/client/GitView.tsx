@@ -11,7 +11,7 @@ import {
   DiffBlock, IconBranchOutline16, IconRefreshOutline16, IconTrashOutline16,
   Input,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { GitLogEntry, GitStatusEntry, GitStatusResult } from './api.ts'
+import type { GitLogEntry, GitStatusEntry, GitStatusResult, SessionScope } from './api.ts'
 import { api } from './api.ts'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
@@ -25,8 +25,8 @@ function badgeOf(entry: GitStatusEntry): string {
   return '?'
 }
 
-export function GitView(props: { sessionId: string }) {
-  const { sessionId } = props
+export function GitView(props: { scope: SessionScope }) {
+  const { scope } = props
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -47,9 +47,9 @@ export function GitView(props: { sessionId: string }) {
     setError(null)
     try {
       const [statusResult, branchResult, logResult] = await Promise.all([
-        api.gitStatus(sessionId),
-        api.gitBranch(sessionId).catch(() => ({ current: '', names: [] as string[] })),
-        api.gitLog(sessionId).catch(() => [] as GitLogEntry[]),
+        api.gitStatus(scope),
+        api.gitBranch(scope).catch(() => ({ current: '', names: [] as string[] })),
+        api.gitLog(scope).catch(() => [] as GitLogEntry[]),
       ])
       setStatus(statusResult)
       setBranchNames(branchResult.names)
@@ -59,7 +59,7 @@ export function GitView(props: { sessionId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [sessionId])
+  }, [scope.sessionId, scope.cwd])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -69,12 +69,12 @@ export function GitView(props: { sessionId: string }) {
     setDiffStaged(staged)
     setDiffOld(null)
     setDiffNew('')
-    const oldPromise = api.gitShow(sessionId, 'HEAD', entry.path)
+    const oldPromise = api.gitShow(scope, 'HEAD', entry.path)
       .then(result => result.content)
       .catch(() => null)
     const newPromise = staged
-      ? api.gitShow(sessionId, ':', entry.path).then(result => result.content ?? '').catch(() => '')
-      : api.fsRead(sessionId, entry.path)
+      ? api.gitShow(scope, ':', entry.path).then(result => result.content ?? '').catch(() => '')
+      : api.fsRead(scope, entry.path)
         .then(result => (result.kind === 'text' ? result.content : ''))
         .catch(() => '')
     const [oldText, newText] = await Promise.all([oldPromise, newPromise])
@@ -85,8 +85,8 @@ export function GitView(props: { sessionId: string }) {
   const stageEntry = async (entry: GitStatusEntry, staged: boolean): Promise<void> => {
     setBusy(true)
     try {
-      if (staged) await api.gitUnstage(sessionId, entry.path)
-      else await api.gitStage(sessionId, entry.path)
+      if (staged) await api.gitUnstage(scope, entry.path)
+      else await api.gitStage(scope, entry.path)
       setDiffPath(null)
       await refresh()
     } finally {
@@ -97,8 +97,8 @@ export function GitView(props: { sessionId: string }) {
   const stageAll = async (staged: boolean): Promise<void> => {
     setBusy(true)
     try {
-      if (staged) await api.gitUnstage(sessionId)
-      else await api.gitStage(sessionId)
+      if (staged) await api.gitUnstage(scope)
+      else await api.gitStage(scope)
       setDiffPath(null)
       await refresh()
     } finally {
@@ -112,7 +112,7 @@ export function GitView(props: { sessionId: string }) {
     setBusy(true)
     setCommitError(null)
     try {
-      await api.gitCommit(sessionId, message)
+      await api.gitCommit(scope, message)
       setCommitMsg('')
       setDiffPath(null)
       await refresh()
@@ -128,7 +128,7 @@ export function GitView(props: { sessionId: string }) {
     setBusy(true)
     setCommitError(null)
     try {
-      await api.gitCheckout(sessionId, branch)
+      await api.gitCheckout(scope, branch)
       setDiffPath(null)
       await refresh()
     } catch (reason) {

@@ -6,7 +6,7 @@ control panel — **isolated per conversation session**.
 
 - 右侧侧边栏（文件夹预览 / 文件编辑与预览 / 终端 / Git）——按会话记忆与隔离
 - Explorer: 懒加载目录树，根目录 = 当前会话工作目录
-- Editor: 文本编辑（脏点 + Ctrl/Cmd+S 保存）、图片查看、Markdown 预览
+- Editor: CodeMirror 文本编辑（自动换行 + 按扩展名语法高亮、脏点 + Ctrl/Cmd+S 保存）、图片查看、Markdown 预览
 - Terminal: xterm.js + node-pty（每会话最多 3 个，进程跨刷新存活）
 - Git: status / diff / stage / commit / branch / history（基础集）
 - 分栏工作台: VSCode 式拖拽分栏（拖 Tab 到分栏边缘即左右/上下拆分，拖到中间合并）、
@@ -24,9 +24,9 @@ control panel — **isolated per conversation session**.
 | host | `src/index.ts` → `lib/index.js` | cordis 插件：`/sidebar/api/*` JSON API、`/sidebar/file` 媒体路由、`/sidebar/ws/terminal` WebSocket；fs / git / pty 服务 |
 | client | `src/client/index.tsx` → `lib/client.js` | 浏览器 bundle（`__ModuleLoader__.load` 闭包工厂）：portal 侧边栏 + 各视图 + turnTail 拦截 |
 
-- 所有 API 携带 `sessionId`；cwd 从会话存储取权威值；终端按 `${sessionId}:${tabId}` 键控。
+- 所有 API 携带 `sessionId`；cwd 权威值取自会话 header，会话尚未附加（页面加载竞态）时回退客户端摘要 cwd，再回退进程 cwd（`session.cwd` / fs / git / 终端 / 媒体路由一致）；终端按 `${sessionId}:${tabId}` 键控。
 - 路由与 `/api` 同款信任围栏（Host 头 loopback / `connection.trustedHosts`，`src/trust-fence.ts`，拷贝自 `@deepseek-ai/dsh-client-connection`，BSD-3-Clause）。
-- client 状态按会话持久化到 `localStorage`（`dsh-sidebar:v1:<sessionId>`）：面板几何、分栏树、Tabs、树展开。
+- client 状态按会话持久化到 `localStorage`（`dsh-sidebar:v1:<sessionId>`）：面板几何、分栏树、Tabs、树展开；读取时做结构校验（旧/损坏状态回退默认）并把宽度钳制到当前视口，防止陈旧全屏宽度压垮应用布局。
 - client bundle externals 仅模块表词条（react/cordis/ui-primitives 等），xterm 等全部内联。
 
 ## 安装（web profile）

@@ -5,17 +5,22 @@
  * type:"resize". Transient disconnects (page refresh, host restart) reconnect
  * automatically; a server-side refusal (close code 1011 with a reason, e.g.
  * a failed pty spawn) stops the loop and shows the reason with a manual
- * retry, so the banner never spins forever.
+ * retry, and repeated unreasoned failures surface the close code after three
+ * attempts, so the banner never spins forever.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
+import type { SessionScope } from './api.ts'
 import css from './sidebar.module.css'
 
-export function TerminalView(props: { sessionId: string; tabId: string }) {
-  const { sessionId, tabId } = props
+/** How many consecutive unreasoned failures before showing the error banner. */
+const FAILURE_LIMIT = 3
+
+export function TerminalView(props: { scope: SessionScope; tabId: string }) {
+  const { scope, tabId } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
@@ -40,10 +45,12 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
     let socket: WebSocket | null = null
     let closed = false
     let retry: number | undefined
+    let failures = 0
 
     const wsUrl = (): string => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const params = new URLSearchParams({ sessionId, tab: tabId })
+      const params = new URLSearchParams({ sessionId: scope.sessionId, tab: tabId })
+      if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
       return `${proto}//${location.host}/sidebar/ws/terminal?${params.toString()}`
     }
 
@@ -57,6 +64,7 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
       if (closed) return
       socket = new WebSocket(wsUrl())
       socket.onopen = () => {
+        failures = 0
         setConnected(true)
         setFatal(null)
         sendResize()
@@ -70,6 +78,15 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
         // forever would only spin the banner, so surface it with a retry.
         if (event.code === 1011 && event.reason !== '') {
           setFatal(event.reason)
+          return
+        }
+        // Unreasoned drops (upgrade rejected, host down, mid-handshake
+        // refusal) normally recover on the next attempt; after a few
+        // consecutive failures stop spinning and show the close code.
+        failures += 1
+        if (failures >= FAILURE_LIMIT) {
+          const detail = event.reason !== '' ? ` (${event.code}: ${event.reason})` : ` (${event.code})`
+          setFatal(`${t('terminalConnectFailed')}${detail}`)
           return
         }
         if (!closed) retry = window.setTimeout(connect, 2000)
@@ -109,7 +126,7 @@ export function TerminalView(props: { sessionId: string; tabId: string }) {
       term.dispose()
       connectRef.current = null
     }
-  }, [sessionId, tabId])
+  }, [scope.sessionId, scope.cwd, tabId])
 
   return (
     <div className={css.terminalWrap}>

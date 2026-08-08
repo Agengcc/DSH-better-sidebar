@@ -366,10 +366,8 @@ function loadState(sessionId: string): SidebarState {
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}:${sessionId}`)
     if (raw !== null) {
-      const parsed = JSON.parse(raw) as SidebarState
-      if (parsed !== null && typeof parsed === 'object' && 'splits' in parsed && 'width' in parsed) {
-        return parsed
-      }
+      const sanitized = sanitizeState(JSON.parse(raw) as unknown)
+      if (sanitized !== undefined) return sanitized
     }
   } catch {
     // Corrupt or unavailable storage: fall through to the default.
@@ -381,6 +379,86 @@ function loadState(sessionId: string): SidebarState {
     ? Math.max(PANEL_MIN, Math.round((window.innerWidth - LEFT_SIDEBAR_DEFAULT) / 2))
     : PANEL_DEFAULT
   return makeDefaultState(contentHalf)
+}
+
+/**
+ * Structural validation of one persisted state. A malformed or stale shape
+ * (older layouts, hand-edited storage) must fall back to the default instead
+ * of crashing the panel on every reload; the restored width is also clamped
+ * to the current viewport so a stale fullscreen width can never crush the
+ * app shell (margin-right larger than the window) or cover the whole screen.
+ * @returns a clean state, or undefined to fall back to the default.
+ */
+export function sanitizeState(parsed: unknown): SidebarState | undefined {
+  if (parsed === null || typeof parsed !== 'object') return undefined
+  const record = parsed as Record<string, unknown>
+  if (typeof record.panelOpen !== 'boolean') return undefined
+  if (typeof record.width !== 'number' || !Number.isFinite(record.width)) return undefined
+  if (typeof record.nextTerminal !== 'number' || !Number.isInteger(record.nextTerminal) || record.nextTerminal < 1) {
+    return undefined
+  }
+  if (typeof record.activePane !== 'string' && record.activePane !== null) return undefined
+  if (!Array.isArray(record.expanded) || record.expanded.some(item => typeof item !== 'string')) return undefined
+  const splits = sanitizeNode(record.splits)
+  if (splits === undefined) return undefined
+  const maxWidth = typeof window !== 'undefined' ? window.innerWidth : Infinity
+  return {
+    panelOpen: record.panelOpen,
+    width: Math.max(PANEL_MIN, Math.min(record.width, maxWidth)),
+    activePane: typeof record.activePane === 'string' ? record.activePane : null,
+    nextTerminal: record.nextTerminal,
+    expanded: record.expanded as string[],
+    splits,
+  }
+}
+
+/** Validate one split-tree node (leaf or split) and rebuild it cleanly. */
+function sanitizeNode(node: unknown): SplitNode | undefined {
+  if (node === null || typeof node !== 'object') return undefined
+  const record = node as Record<string, unknown>
+  if (record.kind === 'leaf') {
+    if (typeof record.id !== 'string' || !Array.isArray(record.tabs)) return undefined
+    const tabs: SidebarTab[] = []
+    for (const tab of record.tabs) {
+      if (tab === null || typeof tab !== 'object') return undefined
+      const candidate = tab as Record<string, unknown>
+      if (typeof candidate.id !== 'string' || typeof candidate.title !== 'string') return undefined
+      if (
+        candidate.type !== 'explorer' && candidate.type !== 'git'
+        && candidate.type !== 'editor' && candidate.type !== 'terminal'
+      ) {
+        return undefined
+      }
+      tabs.push({
+        id: candidate.id,
+        type: candidate.type,
+        title: candidate.title,
+        ...(typeof candidate.path === 'string' ? { path: candidate.path } : {}),
+      })
+    }
+    const active = typeof record.active === 'string' ? record.active : null
+    if (active !== null && !tabs.some(tab => tab.id === active)) return undefined
+    return { kind: 'leaf', id: record.id, tabs, active }
+  }
+  if (record.kind === 'split') {
+    if (typeof record.id !== 'string' || (record.dir !== 'row' && record.dir !== 'col')) return undefined
+    if (!Array.isArray(record.children) || !Array.isArray(record.sizes)) return undefined
+    const children: SplitNode[] = []
+    for (const child of record.children) {
+      const clean = sanitizeNode(child)
+      if (clean === undefined) return undefined
+      children.push(clean)
+    }
+    if (children.length < 2) return undefined
+    if (
+      record.sizes.length !== children.length
+      || record.sizes.some(size => typeof size !== 'number' || !Number.isFinite(size) || size <= 0)
+    ) {
+      return undefined
+    }
+    return { kind: 'split', id: record.id, dir: record.dir, sizes: record.sizes as number[], children }
+  }
+  return undefined
 }
 
 /** The session-scoped store: one state per conversation, localStorage-backed. */

@@ -1,7 +1,10 @@
 /**
  * Typed fetch wrapper over the /sidebar JSON API. Every call posts to
- * `/sidebar/api/<method>` with the sessionId; failures surface as
- * {@link SidebarApiError} with the wire error code.
+ * `/sidebar/api/<method>` with the sessionId and — when known — the session's
+ * cwd from the client's own list summary. The host prefers its attached
+ * session header and uses the summary cwd only while the session is still
+ * hydrating at page load (a detached session would otherwise fail the
+ * request). Failures surface as {@link SidebarApiError} with the wire code.
  */
 
 /** One wire failure. */
@@ -71,37 +74,51 @@ async function call<T>(method: string, payload: Record<string, unknown>, signal?
   return parsed.value as T
 }
 
-/** The sidebar API surface (sessionId is threaded through every call). */
+/** One request's session scope: the conversation id plus its cwd when known. */
+export interface SessionScope {
+  sessionId: string
+  /** The session's working directory from the client list summary (optional). */
+  cwd?: string
+}
+
+/** Fold a scope into a JSON payload ({cwd} only when present). */
+function scopePayload(scope: SessionScope, extra: Record<string, unknown>): Record<string, unknown> {
+  return { sessionId: scope.sessionId, ...(scope.cwd !== undefined && scope.cwd !== '' ? { cwd: scope.cwd } : {}), ...extra }
+}
+
+/** The sidebar API surface (session scope threaded through every call). */
 export const api = {
-  sessionCwd: (sessionId: string, signal?: AbortSignal) =>
-    call<{ sessionId: string; cwd: string; root: string; parent: string | null }>('session.cwd', { sessionId }, signal),
-  fsTree: (sessionId: string, path: string, signal?: AbortSignal) =>
-    call<{ path: string; entries: FsEntry[]; truncated: boolean }>('fs.tree', { sessionId, path }, signal),
-  fsRead: (sessionId: string, path: string, signal?: AbortSignal) =>
-    call<FsTextResult | FsBinaryResult>('fs.read', { sessionId, path }, signal),
-  fsWrite: (sessionId: string, path: string, content: string) =>
-    call<{ ok: true }>('fs.write', { sessionId, path, content }),
-  gitStatus: (sessionId: string, signal?: AbortSignal) =>
-    call<GitStatusResult>('git.status', { sessionId }, signal),
-  gitDiff: (sessionId: string, path: string | undefined, staged: boolean, signal?: AbortSignal) =>
-    call<{ diff: string }>('git.diff', { sessionId, ...(path !== undefined ? { path } : {}), staged }, signal),
-  gitShow: (sessionId: string, rev: string, path: string, signal?: AbortSignal) =>
-    call<{ content: string | null }>('git.show', { sessionId, rev, path }, signal),
-  gitStage: (sessionId: string, path?: string) =>
-    call<{ ok: true }>('git.stage', { sessionId, ...(path !== undefined ? { path } : {}) }),
-  gitUnstage: (sessionId: string, path?: string) =>
-    call<{ ok: true }>('git.unstage', { sessionId, ...(path !== undefined ? { path } : {}) }),
-  gitCommit: (sessionId: string, message: string) =>
-    call<{ ok: true }>('git.commit', { sessionId, message }),
-  gitBranch: (sessionId: string, signal?: AbortSignal) =>
-    call<{ current: string; names: string[] }>('git.branch', { sessionId }, signal),
-  gitCheckout: (sessionId: string, branch: string) =>
-    call<{ ok: true }>('git.checkout', { sessionId, branch }),
-  gitLog: (sessionId: string, signal?: AbortSignal) =>
-    call<GitLogEntry[]>('git.log', { sessionId }, signal),
+  sessionCwd: (scope: SessionScope, signal?: AbortSignal) =>
+    call<{ sessionId: string; cwd: string; root: string; parent: string | null }>('session.cwd', scopePayload(scope, {}), signal),
+  fsTree: (scope: SessionScope, path: string, signal?: AbortSignal) =>
+    call<{ path: string; entries: FsEntry[]; truncated: boolean }>('fs.tree', scopePayload(scope, { path }), signal),
+  fsRead: (scope: SessionScope, path: string, signal?: AbortSignal) =>
+    call<FsTextResult | FsBinaryResult>('fs.read', scopePayload(scope, { path }), signal),
+  fsWrite: (scope: SessionScope, path: string, content: string) =>
+    call<{ ok: true }>('fs.write', scopePayload(scope, { path, content })),
+  gitStatus: (scope: SessionScope, signal?: AbortSignal) =>
+    call<GitStatusResult>('git.status', scopePayload(scope, {}), signal),
+  gitDiff: (scope: SessionScope, path: string | undefined, staged: boolean, signal?: AbortSignal) =>
+    call<{ diff: string }>('git.diff', scopePayload(scope, { ...(path !== undefined ? { path } : {}), staged }), signal),
+  gitShow: (scope: SessionScope, rev: string, path: string, signal?: AbortSignal) =>
+    call<{ content: string | null }>('git.show', scopePayload(scope, { rev, path }), signal),
+  gitStage: (scope: SessionScope, path?: string) =>
+    call<{ ok: true }>('git.stage', scopePayload(scope, { ...(path !== undefined ? { path } : {}) })),
+  gitUnstage: (scope: SessionScope, path?: string) =>
+    call<{ ok: true }>('git.unstage', scopePayload(scope, { ...(path !== undefined ? { path } : {}) })),
+  gitCommit: (scope: SessionScope, message: string) =>
+    call<{ ok: true }>('git.commit', scopePayload(scope, { message })),
+  gitBranch: (scope: SessionScope, signal?: AbortSignal) =>
+    call<{ current: string; names: string[] }>('git.branch', scopePayload(scope, {}), signal),
+  gitCheckout: (scope: SessionScope, branch: string) =>
+    call<{ ok: true }>('git.checkout', scopePayload(scope, { branch })),
+  gitLog: (scope: SessionScope, signal?: AbortSignal) =>
+    call<GitLogEntry[]>('git.log', scopePayload(scope, {}), signal),
 }
 
 /** Absolute URL of the media route for one path (images only). */
-export function mediaUrl(sessionId: string, path: string): string {
-  return `/sidebar/file?sessionId=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(path)}`
+export function mediaUrl(scope: SessionScope, path: string): string {
+  const params = new URLSearchParams({ sessionId: scope.sessionId, path })
+  if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
+  return `/sidebar/file?${params.toString()}`
 }

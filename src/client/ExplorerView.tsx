@@ -45,12 +45,12 @@ export function ExplorerView(props: {
   const loadDir = useCallback((dir: string) => {
     if (dataRef.current[dir] !== undefined) return
     storeLevel(dir, {})
-    api.fsTree(sessionId, dir).then((listing) => {
+    api.fsTree({ sessionId, cwd }, dir).then((listing) => {
       storeLevel(dir, { entries: listing.entries })
     }).catch((error: unknown) => {
       storeLevel(dir, { error: error instanceof Error ? error.message : String(error) })
     })
-  }, [sessionId, storeLevel])
+  }, [sessionId, cwd, storeLevel])
 
   useEffect(() => {
     // Load the visible set; already-loaded levels (kept in the cache) are
