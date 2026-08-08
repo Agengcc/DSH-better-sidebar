@@ -66,6 +66,39 @@ function uid(prefix: string): string {
   return `${prefix}:${nextIdCounter}`
 }
 
+/**
+ * The largest numeric suffix across a raw persisted state's counter ids
+ * (`pane:N` / `tab:N` / `split:N`). The uid counter is module-global and
+ * resets on every reload, so a split minted AFTER a reload would collide
+ * with the persisted ids (a fresh "pane:1" beside the persisted "pane:1");
+ * mapLeaf would then visit BOTH leaves and every open would land in both
+ * panes of the split. Seeding the counter past the persisted ids keeps
+ * fresh ids disjoint.
+ */
+function maxCounterId(parsed: unknown): number {
+  let max = 0
+  const consider = (id: unknown): void => {
+    if (typeof id !== 'string') return
+    const match = /^(?:pane|tab|split):(\d+)$/.exec(id)
+    if (match !== null) max = Math.max(max, Number(match[1]))
+  }
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return
+    const record = node as Record<string, unknown>
+    consider(record.id)
+    if (Array.isArray(record.tabs)) {
+      for (const tab of record.tabs) {
+        if (tab !== null && typeof tab === 'object') consider((tab as Record<string, unknown>).id)
+      }
+    }
+    if (Array.isArray(record.children)) {
+      for (const child of record.children) walk(child)
+    }
+  }
+  walk((parsed as Record<string, unknown> | null)?.splits)
+  return max
+}
+
 /** A fresh default state: open, one explorer tab in one pane. `width` is
  * the caller's preferred panel width (default PANEL_DEFAULT); the store
  * seeds new sessions with half the viewport. */
@@ -268,7 +301,12 @@ function isSingle(type: TabType): boolean {
  * in the active pane (or the first pane when the active one is gone).
  */
 export function openTab(state: SidebarState, tab: SidebarTab): SidebarState {
-  const targetId = state.activePane ?? firstLeaf(state.splits).id
+  let targetId = state.activePane ?? firstLeaf(state.splits).id
+  // A stale activePane (its pane was closed since) must not swallow the
+  // open: fall back to the first pane instead of dropping the tab.
+  if (!allLeaves(state.splits).some(leaf => leaf.id === targetId)) {
+    targetId = firstLeaf(state.splits).id
+  }
   if (isSingle(tab.type)) {
     for (const leaf of allLeaves(state.splits)) {
       const existing = leaf.tabs.find(candidate => candidate.type === tab.type)
@@ -371,7 +409,11 @@ function loadState(sessionId: string): SidebarState {
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}:${sessionId}`)
     if (raw !== null) {
-      const sanitized = sanitizeState(JSON.parse(raw) as unknown)
+      const parsed = JSON.parse(raw) as unknown
+      // Seed the uid counter past the persisted ids (it resets on reload);
+      // sanitize re-ids any duplicates the pre-seeding counter left behind.
+      nextIdCounter = maxCounterId(parsed)
+      const sanitized = sanitizeState(parsed)
       if (sanitized !== undefined) return sanitized
     }
   } catch {
@@ -404,21 +446,44 @@ export function sanitizeState(parsed: unknown): SidebarState | undefined {
   }
   if (typeof record.activePane !== 'string' && record.activePane !== null) return undefined
   if (!Array.isArray(record.expanded) || record.expanded.some(item => typeof item !== 'string')) return undefined
-  const splits = sanitizeNode(record.splits)
+  const reid = new Map<string, string>()
+  const splits = sanitizeNode(record.splits, new Set(), reid)
   if (splits === undefined) return undefined
   const maxWidth = typeof window !== 'undefined' ? window.innerWidth : Infinity
   return {
     panelOpen: record.panelOpen,
     width: Math.max(PANEL_MIN, Math.min(record.width, maxWidth)),
-    activePane: typeof record.activePane === 'string' ? record.activePane : null,
+    // A stale duplicate pane id may have been re-ided; follow the rename so
+    // new tabs still land in the pane the user was using.
+    activePane: typeof record.activePane === 'string' ? (reid.get(record.activePane) ?? record.activePane) : null,
     nextTerminal: record.nextTerminal,
     expanded: record.expanded as string[],
     splits,
   }
 }
 
+/**
+ * One tree node id, deduplicated against the ids already seen in this
+ * state. Duplicates are exactly the pre-seeding counter-reset corruption
+ * (a "pane:1"/"split:1" minted after a reload beside the persisted ones):
+ * keeping both would make mapLeaf visit two leaves at once and every open
+ * would land in both panes, so the repeat gets a fresh id.
+ * @returns the id to use (the original, or a fresh uid for repeats).
+ */
+function uniqueNodeId(id: string, seen: Set<string>, reid: Map<string, string>): string {
+  if (!seen.has(id)) {
+    seen.add(id)
+    return id
+  }
+  const prefix = /^split:\d+$/.test(id) ? 'split' : 'pane'
+  const fresh = uid(prefix)
+  seen.add(fresh)
+  reid.set(id, fresh)
+  return fresh
+}
+
 /** Validate one split-tree node (leaf or split) and rebuild it cleanly. */
-function sanitizeNode(node: unknown): SplitNode | undefined {
+function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string>): SplitNode | undefined {
   if (node === null || typeof node !== 'object') return undefined
   const record = node as Record<string, unknown>
   if (record.kind === 'leaf') {
@@ -443,14 +508,14 @@ function sanitizeNode(node: unknown): SplitNode | undefined {
     }
     const active = typeof record.active === 'string' ? record.active : null
     if (active !== null && !tabs.some(tab => tab.id === active)) return undefined
-    return { kind: 'leaf', id: record.id, tabs, active }
+    return { kind: 'leaf', id: uniqueNodeId(record.id, seen, reid), tabs, active }
   }
   if (record.kind === 'split') {
     if (typeof record.id !== 'string' || (record.dir !== 'row' && record.dir !== 'col')) return undefined
     if (!Array.isArray(record.children) || !Array.isArray(record.sizes)) return undefined
     const children: SplitNode[] = []
     for (const child of record.children) {
-      const clean = sanitizeNode(child)
+      const clean = sanitizeNode(child, seen, reid)
       if (clean === undefined) return undefined
       children.push(clean)
     }
@@ -461,7 +526,7 @@ function sanitizeNode(node: unknown): SplitNode | undefined {
     ) {
       return undefined
     }
-    return { kind: 'split', id: record.id, dir: record.dir, sizes: record.sizes as number[], children }
+    return { kind: 'split', id: uniqueNodeId(record.id, seen, reid), dir: record.dir, sizes: record.sizes as number[], children }
   }
   return undefined
 }
@@ -483,6 +548,11 @@ export class SidebarStore {
       if (state === undefined) {
         state = loadState(sessionId)
         this.bySession.set(sessionId, state)
+      } else {
+        // Cache hit: another session's load/ops may have left the uid
+        // counter below THIS session's persisted ids — re-seed so fresh
+        // pane/split ids can never collide with its tree.
+        nextIdCounter = maxCounterId(state)
       }
       this.snapshot = { sessionId, state }
     }

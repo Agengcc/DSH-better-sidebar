@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { compareEntries, parentOf, rootLabel, requireAbsolute } from '../src/fs-tree.ts'
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
-  activateTab, closeTab, makeDefaultState, moveTab, moveTabToEdge, openTab,
-  resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  activateTab, allLeaves, closeTab, insertLeafAt, makeDefaultState, moveTab, moveTabToEdge,
+  openTab, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
@@ -316,6 +316,53 @@ describe('persisted state sanitization', () => {
     const withBadActive = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withBadActive.splits.active = 'ghost-tab'
     expect(sanitizeState(withBadActive)).toBeUndefined()
+  })
+
+  it('re-ids stale duplicate pane/split ids and follows the activePane rename', () => {
+    // The pre-seeding counter reset could mint a fresh "pane:1" beside the
+    // persisted "pane:1": mapLeaf then hit BOTH leaves and every open landed
+    // in both panes. Sanitize must give the repeat a fresh id.
+    const corrupted = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    corrupted.activePane = 'pane:1'
+    corrupted.splits = {
+      kind: 'split',
+      id: 'split:1',
+      dir: 'col',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf', id: 'pane:1', tabs: [], active: null },
+        { kind: 'leaf', id: 'pane:1', tabs: [{ id: 'tab:1', type: 'explorer', title: 'Explorer' }], active: 'tab:1' },
+      ],
+    }
+    const clean = sanitizeState(corrupted)
+    expect(clean).toBeDefined()
+    const leaves = allLeaves(clean!.splits)
+    // The first occurrence keeps its id; the repeat gets a fresh unique one
+    // (exact suffix depends on the module-level uid counter, so assert shape).
+    expect(leaves[0]!.id).toBe('pane:1')
+    expect(new Set(leaves.map(leaf => leaf.id)).size).toBe(2)
+    expect(clean!.activePane).toBe(leaves[1]!.id)
+    // And an open must land in exactly one pane of the healed tree.
+    const opened = openTab(clean!, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
+    const owners = allLeaves(opened.splits).filter(leaf => leaf.tabs.some(tab => tab.path === '/a.ts'))
+    expect(owners).toHaveLength(1)
+  })
+
+  it('falls back from a stale active pane instead of dropping the open', () => {
+    let s = makeDefaultState()
+    const paneA = allLeaves(s.splits)[0]!.id
+    const explorerTab = allLeaves(s.splits)[0]!.tabs.find(tab => tab.type === 'explorer')!.id
+    s = closeTab(s, paneA, explorerTab)
+    s = openTab(s, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
+    const split = insertLeafAt(s.splits, paneA, 'col', { id: 'terminal:1', type: 'terminal', title: 'Terminal 1' }, false)
+    s = { ...s, splits: split.node, activePane: paneA }
+    // Closing the editor empties paneA; the pane is removed but activePane
+    // still points at it. The next open must land in the surviving pane.
+    s = closeTab(s, paneA, 'editor:/a.ts')
+    s = openTab(s, { id: 'editor:/b.ts', type: 'editor', title: 'b.ts', path: '/b.ts' })
+    const owners = allLeaves(s.splits).filter(leaf => leaf.tabs.some(tab => tab.path === '/b.ts'))
+    expect(owners).toHaveLength(1)
+    expect(owners[0]!.tabs.some(tab => tab.type === 'terminal')).toBe(true)
   })
 })
 
