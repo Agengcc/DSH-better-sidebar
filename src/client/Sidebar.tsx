@@ -12,12 +12,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
-import { IconCloseOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronRightOutline14, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
 import {
-  allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, openTab, resizeSplit,
-  sidebarStore, splitPane, setWidth, toggleExpanded, togglePanel,
-  TERMINAL_LIMIT, type SidebarState, type SidebarTab, type SplitNode,
+  allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
+  resizeSplit, sidebarStore, setWidth, toggleExpanded, togglePanel,
+  TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarTab, type SplitNode,
 } from './state.ts'
 import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import type { NewTabOption } from './TabBar.tsx'
@@ -113,15 +113,15 @@ export function Sidebar(props: { ctx: Context }) {
       }))
     },
     focusPane: (paneId) => { sidebarStore.reduce(s => ({ ...s, activePane: paneId })) },
-    splitPane: (dir) => { sidebarStore.reduce(s => splitPane(s, dir)) },
-    moveTab: (payload: TabDragPayload, toPane: string, before: string | null) => {
+    moveTabToEdge: (payload: TabDragPayload, toPane: string, zone: DropZone) => {
+      sidebarStore.reduce(s => moveTabToEdge(s, payload.paneId, payload.tabId, toPane, zone))
+    },
+    moveTabBefore: (payload: TabDragPayload, toPane: string, beforeTabId: string) => {
       sidebarStore.reduce((s) => {
         let index = -1
-        if (before !== null) {
-          const source = leafWithTab(s.splits, before)
-          if (source !== undefined && source.id === toPane) {
-            index = source.tabs.findIndex(tab => tab.id === before)
-          }
+        const source = leafWithTab(s.splits, beforeTabId)
+        if (source !== undefined && source.id === toPane) {
+          index = source.tabs.findIndex(tab => tab.id === beforeTabId)
         }
         return moveTab(s, payload.paneId, payload.tabId, toPane, index)
       })
@@ -181,11 +181,11 @@ export function Sidebar(props: { ctx: Context }) {
     <>
       {!state.panelOpen && (
         <div className={css.toggleRail}>
-          <Tooltip label={t('openExplorer')} side="bottom" delayMs={500}>
+          <Tooltip label={t('expand')} side="bottom" delayMs={500}>
             <button
               type="button"
               className={css.toggleButton}
-              aria-label={t('openExplorer')}
+              aria-label={t('expand')}
               onClick={() => { sidebarStore.reduce(togglePanel) }}
             >
               <IconPanelLeftOutline16 size={16} />
@@ -222,11 +222,11 @@ export function Sidebar(props: { ctx: Context }) {
             <button
               type="button"
               className={css.iconButton}
-              aria-label={t('close')}
-              title={t('close')}
+              aria-label={t('collapse')}
+              title={t('collapse')}
               onClick={() => { sidebarStore.reduce(togglePanel) }}
             >
-              <IconCloseOutline16 />
+              <IconChevronRightOutline14 />
             </button>
           </div>
           <div className={css.panelBody}>

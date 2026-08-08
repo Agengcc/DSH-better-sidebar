@@ -138,6 +138,77 @@ export function splitLeafAt(node: SplitNode, paneId: string, dir: 'row' | 'col')
 }
 
 /**
+ * Split a leaf by inserting a fresh leaf holding `tab` beside it — the
+ * VSCode drag-to-edge gesture. `dir` is the split direction ('row' for
+ * left/right, 'col' for up/down); `front` places the new leaf first (left/
+ * up) or second (right/down).
+ * @returns the new tree plus the fresh leaf's id (the drop's active pane).
+ */
+export function insertLeafAt(
+  node: SplitNode,
+  paneId: string,
+  dir: 'row' | 'col',
+  tab: SidebarTab,
+  front: boolean,
+): { node: SplitNode; leafId: string } {
+  const fresh: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [tab], active: tab.id }
+  const leafId = fresh.id
+  const next = mapLeaf(node, paneId, (leaf) => {
+    const target: SidebarLeaf = { ...leaf }
+    const split: SidebarSplit = {
+      kind: 'split',
+      id: uid('split'),
+      dir,
+      sizes: [0.5, 0.5],
+      children: front ? [fresh, target] : [target, fresh],
+    }
+    Object.assign(leaf, split)
+  })
+  return { node: next, leafId }
+}
+
+/** Where a tab drop lands on a pane: an edge creates a split, center merges. */
+export type DropZone = 'left' | 'right' | 'up' | 'down' | 'center'
+
+/**
+ * The VSCode drag gesture: move a tab out of its pane and either merge it
+ * into the target pane (center) or split the target pane with the tab in a
+ * fresh leaf (edge). The source pane collapses when it empties.
+ */
+export function moveTabToEdge(
+  state: SidebarState,
+  fromPane: string,
+  tabId: string,
+  toPane: string,
+  zone: DropZone,
+): SidebarState {
+  if (fromPane === toPane && zone === 'center') {
+    // Dropped back onto its own pane's center: reorder to the end.
+    return moveTab(state, fromPane, tabId, toPane, -1)
+  }
+  const source = leafWithTab(state.splits, tabId)
+  if (source === undefined) return state
+  const tab = source.tabs.find(candidate => candidate.id === tabId)!
+  let emptied = false
+  let splits = mapLeaf(state.splits, source.id, (leaf) => {
+    leaf.tabs = leaf.tabs.filter(candidate => candidate.id !== tabId)
+    if (leaf.active === tabId) leaf.active = leaf.tabs[leaf.tabs.length - 1]?.id ?? null
+    if (leaf.tabs.length === 0) emptied = true
+  })
+  if (emptied) splits = removeLeafAt(splits, source.id)
+  if (zone === 'center') {
+    splits = mapLeaf(splits, toPane, (leaf) => {
+      leaf.tabs = [...leaf.tabs, tab]
+      leaf.active = tab.id
+    })
+    return { ...state, splits, activePane: toPane }
+  }
+  const dir = zone === 'left' || zone === 'right' ? 'row' : 'col'
+  const result = insertLeafAt(splits, toPane, dir, tab, zone === 'left' || zone === 'up')
+  return { ...state, splits: result.node, activePane: result.leafId }
+}
+
+/**
  * Remove a leaf from the tree. A split left with one child promotes that
  * child; removing the last leaf yields an empty leaf.
  */

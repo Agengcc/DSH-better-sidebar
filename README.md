@@ -9,7 +9,8 @@ control panel — **isolated per conversation session**.
 - Editor: 文本编辑（脏点 + Ctrl/Cmd+S 保存）、图片查看、Markdown 预览
 - Terminal: xterm.js + node-pty（每会话最多 3 个，进程跨刷新存活）
 - Git: status / diff / stage / commit / branch / history（基础集）
-- 分栏工作台: 上下左右递归分栏、分隔线拖拽、Tab 拖拽移动、面板宽度拖拽
+- 分栏工作台: VSCode 式拖拽分栏（拖 Tab 到分栏边缘即左右/上下拆分，拖到中间合并）、
+  分隔线拖拽、面板宽度拖拽；折叠后右缘展开按钮常驻
 - Tab 栏: 最大宽度 160px、横向滚动、`+` 菜单新建 Tab
 - 拦截: 对话"产出文件"行点击改为在侧边栏打开
 - 样式完全复用 `--dsw-*` 主题变量与 `@deepseek-ai/dsh-client-ui-primitives`

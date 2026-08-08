@@ -8,11 +8,10 @@
 import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconChevronDownOutline14, IconChevronLeftOutline14, IconChevronRightOutline14,
-  IconChevronUpOutline14, IconCloseFill14, IconPlusOutline16, Menu,
+  IconCloseFill14, IconPlusOutline16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarTab } from './state.ts'
-import { t, type CopyKey } from './locales.ts'
+import { t } from './locales.ts'
 import css from './sidebar.module.css'
 
 /** One + menu option. */
@@ -44,27 +43,19 @@ export function parseDrag(raw: string): TabDragPayload | null {
   }
 }
 
-const SPLIT_DIRS: Array<{ dir: 'left' | 'right' | 'up' | 'down'; label: CopyKey; icon: (p: { size?: number }) => ReactNode }> = [
-  { dir: 'left', label: 'splitLeft', icon: IconChevronLeftOutline14 },
-  { dir: 'right', label: 'splitRight', icon: IconChevronRightOutline14 },
-  { dir: 'up', label: 'splitUp', icon: IconChevronUpOutline14 },
-  { dir: 'down', label: 'splitDown', icon: IconChevronDownOutline14 },
-]
-
 export function TabBar(props: {
   paneId: string
   tabs: SidebarTab[]
   active: string | null
   onActivate: (tabId: string) => void
   onClose: (tabId: string) => void
-  onSplit: (dir: 'row' | 'col') => void
   onNewTab: (optionId: string) => void
   newTabOptions: NewTabOption[]
   /** Drop of a tab from any pane: (payload, insertBeforeTabId | null). */
   onDropTab: (payload: TabDragPayload, before: string | null) => void
 }) {
   const {
-    paneId, tabs, active, onActivate, onClose, onSplit, onNewTab, newTabOptions, onDropTab,
+    paneId, tabs, active, onActivate, onClose, onNewTab, newTabOptions, onDropTab,
   } = props
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -122,18 +113,6 @@ export function TabBar(props: {
         ))}
       </div>
       <div className={css.tabBarActions}>
-        {SPLIT_DIRS.map(({ dir, label, icon: Icon }) => (
-          <button
-            key={dir}
-            type="button"
-            className={css.tabBarButton}
-            aria-label={t(label)}
-            title={t(label)}
-            onClick={() => { onSplit(dir === 'left' || dir === 'right' ? 'row' : 'col') }}
-          >
-            <Icon />
-          </button>
-        ))}
         <Menu
           open={menuOpen}
           onClose={() => { setMenuOpen(false) }}

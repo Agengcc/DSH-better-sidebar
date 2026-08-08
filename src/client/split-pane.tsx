@@ -1,14 +1,19 @@
 /**
  * The split-pane workbench: renders the recursive split tree. A split lays
  * children out row- or column-wise with draggable dividers (fractional
- * sizes); a leaf renders its tab strip plus the active tab's content and
- * accepts tab drops. The tree and all operations live in state.ts — this
- * file is pure presentation over them.
+ * sizes); a leaf renders its tab strip plus the active tab's content.
+ *
+ * Splitting is VSCode-style DRAG-TO-EDGE, not buttons: while dragging a tab
+ * over a pane, a drop overlay shows five zones — four edges (left/right/up/
+ * down) that split the pane with the tab in a fresh leaf, and the center
+ * that merges the tab into the pane. The tree and all operations live in
+ * state.ts; this file is pure presentation over them.
  */
 import { Fragment, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
+import type { DropZone } from './state.ts'
 import { t } from './locales.ts'
 import { TabBar, type NewTabOption, parseDrag, type TabDragPayload } from './TabBar.tsx'
 import css from './sidebar.module.css'
@@ -19,8 +24,10 @@ export interface WorkbenchActions {
   activateTab: (paneId: string, tabId: string) => void
   /** Make a pane the target of newly opened tabs (click focus). */
   focusPane: (paneId: string) => void
-  splitPane: (dir: 'row' | 'col') => void
-  moveTab: (payload: TabDragPayload, toPane: string, before: string | null) => void
+  /** VSCode drag gesture: edge → split the target pane, center → merge. */
+  moveTabToEdge: (payload: TabDragPayload, toPane: string, zone: DropZone) => void
+  /** Reorder within a pane (drop onto another tab inserts before it). */
+  moveTabBefore: (payload: TabDragPayload, toPane: string, beforeTabId: string) => void
   resizeSplit: (splitId: string, index: number, deltaFrac: number) => void
 }
 
@@ -59,7 +66,20 @@ function Divider(props: { dir: 'row' | 'col'; onResize: (deltaFrac: number) => v
   )
 }
 
-/** A leaf: tab strip + active content + drop target for tabs. */
+/** Map a pointer position inside a pane to the VSCode drop zone (25% edges). */
+function zoneAt(event: React.DragEvent, pane: HTMLElement): DropZone {
+  const rect = pane.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return 'center'
+  const x = (event.clientX - rect.left) / rect.width
+  const y = (event.clientY - rect.top) / rect.height
+  if (x < 0.25) return 'left'
+  if (x > 0.75) return 'right'
+  if (y < 0.25) return 'up'
+  if (y > 0.75) return 'down'
+  return 'center'
+}
+
+/** A leaf: tab strip + active content + VSCode-style drop target for tabs. */
 function LeafView(props: {
   leaf: { id: string; tabs: SidebarTab[]; active: string | null }
   newTabOptions: NewTabOption[]
@@ -68,24 +88,32 @@ function LeafView(props: {
   renderTab: (tab: SidebarTab) => ReactNode
 }) {
   const { leaf, newTabOptions, actions, onNewTab, renderTab } = props
-  const [dropTarget, setDropTarget] = useState(false)
+  const [dropZone, setDropZone] = useState<DropZone | null>(null)
   const activeTab = leaf.tabs.find(tab => tab.id === leaf.active) ?? leaf.tabs[leaf.tabs.length - 1]
   return (
     <div
-      className={clsx(css.pane, dropTarget && css.paneDrop)}
+      className={clsx(css.pane, dropZone !== null && css.paneDrop)}
       onPointerDown={() => { actions.focusPane(leaf.id) }}
       onDragOver={(event) => {
         event.preventDefault()
-        setDropTarget(true)
+        const zone = zoneAt(event, event.currentTarget)
+        setDropZone(zone)
       }}
-      onDragLeave={() => { setDropTarget(false) }}
+      onDragLeave={(event) => {
+        // Only clear when the pointer left the pane entirely (not onto a child).
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDropZone(null)
+        }
+      }}
       onDrop={(event) => {
         event.preventDefault()
-        setDropTarget(false)
+        const zone = dropZone ?? zoneAt(event, event.currentTarget)
+        setDropZone(null)
         const payload = parseDrag(event.dataTransfer.getData('application/x-dsh-tab'))
-        if (payload !== null) actions.moveTab(payload, leaf.id, null)
+        if (payload !== null) actions.moveTabToEdge(payload, leaf.id, zone)
       }}
     >
+      {dropZone !== null && <div className={clsx(css.dropOverlay, css[`drop${dropZone[0]!.toUpperCase()}${dropZone.slice(1)}`])} />}
       {leaf.tabs.length > 0 ? (
         <>
           <TabBar
@@ -94,10 +122,12 @@ function LeafView(props: {
             active={leaf.active}
             onActivate={(tabId) => { actions.activateTab(leaf.id, tabId) }}
             onClose={(tabId) => { actions.closeTab(leaf.id, tabId) }}
-            onSplit={(dir) => { actions.splitPane(dir) }}
             onNewTab={onNewTab}
             newTabOptions={newTabOptions}
-            onDropTab={(payload, before) => { actions.moveTab(payload, leaf.id, before) }}
+            onDropTab={(payload, before) => {
+              if (before === null) actions.moveTabToEdge(payload, leaf.id, 'center')
+              else actions.moveTabBefore(payload, leaf.id, before)
+            }}
           />
           <div className={css.paneContent}>{activeTab !== undefined ? renderTab(activeTab) : null}</div>
         </>

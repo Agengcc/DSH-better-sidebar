@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { compareEntries, parentOf, rootLabel, requireAbsolute } from '../src/fs-tree.ts'
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
-  activateTab, closeTab, makeDefaultState, moveTab, openTab, resizeSplit,
-  splitPane, toggleExpanded, type SidebarState, type SplitNode,
+  activateTab, closeTab, makeDefaultState, moveTab, moveTabToEdge, openTab,
+  resizeSplit, splitPane, toggleExpanded, type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
 
@@ -88,6 +88,49 @@ describe('sidebar state', () => {
     expect(s.splits.kind).toBe('leaf')
     expect((s.splits as { id: string }).id).toBe(otherId)
     expect((s.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([explorerTab])
+  })
+
+  it('dragging a tab to a pane edge splits the pane with the tab in a fresh leaf', () => {
+    let s = state()
+    s = splitPane(s, 'row')
+    const split = s.splits as Extract<SplitNode, { kind: 'split' }>
+    const paneA = split.children[0] as { id: string; tabs: { id: string }[] }
+    const paneB = split.children[1] as { id: string; tabs: { id: string }[] }
+    const tabId = paneA.tabs[0]!.id
+    // 先给 paneB 一个 tab，然后拖 paneA 的 tab 到 paneB 的 right 边缘。
+    s = openTab(s, { id: 't2', type: 'terminal', title: 'T2' })
+    s = moveTabToEdge(s, paneA.id, tabId, paneB.id, 'right')
+    const after = s.splits as Extract<SplitNode, { kind: 'split' }>
+    // paneB 现在是 split(row) [旧leaf, 新leaf(tabId)]；其父 split 仍存在。
+    const bSplit = after.children.find(child => child.kind === 'split') as Extract<SplitNode, { kind: 'split' }> | undefined
+    expect(bSplit).toBeDefined()
+    expect(bSplit!.dir).toBe('row')
+    const newLeaf = bSplit!.children[1] as { tabs: { id: string }[] }
+    expect(newLeaf.tabs.map(t => t.id)).toContain(tabId)
+  })
+
+  it('dragging a tab to a pane center merges it into the pane', () => {
+    let s = state()
+    s = splitPane(s, 'col')
+    const split = s.splits as Extract<SplitNode, { kind: 'split' }>
+    const paneA = split.children[0] as { id: string; tabs: { id: string }[] }
+    const paneB = split.children[1] as { id: string; tabs: { id: string }[] }
+    const tabId = paneA.tabs[0]!.id
+    s = moveTabToEdge(s, paneA.id, tabId, paneB.id, 'center')
+    // paneA 空了被移除，树退化为 paneB（含 tab）。
+    expect(s.splits.kind).toBe('leaf')
+    expect((s.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([tabId])
+  })
+
+  it('dragging a tab back onto its own pane center reorders it', () => {
+    let s = state()
+    s = openTab(s, { id: 't2', type: 'terminal', title: 'T2' })
+    const leaf = s.splits as { id: string; tabs: { id: string }[] }
+    const first = leaf.tabs[0]!.id
+    s = moveTabToEdge(s, leaf.id, first, leaf.id, 'center')
+    const after = s.splits as { tabs: { id: string }[] }
+    expect(after.tabs[after.tabs.length - 1]!.id).toBe(first)
+    expect(after.tabs).toHaveLength(2)
   })
 
   it('closing the last tab removes the pane (promotes the sibling)', () => {
