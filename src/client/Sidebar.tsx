@@ -140,7 +140,18 @@ export function Sidebar(props: { ctx: Context }) {
   const fullscreen = state !== undefined && window.innerWidth - state.width < 8
 
   const actions: WorkbenchActions = useMemo(() => ({
-    closeTab: (paneId, tabId) => { sidebarStore.reduce(s => closeTab(s, paneId, tabId)) },
+    closeTab: (paneId, tabId) => {
+      // A closed terminal releases its pty immediately — including when its
+      // socket is mid-reconnect, where the unmount close frame never reaches
+      // the host and the process would hold the quota until the grace ends.
+      const current = sidebarStore.getSnapshot().state
+      const leaf = current === undefined ? undefined : leafWithTab(current.splits, tabId)
+      const tab = leaf?.tabs.find(candidate => candidate.id === tabId)
+      sidebarStore.reduce(s => closeTab(s, paneId, tabId))
+      if (sessionId !== undefined && tab?.type === 'terminal') {
+        void api.ptyClose({ sessionId, cwd }, tabId).catch(() => { /* the host may already have released it */ })
+      }
+    },
     activateTab: (paneId, tabId) => {
       sidebarStore.reduce(s => ({
         ...s,
@@ -167,7 +178,7 @@ export function Sidebar(props: { ctx: Context }) {
     resizeSplit: (splitId, index, deltaFrac) => {
       sidebarStore.reduce(s => ({ ...s, splits: resizeSplit(s.splits, splitId, index, deltaFrac) }))
     },
-  }), [])
+  }), [sessionId, cwd])
 
   if (state === undefined || sessionId === undefined) {
     return (

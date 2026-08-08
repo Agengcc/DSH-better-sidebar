@@ -125,6 +125,11 @@ export function allLeaves(node: SplitNode): SidebarLeaf[] {
   return node.children.flatMap(allLeaves)
 }
 
+/** Whether a tab exists anywhere in a state tree (any pane). */
+export function tabOpenIn(state: SidebarState, tabId: string): boolean {
+  return allLeaves(state.splits).some(leaf => leaf.tabs.some(tab => tab.id === tabId))
+}
+
 /** Replace a leaf with a split of it plus a fresh empty leaf. */
 export function splitLeafAt(node: SplitNode, paneId: string, dir: 'row' | 'col'): SplitNode {
   const fresh: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [], active: null }
@@ -504,6 +509,21 @@ export class SidebarStore {
     this.snapshot = { sessionId, state: draft }
     this.schedulePersist(sessionId, draft)
     this.notify()
+  }
+
+  /**
+   * Whether a tab still exists in its session's state. Views use this on
+   * unmount to tell "the tab was closed" (release the terminal now) from
+   * "the tree re-rendered / the conversation switched" (the tab is still
+   * open — keep the terminal alive through the host's reconnect grace).
+   * Checks the session's own map entry (the current snapshot may already
+   * point at another session when a conversation switch unmounts the old
+   * one's tabs).
+   */
+  tabOpen(sessionId: string, tabId: string): boolean {
+    const state = this.bySession.get(sessionId)
+      ?? (this.snapshot.sessionId === sessionId ? this.snapshot.state : undefined)
+    return state !== undefined && tabOpenIn(state, tabId)
   }
 
   /** Apply a pure reducer (returns the next state). */

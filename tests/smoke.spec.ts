@@ -119,6 +119,25 @@ describe('host plugin smoke', () => {
     }
   })
 
+  it('pty manager: reopening with a different cwd respawns in the new directory', async () => {
+    const manager = new PtyManager(defaultShell(), 3)
+    try {
+      const first = manager.open('s4', 't1', process.cwd(), 80, 24)
+      // The hydrate race: the first connect fell back to the process cwd,
+      // the reconnect carries the session's real cwd — the shell must move.
+      const second = manager.open('s4', 't1', '/tmp', 80, 24)
+      expect(second).not.toBe(first)
+      expect(second.cwd).toBe('/tmp')
+      expect(manager.keysOf('s4')).toHaveLength(1)
+      // A same-cwd reconnect reattaches without respawning.
+      const third = manager.open('s4', 't1', '/tmp', 80, 24)
+      expect(third).toBe(second)
+      expect(manager.keysOf('s4')).toHaveLength(1)
+    } finally {
+      manager.disposeAll()
+    }
+  })
+
   it('lists the repository root level', async () => {
     const listing = await listDirectory(process.cwd(), 1000)
     expect(listing.entries.some(entry => entry.name === 'src' && entry.isDir)).toBe(true)
@@ -148,11 +167,15 @@ describe('session cwd resolution over the API route', () => {
     return routes.find(route => route.path === '/sidebar/api')!
   }
 
-  const invoke = async (route: SidebarWebRoute, payload: unknown): Promise<{ ok: boolean; value?: { cwd: string }; error?: { message: string } }> => {
+  const invoke = async (
+    route: SidebarWebRoute,
+    method: string,
+    payload: unknown,
+  ): Promise<{ ok: boolean; value?: { cwd: string }; error?: { message: string } }> => {
     const body = Buffer.from(JSON.stringify(payload))
     const req = {
       method: 'POST',
-      url: '/sidebar/api/session.cwd',
+      url: `/sidebar/api/${method}`,
       headers: { host: '127.0.0.1:3080' },
       [Symbol.asyncIterator]: async function* () { yield body },
     } as never
@@ -167,14 +190,14 @@ describe('session cwd resolution over the API route', () => {
 
   it('uses the client summary cwd while the session is detached', async () => {
     const route = mount()
-    const result = await invoke(route, { sessionId: 's-detached', cwd: '/tmp/summary-cwd' })
+    const result = await invoke(route, 'session.cwd', { sessionId: 's-detached', cwd: '/tmp/summary-cwd' })
     expect(result.ok).toBe(true)
     expect(result.value?.cwd).toBe('/tmp/summary-cwd')
   })
 
   it('falls back to the process cwd with no summary cwd', async () => {
     const route = mount()
-    const result = await invoke(route, { sessionId: 's-unknown' })
+    const result = await invoke(route, 'session.cwd', { sessionId: 's-unknown' })
     expect(result.ok).toBe(true)
     expect(result.value?.cwd).toBe(process.cwd())
   })
@@ -185,15 +208,23 @@ describe('session cwd resolution over the API route', () => {
         get: (id) => id === 's-attached' ? { header: { cwd: '/attached-cwd' } } : undefined,
       },
     })
-    const result = await invoke(route, { sessionId: 's-attached', cwd: '/tmp/summary-cwd' })
+    const result = await invoke(route, 'session.cwd', { sessionId: 's-attached', cwd: '/tmp/summary-cwd' })
     expect(result.ok).toBe(true)
     expect(result.value?.cwd).toBe('/attached-cwd')
   })
 
   it('rejects a non-absolute client cwd', async () => {
     const route = mount()
-    const result = await invoke(route, { sessionId: 's-detached', cwd: 'relative/path' })
+    const result = await invoke(route, 'session.cwd', { sessionId: 's-detached', cwd: 'relative/path' })
     expect(result.ok).toBe(false)
     expect(result.error?.message).toMatch(/invalid working directory/)
+  })
+
+  it('pty.close releases a terminal key (and rejects a missing tab)', async () => {
+    const route = mount()
+    const result = await invoke(route, 'pty.close', { sessionId: 's-pty', tab: 't1' })
+    expect(result.ok).toBe(true)
+    const missing = await invoke(route, 'pty.close', { sessionId: 's-pty' })
+    expect(missing.ok).toBe(false)
   })
 })

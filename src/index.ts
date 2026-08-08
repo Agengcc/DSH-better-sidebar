@@ -204,6 +204,16 @@ function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMetho
       const rev = requireString(payload, 'rev')
       return { content: await git.show(cwd, rev, path) }
     },
+    // Release a terminal immediately. The WebSocket close frame already does
+    // this while the socket is open; this route covers the tab-close that
+    // happens while the socket is down (reconnect loop), so a closed tab can
+    // never hold the per-session quota until the reconnect grace expires.
+    'pty.close': (payload) => {
+      const sessionId = requireString(payload, 'sessionId')
+      const tab = requireString(payload, 'tab')
+      ptyManager.close(`${sessionId}:${tab}`)
+      return { ok: true }
+    },
   }
 }
 

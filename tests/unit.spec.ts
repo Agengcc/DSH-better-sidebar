@@ -3,7 +3,8 @@ import { compareEntries, parentOf, rootLabel, requireAbsolute } from '../src/fs-
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
   activateTab, closeTab, makeDefaultState, moveTab, moveTabToEdge, openTab,
-  resizeSplit, sanitizeState, splitPane, toggleExpanded, type SidebarState, type SplitNode,
+  resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
@@ -174,6 +175,27 @@ describe('sidebar state', () => {
     const tabId = leaf.tabs[0]!.id
     const after = activateTab(s, leaf.id, tabId)
     expect((after.splits as { active: string | null }).active).toBe(tabId)
+  })
+
+  it('tabOpenIn: a tab is open until it is truly closed, wherever it lives', () => {
+    let s = state()
+    const leaf = s.splits as { id: string; tabs: { id: string }[] }
+    const explorerId = leaf.tabs[0]!.id
+    expect(tabOpenIn(s, explorerId)).toBe(true)
+    // Moving the tab to another pane keeps it open.
+    s = splitPane(s, 'row')
+    const split = s.splits as Extract<SplitNode, { kind: 'split' }>
+    const paneA = split.children[0] as { id: string; tabs: { id: string }[] }
+    const paneB = split.children[1] as { id: string }
+    s = moveTab(s, paneA.id, explorerId, paneB.id)
+    expect(tabOpenIn(s, explorerId)).toBe(true)
+    // Closing it removes it from the whole tree.
+    const target = s.splits as { id: string; tabs: { id: string }[] }
+    s = closeTab(s, target.id, explorerId)
+    expect(tabOpenIn(s, explorerId)).toBe(false)
+    // A terminal tab added later is open too.
+    s = openTab(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
+    expect(tabOpenIn(s, 'terminal:9')).toBe(true)
   })
 })
 

@@ -14,6 +14,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
+import { sidebarStore } from './state.ts'
 import css from './sidebar.module.css'
 
 /** How many consecutive unreasoned failures before showing the error banner. */
@@ -125,10 +126,14 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
       window.clearTimeout(retry)
       observer.disconnect()
       inputSub.dispose()
-      // Tell the host the owning tab is gone so it releases the terminal
-      // quota immediately (best effort; a dropped socket gets the grace
-      // period on the host side instead).
-      if (socket !== null && socket.readyState === WebSocket.OPEN) {
+      // The close frame tells the host the owning tab is GONE (immediate
+      // quota release). A bare unmount — conversation switch, re-render,
+      // page unload — leaves the tab open, so the socket drop alone hands
+      // the process to the host's reconnect grace: switching back or
+      // refreshing reattaches the SAME shell instead of respawning one.
+      // (The host respawns on its own when the authoritative cwd changed.)
+      if (!sidebarStore.tabOpen(scope.sessionId, tabId)
+        && socket !== null && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }))
       }
       socket?.close()

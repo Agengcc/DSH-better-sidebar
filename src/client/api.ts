@@ -114,6 +114,11 @@ export const api = {
     call<{ ok: true }>('git.checkout', scopePayload(scope, { branch })),
   gitLog: (scope: SessionScope, signal?: AbortSignal) =>
     call<GitLogEntry[]>('git.log', scopePayload(scope, {}), signal),
+  /** Release a terminal's process immediately (tab closed; the WS close frame
+   *  may be unreachable while the socket is down, so the host also accepts
+   *  this explicit route). */
+  ptyClose: (scope: SessionScope, tab: string) =>
+    call<{ ok: true }>('pty.close', scopePayload(scope, { tab })),
 }
 
 /** Absolute URL of the media route for one path (images only). */

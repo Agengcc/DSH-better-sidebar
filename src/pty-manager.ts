@@ -46,6 +46,11 @@ export interface SidebarPty {
   key: string
   sessionId: string
   tabId: string
+  /** The working directory the process was SPAWNED with (a reconnect that
+   *  resolves a different authoritative cwd respawns instead of reusing —
+   *  the page-load hydrate race can attach the real cwd after the first
+   *  connect, and a shell in the wrong directory must not linger). */
+  cwd: string
   pty: nodePty.IPty
   /** Output accumulated since spawn (bounded; head dropped when over the limit). */
   transcript: string
@@ -79,9 +84,13 @@ export class PtyManager {
   /**
    * Open (or reuse) the terminal for a session/tab key. A handle whose
    * process already exited is replaced with a fresh spawn (reconnecting a
-   * dead terminal must yield a live shell, not an input sink). Reopening
-   * also cancels any pending scheduled close (a reconnect within the grace
-   * window keeps the process alive).
+   * dead terminal must yield a live shell, not an input sink), and so is a
+   * live handle whose spawn cwd differs from the now-authoritative one (the
+   * first connect of a page load can arrive before the session hydrates, so
+   * it fell back to the process cwd — reconnecting with the real cwd must
+   * restart the shell in the right directory). Reopening also cancels any
+   * pending scheduled close (a reconnect within the grace window keeps the
+   * process alive).
    * @param sessionId - conversation id.
    * @param tabId - client tab id.
    * @param cwd - initial working directory (the session's cwd).
@@ -94,7 +103,7 @@ export class PtyManager {
     const key = `${sessionId}:${tabId}`
     this.cancelClose(key)
     const existing = this.sessions.get(key)
-    if (existing !== undefined && !existing.exited) return existing
+    if (existing !== undefined && !existing.exited && existing.cwd === cwd) return existing
     if (existing !== undefined) this.close(key)
     // Zombie cleanup: a session's exited handles (shell closed, tab dropped
     // on an old host without the close frame) must not eat the quota.
@@ -108,6 +117,7 @@ export class PtyManager {
       key,
       sessionId,
       tabId,
+      cwd,
       pty: nodePty.spawn(this.shell, [], {
         name: 'xterm-256color',
         cols: Math.max(2, Math.floor(cols)),
