@@ -185,6 +185,28 @@ export function Sidebar(props: { ctx: Context }) {
     },
   }), [sessionId, cwd])
 
+  /**
+   * The explorer's @-reference button: append `@<relative path>` to the
+   * session's composer draft (space-separated). Resolves the session-scope
+   * ctx and the conversation input service at click time; a missing service
+   * or scope degrades to a logged no-op, never a crash. Defined above the
+   * no-session early return — a hook must never sit behind a conditional
+   * return (React counts hooks per render).
+   */
+  const referenceInChat = useCallback((path: string): void => {
+    if (sessionId === undefined) return
+    try {
+      const actx = ctx.sessions.scope(sessionId)
+      if (actx === undefined) return
+      const input = ctx.conversation.input.for(actx)
+      const mention = `@${relativeTo(cwd ?? '', path)}`
+      const draft = input.state.getSnapshot().draft
+      input.setDraft(draft.trim() === '' ? mention : `${draft} ${mention}`)
+    } catch (error) {
+      console.warn('[dsh-better-sidebar] reference insert failed:', error)
+    }
+  }, [ctx, sessionId, cwd])
+
   if (state === undefined || sessionId === undefined) {
     return (
       <div className={css.toggleRail}>
@@ -225,19 +247,6 @@ export function Sidebar(props: { ctx: Context }) {
    * ctx and the conversation input service at click time; a missing service
    * or scope degrades to a logged no-op, never a crash.
    */
-  const referenceInChat = useCallback((path: string): void => {
-    try {
-      const actx = ctx.sessions.scope(sessionId)
-      if (actx === undefined) return
-      const input = ctx.conversation.input.for(actx)
-      const mention = `@${relativeTo(cwd ?? '', path)}`
-      const draft = input.state.getSnapshot().draft
-      input.setDraft(draft.trim() === '' ? mention : `${draft} ${mention}`)
-    } catch (error) {
-      console.warn('[dsh-better-sidebar] reference insert failed:', error)
-    }
-  }, [ctx, sessionId, cwd])
-
   const renderTab = (tab: SidebarTab) => (
     <TabContent
       tab={tab}
