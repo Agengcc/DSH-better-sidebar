@@ -1,10 +1,21 @@
 /**
  * tsdown build for dsh-better-sidebar: the host-half lib (lib/index.js and
- * the lib/invariant.js companion, ESM node) plus the browser client bundle
- * (lib/client.js, CJS closure factory).
+ * the lib/invariant.js companion, ESM node) plus the two browser client
+ * bundles (lib/client.js and lib/client-registry.js, CJS closure factory) —
+ * one per install channel:
  *
- * The client bundle replicates the official DSH client-bundle preset
- * (packages/client/tsdown.client.ts):
+ * - `lib/client.js` serves the official profile channel, registering with
+ *   the package-name id `dsh-better-sidebar` (the client-modules compose
+ *   keys on the package name; keep it in sync with package.json `name`),
+ * - `lib/client-registry.js` serves the plugin-registry channel
+ *   (dsh.plugin.json), registering with the manifest id
+ *   `dsh-external/dsh-better-sidebar` (the registry browser-side `arrive()`
+ *   check requires bundle id === plugin id).
+ *
+ * Both bundles replicate the official DSH client-bundle preset
+ * (packages/client/tsdown.client.ts) and are compiled from the same
+ * src/client/index.tsx source — only the registered id and the output file
+ * name differ, so they cannot drift:
  * - externals resolve through the loader module table at runtime (the
  *   PLATFORM_MODULES seed list from apps/web's platform.ts, plus the
  *   runtime/client exemption),
@@ -13,7 +24,7 @@
  *   collaboration goes through cordis services, never value imports,
  * - CSS Modules compile to hashed class maps and inject <style data-plugin>
  *   tags at factory execution,
- * - the artifact registers itself via window.__ModuleLoader__.load({id,
+ * - each artifact registers itself via window.__ModuleLoader__.load({id,
  *   factory}) with the (require) => exports CJS closure shape.
  *
  * Types ship from lib/types (tsc -p tsconfig.build.json), not from tsdown.
@@ -26,8 +37,6 @@ import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
 const require = createRequire(import.meta.url)
-
-const PLUGIN_ID = 'dsh-better-sidebar'
 
 /** Module specifiers the web shell shares into the frozen module table (the official PLATFORM_MODULES list, plus the runtime/client exemption). */
 const CLIENT_EXTERNALS = [
@@ -58,14 +67,14 @@ const CSS_VIRTUAL_SUFFIX = '.mjs'
 const REPOSITORY_ROOT = fileURLToPath(new URL('.', import.meta.url))
 
 /** The style-injection prologue shared by module css and plain css loads. */
-function injectTag(fileId: string, cssText: string): string {
-  const tagId = `${PLUGIN_ID}/${basename(fileId)}`
+function injectTag(pluginId: string, fileId: string, cssText: string): string {
+  const tagId = `${pluginId}/${basename(fileId)}`
   return [
     `const css = ${JSON.stringify(cssText)};`,
     `const tagId = ${JSON.stringify(tagId)};`,
     `if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(tagId) + ']') === null) {`,
     `  const tag = document.createElement('style');`,
-    `  tag.dataset.plugin = ${JSON.stringify(PLUGIN_ID)};`,
+    `  tag.dataset.plugin = ${JSON.stringify(pluginId)};`,
     `  tag.dataset.pluginCss = tagId;`,
     `  tag.textContent = css;`,
     `  document.head.appendChild(tag);`,
@@ -81,21 +90,18 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
   return `../../../${repositoryPath}`
 }
 
-export default [
-  {
-    entry: { index: 'src/index.ts', invariant: 'src/invariant.ts' },
-    outDir: 'lib',
-    format: ['esm'],
-    platform: 'node',
-    target: 'es2024',
-    fixedExtension: false,
-    dts: false,
-    // clean stays off: the build script removes lib/ wholesale before tsc, so
-    // a tsdown clean here would wipe the lib/types declarations tsc just
-    // emitted (and `watch` must never touch them).
-    clean: false,
-  },
-  {
+/**
+ * One client bundle build for a plugin id. The same src/client/index.tsx is
+ * compiled twice with only the registered id and the output file name
+ * differing: the official channel uses the package name (`dsh-better-sidebar`)
+ * and the registry channel uses the manifest id
+ * (`dsh-external/dsh-better-sidebar`).
+ * @param pluginId - the `__ModuleLoader__.load({ id })` value and the
+ *   data-plugin style-tag prefix of this bundle.
+ * @param entryFile - the output file name under lib/.
+ */
+function clientBundle(pluginId: string, entryFile: string): UserConfig {
+  return {
     entry: { client: 'src/client/index.tsx' },
     outDir: 'lib',
     format: 'cjs',
@@ -160,22 +166,42 @@ export default [
           const classMap: Record<string, string> = {}
           for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
           return [
-            injectTag(fileId, code.toString()),
+            injectTag(pluginId, fileId, code.toString()),
             `export default ${JSON.stringify(classMap)};`,
           ].join('\n')
         }
         return [
-          injectTag(fileId, source.toString('utf8')),
+          injectTag(pluginId, fileId, source.toString('utf8')),
           'export default "";',
         ].join('\n')
       },
     }],
     outputOptions: {
-      entryFileNames: 'client.js',
+      entryFileNames: entryFile,
       sourcemapPathTransform: browserSourcePath,
-      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
+      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(pluginId)}, factory: (require) => {`,
       footer: `return module.exports; } });`,
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
+  }
+}
+
+export default [
+  {
+    entry: { index: 'src/index.ts', invariant: 'src/invariant.ts' },
+    outDir: 'lib',
+    format: ['esm'],
+    platform: 'node',
+    target: 'es2024',
+    fixedExtension: false,
+    dts: false,
+    // clean stays off: the build script removes lib/ wholesale before tsc, so
+    // a tsdown clean here would wipe the lib/types declarations tsc just
+    // emitted (and `watch` must never touch them).
+    clean: false,
   },
+  // Official profile channel: bundle id = package name (package.json `name`).
+  clientBundle('dsh-better-sidebar', 'client.js'),
+  // Plugin-registry channel: bundle id = manifest id (dsh.plugin.json `id`).
+  clientBundle('dsh-external/dsh-better-sidebar', 'client-registry.js'),
 ] satisfies UserConfig[]

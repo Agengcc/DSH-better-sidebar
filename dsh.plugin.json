@@ -1,0 +1,16 @@
+{
+  "id": "dsh-external/dsh-better-sidebar",
+  "version": "0.1.2",
+  "main": "./lib/index.js",
+  "description": "VSCode 风格右侧侧边栏：文件资源管理器 / 编辑器 / 终端 / Git，按会话隔离",
+  "engines": {
+    "dsh": ">=0.0.1"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  },
+  "client": {
+    "main": "./lib/client-registry.js"
+  }
+}

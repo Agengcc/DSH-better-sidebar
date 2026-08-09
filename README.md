@@ -5,6 +5,31 @@
 <img width="4632" height="2720" alt="image" src="https://github.com/user-attachments/assets/39d86636-7654-412f-86ea-c60a2d5f20f0" />
 <img width="1000" height="1186" alt="image" src="https://github.com/user-attachments/assets/9dadffe0-0738-4b6d-b929-f452f51768a2" />
 
+## 🚀 通过 plugin-registry 安装（标准）
+
+前置条件：DSH 已集成 [plugin-registry](https://github.com/dsh-external/plugin-registry)（`dsh registry` 命令可用；集成步骤见其 README）。
+
+```sh
+git clone https://github.com/dsh-external/DSH-better-sidebar.git
+cd DSH-better-sidebar
+pnpm install && pnpm build          # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js + lib/client-registry.js (client) + lib/types
+node scripts/package-registry.mjs   # 组装 registry/ 暂存目录（只含清单 + 构建产物 + README，不入库）
+dsh registry install ./registry     # 安装（默认禁用——信任边界）
+dsh registry enable dsh-external/dsh-better-sidebar   # 启用
+```
+
+> **通道互斥**：registry 安装与下方「不依赖 plugin-registry 的官方 profile 安装」是同一插件的两种安装方式，**每个部署二选一**——同时启用会双挂载（Node 半挂两次、页面渲染两个侧边栏）。已用官方方式装过时，先移除 `~/.dsh/profiles/web/cordis.patch.yml` 里的 better-sidebar 挂载行与 `package.json` 的 `link:` 依赖，再走 registry。
+
+### 更新（registry 通道）
+
+```sh
+cd DSH-better-sidebar && git pull && pnpm install && pnpm build
+node scripts/package-registry.mjs
+dsh registry uninstall dsh-external/dsh-better-sidebar
+dsh registry install ./registry
+dsh registry enable dsh-external/dsh-better-sidebar
+```
+
 ## 🚀 一键安装（把提示词发给 DSH）
 
 把下面提示词**整段**发给 DSH，它会自动完成克隆、构建、注册与安装（前置条件：已安装 DSH 且 `dsh web` 可运行，Node.js ≥ 20、pnpm ≥ 10）：
@@ -139,7 +164,7 @@
 git clone https://github.com/dsh-external/DSH-better-sidebar.git
 cd DSH-better-sidebar
 pnpm install
-pnpm build        # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js (client) + lib/types/*.d.ts
+pnpm build        # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js + lib/client-registry.js (client) + lib/types/*.d.ts
 ```
 
 > 运行期依赖（cordis、react、`@deepseek-ai/dsh-client-*` 等）按官方插件清单规范声明在 `peerDependencies`——web profile 已内置全部 peer 依赖，安装本插件无需额外装包；`dependencies` 只保留插件自有的运行时依赖（node-pty、ws、xterm、CodeMirror、schemastery 等）。
@@ -177,22 +202,49 @@ git pull && pnpm install && pnpm build   # 在插件仓库目录执行
 
 `link:` 引用无需重新 install。
 
+### 通过 registry 安装（手动，与上面的官方方案二选一）
+
+前置条件：`dsh registry` 命令可用（DSH 已集成 plugin-registry）。安装源是 `scripts/package-registry.mjs` 组装的 `registry/` 暂存目录——只含清单 + 构建产物 + README，避免把 `node_modules/`（本机 `link:` 符号链接、node-pty 二进制）与 `.git/` 一并装进 `<dshHome>/plugins`。
+
+```sh
+pnpm build                          # 先构建（产物见上）
+node scripts/package-registry.mjs   # 组装 registry/（重新运行会整体重建）
+dsh registry install ./registry     # 安装（默认禁用）
+dsh registry enable dsh-external/dsh-better-sidebar
+```
+
+更新：
+
+```sh
+git pull && pnpm install && pnpm build
+node scripts/package-registry.mjs
+dsh registry uninstall dsh-external/dsh-better-sidebar
+dsh registry install ./registry
+dsh registry enable dsh-external/dsh-better-sidebar
+```
+
+- 只改了 **client** 代码 → 硬刷新页面即可（registry 通道的 bundle 由服务器按请求读取）
+- 改了 **host** 代码 → 重启 DSH + 硬刷新
+- 与官方方案的互斥见上文「通道互斥」说明
+
 ## 🛠️ 开发
 
 ```sh
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest（单元 + 冒烟 + 插件形态 guard：真实 git/fs/node-pty 交互）
-pnpm build       # rm -rf lib && tsc(声明) + tsdown → lib/index.js + lib/invariant.js + lib/client.js + lib/types
+pnpm build       # rm -rf lib && tsc(声明) + tsdown → lib/index.js + lib/invariant.js + lib/client.js + lib/client-registry.js + lib/types
+pnpm test        # vitest（单元 + 冒烟 + 插件形态 guard：真实 git/fs/node-pty 交互；manifest 一致性测试读取 lib/，需先 build）
 pnpm watch       # tsdown --watch（client bundle 热重建）
 ```
 
 ### 规范符合性
 
-插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`）。**安装通道与渲染方式是两个独立概念**：安装始终走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[一键安装](#一键安装把提示词发给-dsh)）；下面的 portal 条目只描述面板在页面上的渲染方式。
+插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`），并额外提供 plugin-registry 标准发布面（`dsh.plugin.json`）。**安装通道与渲染方式是两个独立概念**：安装走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[一键安装](#一键安装把提示词发给-dsh)）**或** registry 通道（`dsh registry`，见[通过 plugin-registry 安装](#通过-plugin-registry-安装标准)），二者互斥；下面的 portal 条目只描述面板在页面上的渲染方式。
 
 - **插件形态**：`export const name / inject / Config / apply`，无 default 导出；`tests/plugin-shape.spec.ts` 通过 `Loader.unwrapExports` 守卫该形态
 - **清单**：`types` + `exports`（`.` / `./invariant` / `./client` / `./src/*` / `./package.json`）、`dshClient`（`platform: 'web'` + 信息性 `inject` 边）、peerDependencies、`engines`、`files` 产物明细、`prepare`（消费者侧 `tsdown`，git 安装可用）
 - **client 契约**：仅导出 `apply`/`inject`（+ 类型）；store 为 `createSidebarStore()` 工厂，实例归 `apply` 所有；`src/invariant.ts` 伴生；client bundle 复刻官方 preset（externals = 平台模块表 + runtime/client 豁免、纯度门、CSS Modules 内联）
+- **registry 形态（标准发布面）**：仓库根 `dsh.plugin.json`（原生清单：id `dsh-external/dsh-better-sidebar`、`main` = host 构建产物、`client.main` = registry client bundle、`contributes` 空声明）；`tests/manifest-consistency.spec.ts` 守卫清单与构建产物一致性（id 严格两段、version 与 package.json 同步、bundle id = 清单 id）
+- **双 client bundle**：同一 `src/client/index.tsx` 构建出 `lib/client.js`（官方通道，id = 包名 `dsh-better-sidebar`）与 `lib/client-registry.js`（registry 通道，id = 清单 id）——两通道的 bundle-id 契约互不相同，各产出一份、同源不漂移；每个部署二选一（见安装章节「通道互斥」）
 - **已知偏差**：侧边栏面板经 portal（`document.body` + `createRoot`）挂载而非 slot——官方 slot 系统的 `'root'` 由 ui-layout 独占声明，重复声明 fail loud，外部插件无整面板 slot 可用；与 shell 的集成点（`conversation.chat.turnTail`）走官方 chain-slot 机制
 
 ## 🏗️ 架构
@@ -203,7 +255,9 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 |---|---|---|
 | host | `src/index.ts` → `lib/index.js` | cordis 插件（`Config` 为 schemastery schema，可调 readLimit/mediaLimit/listLimit/terminalsPerSession/reconnectGraceMs）：`/sidebar/api/*` JSON API、`/sidebar/file` 媒体路由、`/sidebar/ws/terminal` WebSocket；fs / git / pty 服务 |
 | invariant | `src/invariant.ts` → `lib/invariant.js` | 包属 invariant 伴生（注册包名，无运行时断言） |
-| client | `src/client/index.tsx` → `lib/client.js` | 浏览器 bundle（`__ModuleLoader__.load` 闭包工厂）：portal 侧边栏 + 各视图 + turnTail 拦截 |
+| client（官方通道） | `src/client/index.tsx` → `lib/client.js` | 浏览器 bundle（`__ModuleLoader__.load` 闭包工厂，id = 包名）：portal 侧边栏 + 各视图 + turnTail 拦截 |
+| client（registry 通道） | `src/client/index.tsx` → `lib/client-registry.js` | 同一源码的 registry 版本（id = 清单 id `dsh-external/dsh-better-sidebar`，`dsh.plugin.json` 的 `client.main` 指向它） |
+| manifest | `dsh.plugin.json`（仓库根；`scripts/package-registry.mjs` 组装 `registry/` 安装根） | registry 发布面：id / version / main / client.main；仅 registry 通道读取 |
 
 - 所有 API 携带 `sessionId`；cwd 权威值取自会话 header，会话未附加（页面加载竞态）时回退客户端摘要 cwd，再回退进程 cwd；终端按 `${sessionId}:${tabId}` 键控，重连时若权威 cwd 变化则重启 shell 到正确目录
 - 路由与 `/api` 同款信任围栏（Host 头 loopback / `connection.trustedHosts`，`src/trust-fence.ts`，拷贝自 `@deepseek-ai/dsh-client-connection`，BSD-3-Clause）
