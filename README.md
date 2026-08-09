@@ -6,6 +6,29 @@
 <img width="990" height="818" alt="image" src="https://github.com/user-attachments/assets/27b9c9b9-3799-4e63-8169-dd4a3dc8b2e1" />
 
 
+## 🚀 一键安装（把提示词发给 DSH）
+
+把下面提示词**整段**发给 DSH，它会自动完成克隆、构建、注册与安装（前置条件：已安装 DSH 且 `dsh web` 可运行，Node.js ≥ 20、pnpm ≥ 10）：
+
+```text
+请帮我把 dsh-better-sidebar 插件安装到我的 web profile（插件 = VSCode 风格右侧侧边栏，仓库 https://github.com/dsh-external/DSH-better-sidebar）：
+
+1. 克隆并构建：
+   git clone https://github.com/dsh-external/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
+   cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
+   （若 pnpm install 因 @deepseek-ai/* 的 link: 依赖解析失败，说明 DSH 源码 checkout 不在 ~/.dsh/source/current —— 停下来告诉我，不要继续）
+2. 注册到 web profile：
+   a. 编辑 ~/.dsh/profiles/web/package.json，在 dependencies 中加入 "dsh-better-sidebar": "link:<第 1 步克隆目录的绝对路径>"
+   b. 编辑 ~/.dsh/profiles/web/cordis.patch.yml，追加挂载行：
+      - insert:
+          - id: better-sidebar
+            name: 'dsh-better-sidebar'
+3. 在 ~/.dsh/profiles/web 目录执行 pnpm install
+4. 全部完成后告诉我，我重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）验证
+```
+
+> 安装 = 把插件登记进 web profile 的依赖清单（等价于 `dsh plugin --profile web add link:<路径>`）+ 一行 cordis 挂载行，**与 portal 无关**——portal 只指侧边栏面板在页面上的渲染方式（见下文[规范符合性](#规范符合性)）。
+
 ## 为什么用它
 
 - **⚡ 工作流不断档**：编辑文件、跑终端、看 Git 状态、拖 Tab 分栏对比，全在对话旁边完成，无需切窗口
@@ -77,7 +100,9 @@
 
 ---
 
-## 🚀 快速开始
+## 🧰 手动安装与更新
+
+不想用提示词时，也可以手动完成（等价于上面提示词的步骤）：
 
 ### 前置条件
 
@@ -95,33 +120,15 @@ pnpm build        # 产物: lib/index.js + lib/invariant.js (host) + lib/client.
 
 > 运行期依赖（cordis、react、`@deepseek-ai/dsh-client-*` 等）按官方插件清单规范声明在 `peerDependencies`——web profile 已内置全部 peer 依赖，安装本插件无需额外装包；`dependencies` 只保留插件自有的运行时依赖（node-pty、ws、xterm、CodeMirror、schemastery 等）。
 
-### 2. 注册到 web profile（安装）
-
-> **安装走 profile 清单注册，与 portal 无关**：安装 = 把插件登记进 web profile 的依赖（`dsh plugin` 命令或手动编辑 `package.json`）并加一行 cordis 挂载行；"portal" 只指侧边栏面板在页面上的**渲染方式**（见下文[规范符合性](#规范符合性)），不是安装通道。
-
-**方式 A（推荐）：`dsh plugin` 命令**
+### 2. 注册到 web profile
 
 ```sh
 dsh plugin --profile web add link:/绝对路径/DSH-better-sidebar
 ```
 
-等价于在 `~/.dsh/profiles/web` 目录执行 `pnpm add link:...`：写入该 profile 的 `package.json` `dependencies` 并安装依赖。
+（等价于手动把 `"dsh-better-sidebar": "link:<绝对路径>"` 写入 `~/.dsh/profiles/web/package.json` 的 `dependencies` 并 `pnpm install`。）
 
-**方式 B：手动编辑**
-
-编辑 `~/.dsh/profiles/web/package.json`，在 `dependencies` 加入：
-
-```json
-"dsh-better-sidebar": "link:/绝对路径/DSH-better-sidebar"
-```
-
-然后安装依赖：
-
-```sh
-(cd ~/.dsh/profiles/web && pnpm install)
-```
-
-**两种方式都要**在 `~/.dsh/profiles/web/cordis.patch.yml` 追加插件挂载行（`dsh plugin` 只管理依赖清单，不写挂载行）：
+然后编辑 `~/.dsh/profiles/web/cordis.patch.yml`，追加插件挂载行（`dsh plugin` 只管理依赖清单，不写挂载行）：
 
 ```yaml
 - insert:
@@ -129,13 +136,9 @@ dsh plugin --profile web add link:/绝对路径/DSH-better-sidebar
       name: 'dsh-better-sidebar'
 ```
 
-### 3. 重启 GUI 并刷新页面
+### 3. 重启 DSH 并刷新页面
 
-```sh
-pm2 restart dsh-web   # 或你自己的 dsh web 启动方式
-```
-
-浏览器**硬刷新**（Cmd/Ctrl+Shift+R）后，右侧出现侧边栏即安装成功。
+重启 DSH（你的 `dsh web` 启动方式），浏览器**硬刷新**（Cmd/Ctrl+Shift+R）后，右侧出现侧边栏即安装成功。
 
 ### 更新
 
@@ -144,7 +147,7 @@ pnpm build            # 产物: lib/index.js + lib/invariant.js (host) + lib/cli
 ```
 
 - 只改了 **client** 代码（`src/client/*`）→ 硬刷新页面即可（bundle 由服务器按请求读取）
-- 改了 **host** 代码（`src/index.ts`、`src/config.ts` 等）→ `pm2 restart dsh-web` + 硬刷新
+- 改了 **host** 代码（`src/index.ts`、`src/config.ts` 等）→ 重启 DSH + 硬刷新
 
 `link:` 引用无需重新 install。
 
@@ -159,7 +162,7 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 
 ### 规范符合性
 
-插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`）。**安装通道与渲染方式是两个独立概念**：安装始终走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[快速开始](#快速开始)）；下面的 portal 条目只描述面板在页面上的渲染方式。
+插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`）。**安装通道与渲染方式是两个独立概念**：安装始终走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[一键安装](#一键安装把提示词发给-dsh)）；下面的 portal 条目只描述面板在页面上的渲染方式。
 
 - **插件形态**：`export const name / inject / Config / apply`，无 default 导出；`tests/plugin-shape.spec.ts` 通过 `Loader.unwrapExports` 守卫该形态
 - **清单**：`types` + `exports`（`.` / `./invariant` / `./client` / `./src/*` / `./package.json`）、`dshClient`（`platform: 'web'` + 信息性 `inject` 边）、peerDependencies、`engines`、`files` 产物明细、`prepare`（消费者侧 `tsdown`，git 安装可用）
@@ -192,4 +195,12 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 - Git 无 push/pull/fetch；无文件 watcher（手动刷新）
 - 工具行内的文件打开按钮（核心代码）不可拦截，仅"产出文件"行被接管
 - 终端 Tab **拖拽到另一分栏**时会重挂载（shell 重开）；切换 Tab / 切换会话（30 秒内返回）/ 刷新页面不会
-- 仅验证 macOS（node-pty 预编译二进制平台相关）
+
+## 🖥️ 平台支持
+
+代码按 **Windows / Linux / macOS** 三平台适配（macOS 为日常验证平台；Windows/Linux 的平台分支经单元测试覆盖，建议真机冒烟）：
+
+- 路径处理全部走 `node:path` 平台 API（列表拼接、`resolve`）；媒体路由的前缀检查与相对路径投影容忍混合分隔符，Windows 上大小写不敏感
+- Windows 上终端 shell 为 `powershell.exe`；node-pty 的 spawn-helper 修复（pnpm 剥执行位）自动跳过 Windows
+- `node-pty` 安装优先下载预编译二进制（`prebuild.js`，需网络），失败则源码编译——Windows 需 Visual Studio Build Tools，Linux 需 `make`/`g++`/`python3`，macOS 需 Xcode Command Line Tools；`pnpm-workspace.yaml` 已声明 `allowBuilds: node-pty: true`
+- git 操作仅依赖 `git` 在 PATH（Windows 需 Git for Windows）
