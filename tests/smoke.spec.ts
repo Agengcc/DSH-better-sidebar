@@ -4,6 +4,8 @@
  * actual repository, and a real directory listing. Runs with `pnpm test`.
  */
 import { describe, expect, it } from 'vitest'
+import { tmpdir } from 'node:os'
+import { resolve as resolvePath } from 'node:path'
 import { apply } from '../src/index.ts'
 import * as git from '../src/git.ts'
 import { listDirectory } from '../src/fs-tree.ts'
@@ -121,16 +123,19 @@ describe('host plugin smoke', () => {
 
   it('pty manager: reopening with a different cwd respawns in the new directory', async () => {
     const manager = new PtyManager(defaultShell(), 3)
+    // A real second directory: os.tmpdir() exists on every platform ('/tmp'
+    // does not exist on Windows).
+    const other = tmpdir()
     try {
       const first = manager.open('s4', 't1', process.cwd(), 80, 24)
       // The hydrate race: the first connect fell back to the process cwd,
       // the reconnect carries the session's real cwd — the shell must move.
-      const second = manager.open('s4', 't1', '/tmp', 80, 24)
+      const second = manager.open('s4', 't1', other, 80, 24)
       expect(second).not.toBe(first)
-      expect(second.cwd).toBe('/tmp')
+      expect(second.cwd).toBe(other)
       expect(manager.keysOf('s4')).toHaveLength(1)
       // A same-cwd reconnect reattaches without respawning.
-      const third = manager.open('s4', 't1', '/tmp', 80, 24)
+      const third = manager.open('s4', 't1', other, 80, 24)
       expect(third).toBe(second)
       expect(manager.keysOf('s4')).toHaveLength(1)
     } finally {
@@ -192,7 +197,9 @@ describe('session cwd resolution over the API route', () => {
     const route = mount()
     const result = await invoke(route, 'session.cwd', { sessionId: 's-detached', cwd: '/tmp/summary-cwd' })
     expect(result.ok).toBe(true)
-    expect(result.value?.cwd).toBe('/tmp/summary-cwd')
+    // The summary cwd passes through requireAbsolute (platform resolve), so
+    // the expectation follows the platform's own normalization.
+    expect(result.value?.cwd).toBe(resolvePath('/tmp/summary-cwd'))
   })
 
   it('falls back to the process cwd with no summary cwd', async () => {

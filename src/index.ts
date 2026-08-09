@@ -12,7 +12,7 @@
  * processes are keyed by session.
  */
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, extname } from 'node:path'
+import { basename, dirname, extname } from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { Context } from './context-types.ts'
@@ -22,7 +22,7 @@ import {
   type ResolvedSidebarConfig,
   type SidebarConfig,
 } from './config.ts'
-import { parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
+import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
 import { isTrustedApiRequest } from './trust-fence.ts'
 import * as git from './git.ts'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
@@ -286,9 +286,11 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         if (sessionId === null || raw === null) throw new SidebarError('bad-request', 'sessionId and path are required')
         const cwd = sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined)
         const path = requireAbsolute(raw)
-        if (!path.startsWith(cwd)) {
+        if (!isWithin(cwd, path)) {
           // Only files under the session cwd are served as media (the editor
           // opens images from the explorer; produced files go through read).
+          // isWithin (not a raw startsWith) so case-mismatched Windows paths
+          // and mixed separators cannot be misclassified.
           throw new SidebarError('fs-error', 'media path outside the session working directory', 403)
         }
         const info = await stat(path)
@@ -297,7 +299,13 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         }
         const type = MEDIA_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream'
         const body = await readFile(path)
-        res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' })
+        // Raw bytes either way (binary-safe); ?download=1 switches the
+        // disposition so the browser saves the file instead of showing it.
+        const headers: Record<string, string> = { 'content-type': type, 'cache-control': 'no-cache' }
+        if (url.searchParams.get('download') === '1') {
+          headers['content-disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}`
+        }
+        res.writeHead(200, headers)
         res.end(body)
       } catch (error) {
         writeError(res, error)

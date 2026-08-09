@@ -11,6 +11,11 @@
  * @param path - an absolute entry path from the fs-tree.
  * @returns the relative path with '/' separators ('.' for the cwd itself),
  * or `path` unchanged when it lies outside the cwd.
+ *
+ * The prefix test is case-insensitive: Windows paths (and macOS's
+ * case-insensitive volumes) may arrive with different casing than the cwd
+ * row, and the containment decision must not depend on it. The returned
+ * relative text keeps the caller's own casing.
  */
 export function relativeTo(cwd: string, path: string): string {
   const base = cwd.replace(/[\\/]+$/, '')
@@ -18,6 +23,6 @@ export function relativeTo(cwd: string, path: string): string {
   const nBase = norm(base)
   const nPath = norm(path)
   if (nPath === nBase) return '.'
-  if (nPath.startsWith(`${nBase}/`)) return nPath.slice(nBase.length + 1)
+  if (nPath.toLowerCase().startsWith(`${nBase.toLowerCase()}/`)) return nPath.slice(nBase.length + 1)
   return path
 }

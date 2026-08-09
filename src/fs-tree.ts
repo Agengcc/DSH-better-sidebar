@@ -6,7 +6,7 @@
  * dirent says, keeping the read cheap for arbitrarily large levels.
  */
 import { opendir } from 'node:fs/promises'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { SidebarError } from './wire.ts'
 
 /** One explorer row. */
@@ -54,7 +54,9 @@ export async function listDirectory(path: string, maxEntries = 1000): Promise<Si
       }
       rows.push({
         name: dirent.name,
-        path: `${path}/${dirent.name}`,
+        // Platform join: on Windows the level path uses '\' — a hardcoded '/'
+        // would leak mixed separators into every row's path.
+        path: join(path, dirent.name),
         isDir: dirent.isDirectory(),
         hidden: dirent.name.startsWith('.'),
       })
@@ -84,6 +86,27 @@ export function requireAbsolute(path: string): string {
     throw new SidebarError('fs-error', `"${path}" is not an absolute path`, 400)
   }
   return resolve(path)
+}
+
+/**
+ * Whether `target` lies under `base` (or equals it), tolerant of separator
+ * style and — on Windows, where the filesystem is case-insensitive — of
+ * letter case. The media route uses this instead of a raw `startsWith` so a
+ * case-mismatched or mixed-separator path can never be misclassified
+ * (e.g. `C:\Users\Me` vs `c:/users/me/file.png`).
+ * @param platform - filesystem semantics; injectable so both branches are
+ * unit-testable on any host.
+ */
+export function isWithin(base: string, target: string, platform: NodeJS.Platform = process.platform): boolean {
+  const norm = (value: string): string => value.replace(/[\\/]+/g, '/').replace(/\/$/, '')
+  const b = norm(base)
+  const t = norm(target)
+  if (platform === 'win32') {
+    const lb = b.toLowerCase()
+    const lt = t.toLowerCase()
+    return lt === lb || lt.startsWith(`${lb}/`)
+  }
+  return t === b || t.startsWith(`${b}/`)
 }
 
 /** Message text of an unknown thrown value. */
