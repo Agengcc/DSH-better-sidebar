@@ -7,15 +7,16 @@
  * Row actions: hovering a row reveals an @-reference button on the far
  * right (appends `@<relative path>` to the composer draft), and right-click
  * opens a context menu to copy the relative or absolute path (with a brief
- * "copied" label replacing the button after a successful write).
+ * "copied" label replacing the button after a successful write); file rows
+ * also offer a download action (the host serves raw bytes, binary-safe).
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconCodeOutline16, IconCopyOutline16, IconFolderClose16, IconFolderOpen16,
+  IconCodeOutline16, IconCopyOutline16, IconDownloadOutline16, IconFolderClose16, IconFolderOpen16,
   IconRefreshOutline16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, type FsEntry } from './api.ts'
+import { api, downloadUrl, type FsEntry } from './api.ts'
 import { relativeTo } from './paths.ts'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
@@ -50,8 +51,8 @@ export function ExplorerView(props: {
   const [refreshTick, setRefreshTick] = useState(0)
   /** The row whose path was just copied ("copied" label replaces its button). */
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
-  /** Open context menu: the row path plus the cursor position. */
-  const [rowMenu, setRowMenu] = useState<{ path: string; x: number; y: number } | null>(null)
+  /** Open context menu: the row path (and whether it is a directory) plus the cursor position. */
+  const [rowMenu, setRowMenu] = useState<{ path: string; isDir: boolean; x: number; y: number } | null>(null)
 
   const storeLevel = useCallback((path: string, level: LevelData) => {
     dataRef.current = { ...dataRef.current, [path]: level }
@@ -109,10 +110,21 @@ export function ExplorerView(props: {
     )
   }
 
-  const openRowMenu = (event: MouseEvent, path: string): void => {
+  const openRowMenu = (event: MouseEvent, path: string, isDir: boolean): void => {
     event.preventDefault()
     event.stopPropagation()
-    setRowMenu({ path, x: event.clientX, y: event.clientY })
+    setRowMenu({ path, isDir, x: event.clientX, y: event.clientY })
+  }
+
+  /** Download a file through the host route (raw bytes, binary-safe). */
+  const downloadFile = (path: string): void => {
+    const url = downloadUrl({ sessionId, cwd }, path)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
   }
 
   const root = cwd
@@ -147,7 +159,7 @@ export function ExplorerView(props: {
                   onToggle(entry.path)
                 }
               }}
-              onContextMenu={(event) => { openRowMenu(event, entry.path) }}
+              onContextMenu={(event) => { openRowMenu(event, entry.path, true) }}
             >
               {isOpen ? <IconFolderOpen16 size={14} /> : <IconFolderClose16 size={14} />}
               <span className={css.explorerName}>{entry.name}</span>
@@ -172,7 +184,7 @@ export function ExplorerView(props: {
               onOpenFile(entry.path)
             }
           }}
-          onContextMenu={(event) => { openRowMenu(event, entry.path) }}
+          onContextMenu={(event) => { openRowMenu(event, entry.path, false) }}
         >
           <IconCodeOutline16 size={14} />
           <span className={css.explorerName}>{entry.name}</span>
@@ -208,7 +220,7 @@ export function ExplorerView(props: {
             <div
               className={css.explorerRow}
               style={{ paddingLeft: 6 }}
-              onContextMenu={(event) => { openRowMenu(event, root) }}
+              onContextMenu={(event) => { openRowMenu(event, root, true) }}
             >
               <IconFolderOpen16 size={14} />
               <span className={css.explorerName}>{baseName(root)}</span>
@@ -241,6 +253,10 @@ export function ExplorerView(props: {
         open={rowMenu !== null}
         onClose={() => { setRowMenu(null) }}
         items={[
+          // Download applies to files only (the host route refuses directories).
+          ...(rowMenu?.isDir === false
+            ? [{ id: 'download', label: t('download'), icon: <IconDownloadOutline16 size={14} /> }]
+            : []),
           { id: 'relative', label: t('copyRelative'), icon: <IconCopyOutline16 size={14} /> },
           { id: 'absolute', label: t('copyAbsolute'), icon: <IconCopyOutline16 size={14} /> },
         ]}
@@ -248,6 +264,10 @@ export function ExplorerView(props: {
           const target = rowMenu
           if (target === null) return
           setRowMenu(null)
+          if (id === 'download') {
+            downloadFile(target.path)
+            return
+          }
           copyPath(
             id === 'relative' ? relativeTo(cwd ?? '', target.path) : target.path,
             target.path,

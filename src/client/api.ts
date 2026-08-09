@@ -123,7 +123,19 @@ export const api = {
 
 /** Absolute URL of the media route for one path (images only). */
 export function mediaUrl(scope: SessionScope, path: string): string {
+  return fileUrl(scope, path, false)
+}
+
+/** Absolute URL of the download route: serves raw bytes (binary-safe) with
+ *  `Content-Disposition: attachment`, so the browser saves the file. */
+export function downloadUrl(scope: SessionScope, path: string): string {
+  return fileUrl(scope, path, true)
+}
+
+/** Shared URL builder for the /sidebar/file route (media vs download). */
+function fileUrl(scope: SessionScope, path: string, download: boolean): string {
   const params = new URLSearchParams({ sessionId: scope.sessionId, path })
   if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
+  if (download) params.set('download', '1')
   return `/sidebar/file?${params.toString()}`
 }

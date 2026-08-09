@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { EditorState } from '@codemirror/state'
-import { EditorView as CodeMirrorView, keymap } from '@codemirror/view'
+import { EditorView as CodeMirrorView, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { IconCheckOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, mediaUrl, type SessionScope } from './api.ts'
@@ -98,6 +98,7 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
       doc: load.content,
       extensions: [
         CodeMirrorView.lineWrapping,
+        lineNumbers(),
         history(),
         EditorState.tabSize.of(2),
         CodeMirrorView.contentAttributes.of({ spellcheck: 'false' }),

@@ -182,18 +182,18 @@
   flex: none;
   z-index: 3;
   touch-action: none;
-  background: transparent;
+  background: var(--dsw-alias-border-l2);
   transition: background var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .dividerRow {
-  width: 5px;
+  width: 7px;
   margin: 0 -2px;
   cursor: col-resize;
 }
 
 .dividerCol {
-  height: 5px;
+  height: 7px;
   margin: -2px 0;
   cursor: row-resize;
 }

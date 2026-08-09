@@ -69,6 +69,7 @@ const zh = {
   referenceFile: '@文件',
   copyRelative: '复制相对地址',
   copyAbsolute: '复制绝对地址',
+  download: '下载',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -135,6 +136,7 @@ const en: Record<keyof typeof zh, string> = {
   referenceFile: '@file',
   copyRelative: 'Copy relative path',
   copyAbsolute: 'Copy absolute path',
+  download: 'Download',
 }
 
 /** Translate a copy key in the browser's language (zh → zh, else en). */
