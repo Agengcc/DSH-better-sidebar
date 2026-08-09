@@ -70,6 +70,14 @@ const zh = {
   copyRelative: '复制相对地址',
   copyAbsolute: '复制绝对地址',
   download: '下载',
+  settingsNav: '侧边卡片',
+  settingsOpenTitle: '新会话默认打开',
+  settingsOpenDesc: '新建会话时自动展开侧边卡片；已存在的会话保持各自布局',
+  settingsWidthTitle: '默认宽度占比',
+  settingsWidthDesc: '新建会话时侧边卡片占窗口宽度的百分比 (20–60)',
+  settingsWidthSuffix: '%',
+  settingsSaveFailed: '保存失败',
+  settingsConflict: '设置已被其他窗口修改，请重试',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -137,6 +145,14 @@ const en: Record<keyof typeof zh, string> = {
   copyRelative: 'Copy relative path',
   copyAbsolute: 'Copy absolute path',
   download: 'Download',
+  settingsNav: 'Side card',
+  settingsOpenTitle: 'Open by default for new conversations',
+  settingsOpenDesc: 'Expand the side card automatically for brand-new conversations; existing conversations keep their own layouts',
+  settingsWidthTitle: 'Default width share',
+  settingsWidthDesc: 'The side card\'s default share of the window width for new conversations (20–60)',
+  settingsWidthSuffix: '%',
+  settingsSaveFailed: 'Failed to save',
+  settingsConflict: 'The setting changed in another window — please retry',
 }
 
 /** Translate a copy key in the browser's language (zh → zh, else en). */

@@ -119,6 +119,15 @@ export const api = {
    *  this explicit route). */
   ptyClose: (scope: SessionScope, tab: string) =>
     call<{ ok: true }>('pty.close', scopePayload(scope, { tab })),
+  /** Read the side card preferences (plugin-global, no session scope). */
+  settingsGet: () =>
+    call<{ value?: unknown; revision?: number }>('settings.get', {}),
+  /** Merge a patch into the side card preferences (revision-guarded). */
+  settingsUpdate: (patch: Record<string, unknown>, expectedRevision?: number) =>
+    call<{ value?: unknown; revision?: number }>('settings.update', {
+      patch,
+      ...(expectedRevision !== undefined ? { expectedRevision } : {}),
+    }),
 }
 
 /** Absolute URL of the media route for one path (images only). */

@@ -18,13 +18,16 @@ import { WebSocket, WebSocketServer } from 'ws'
 import type { Context } from './context-types.ts'
 import {
   Config,
+  PrefsSchema,
   resolveSidebarConfig,
+  SIDEBAR_PREFS_NS,
   type ResolvedSidebarConfig,
   type SidebarConfig,
 } from './config.ts'
 import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
 import { isTrustedApiRequest } from './trust-fence.ts'
 import * as git from './git.ts'
+import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
@@ -112,8 +115,27 @@ async function readText(path: string, readLimit: number): Promise<{ content: str
 /** One API method dispatch table entry. */
 type ApiMethod = (payload: unknown) => Promise<unknown> | unknown
 
+/**
+ * The live face of the side card settings namespace, bound to the settings
+ * service when it is mounted. The DSH settings RPC domain only serves
+ * allowlisted namespaces (api-proxy exposedNamespaces), so the client reads
+ * and writes THIS namespace through the plugin's own fenced /sidebar routes,
+ * which call the seam in-process — no configuration-client gate involved.
+ */
+export interface SidebarSettingsFace {
+  /** The current resolved value + revision (undefined while the settings service is absent). */
+  get(): { value?: unknown; revision?: number }
+  /** Merge a patch (revision-guarded) and return the fresh resolved view. */
+  update(patch: Record<string, unknown>, expectedRevision?: number): Promise<{ value?: unknown; revision?: number }>
+}
+
 /** Build the API method table bound to the plugin context, pty manager, and resolved config. */
-function buildApi(ctx: Context, ptyManager: PtyManager, resolved: ResolvedSidebarConfig): Record<string, ApiMethod> {
+function buildApi(
+  ctx: Context,
+  ptyManager: PtyManager,
+  resolved: ResolvedSidebarConfig,
+  getSettings: () => SidebarSettingsFace | undefined,
+): Record<string, ApiMethod> {
   const cwdOf = (payload: unknown): { sessionId: string; cwd: string } => {
     const sessionId = requireString(payload, 'sessionId')
     const record = payload as { cwd?: unknown } | null
@@ -212,6 +234,35 @@ function buildApi(ctx: Context, ptyManager: PtyManager, resolved: ResolvedSideba
       ptyManager.close(`${sessionId}:${tab}`)
       return { ok: true }
     },
+    // The side card preferences. The settings service is optional in the
+    // composition; while absent the routes report undefined and the client
+    // keeps the schema defaults. Writes are revision-guarded: a stale editor
+    // is refused with settings-conflict so a concurrent change is never
+    // silently overwritten (mirror of the settings seam's own guard).
+    'settings.get': () => {
+      const settings = getSettings()
+      return settings?.get() ?? { value: undefined, revision: undefined }
+    },
+    'settings.update': async (payload) => {
+      const settings = getSettings()
+      if (settings === undefined) {
+        throw new SidebarError('settings-rejected', 'the settings service is not mounted in this deployment', 503)
+      }
+      const record = payload as { patch?: unknown; expectedRevision?: unknown } | null
+      const patch = record?.patch
+      if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) {
+        throw new SidebarError('bad-request', 'patch must be a plain object')
+      }
+      const expectedRevision = typeof record?.expectedRevision === 'number' ? record.expectedRevision : undefined
+      try {
+        return await settings.update(patch as Record<string, unknown>, expectedRevision)
+      } catch (error) {
+        if (error instanceof SettingsConflictError) {
+          throw new SidebarError('settings-conflict', error.message, 409)
+        }
+        throw new SidebarError('settings-rejected', error instanceof Error ? error.message : String(error), 400)
+      }
+    },
   }
 }
 
@@ -231,8 +282,35 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   const fence = (req: IncomingMessage): boolean => isTrustedApiRequest(req, trustedHosts)
   const ptyManager = new PtyManager(defaultShell(), resolved.terminalsPerSession)
 
+  // ── User-facing "Side card" preferences ──────────────────────────────────
+  // Register the namespace with the settings provider so the Settings page
+  // (client half) can render and persist the new-conversation defaults. The
+  // DSH settings RPC domain (api-proxy) only serves allowlisted namespaces to
+  // configuration clients, so the client reaches this namespace through the
+  // plugin's own fenced routes below ('settings.get'/'settings.update'),
+  // which call the seam in-process. Deployments without a settings service
+  // simply never fill the face and the client falls back to the defaults.
+  let settingsFace: SidebarSettingsFace | undefined
+  ctx.inject(['settings'], (sctx) => {
+    const ns: SettingsNamespace = settingsNamespace(SIDEBAR_PREFS_NS)
+    sctx.settings.register(ns, PrefsSchema)
+    const viewOf = (): { value?: unknown; revision?: number } => {
+      const descriptor = sctx.settings.describe({ redactSecrets: true }).find(candidate => candidate.ns === ns)
+      return descriptor === undefined
+        ? { value: undefined, revision: undefined }
+        : { value: descriptor.value, revision: descriptor.revision }
+    }
+    settingsFace = {
+      get: viewOf,
+      update: async (patch, expectedRevision) => {
+        await sctx.settings.update(ns, patch, expectedRevision)
+        return viewOf()
+      },
+    }
+  })
+
   // ── JSON API ────────────────────────────────────────────────────────────
-  const api = buildApi(ctx, ptyManager, resolved)
+  const api = buildApi(ctx, ptyManager, resolved, () => settingsFace)
   ctx.effect(() => ctx.httpServer.register({
     kind: 'prefix',
     path: '/sidebar/api',

@@ -15,6 +15,8 @@ export type SidebarErrorCode =
   | 'fs-error'
   | 'git-error'
   | 'pty-error'
+  | 'settings-rejected'
+  | 'settings-conflict'
   | 'internal'
 
 /** One API failure with its wire code and HTTP status. */

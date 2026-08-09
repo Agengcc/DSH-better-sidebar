@@ -9,6 +9,8 @@
  * divides the space row- or column-wise with fractional sizes. All tree
  * operations are pure functions over the node, unit-tested in tests/state.spec.ts.
  */
+import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
+
 export type TabType = 'explorer' | 'git' | 'editor' | 'terminal'
 
 /** One open tab. `path` carries the file (editor) or is absent (explorer/git). */
@@ -54,8 +56,6 @@ export interface SidebarState {
 export const PANEL_MIN = 280
 export const PANEL_MAX = 640
 export const PANEL_DEFAULT = 400
-/** Approximate default width of the host's left sidebar (columns.ts SIDEBAR_DEFAULT). */
-export const LEFT_SIDEBAR_DEFAULT = 320
 export const TAB_MAX_WIDTH = 160
 export const TERMINAL_LIMIT = 3
 
@@ -99,15 +99,16 @@ function maxCounterId(parsed: unknown): number {
   return max
 }
 
-/** A fresh default state: open, one explorer tab in one pane. `width` is
- * the caller's preferred panel width (default PANEL_DEFAULT); the store
- * seeds new sessions with half the viewport. */
-export function makeDefaultState(width = PANEL_DEFAULT): SidebarState {
+/** A fresh default state: one explorer tab in one pane, open per the caller's
+ * preference. `width` is the caller's preferred panel width (default
+ * PANEL_DEFAULT) and `panelOpen` whether the panel starts expanded (default
+ * true); the store seeds new sessions from the user's side card prefs. */
+export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true): SidebarState {
   const leaf: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [], active: null }
   leaf.tabs = [{ id: uid('tab'), type: 'explorer', title: 'Explorer' }]
   leaf.active = leaf.tabs[0]!.id
   return {
-    panelOpen: true,
+    panelOpen,
     width,
     activePane: leaf.id,
     nextTerminal: 1,
@@ -405,7 +406,14 @@ export interface SidebarSnapshot {
   state: SidebarState | undefined
 }
 
-function loadState(sessionId: string): SidebarState {
+/** Default panel width for one viewport: the prefs percent of the window,
+ * clamped to the panel floor (a tiny percent must stay usable) and to the
+ * viewport (a large one must never cover the whole window). */
+export function defaultWidthFor(viewport: number, percent: number): number {
+  return Math.min(viewport, Math.max(PANEL_MIN, Math.round(viewport * percent / 100)))
+}
+
+function loadState(sessionId: string, prefs: SidebarPrefs): SidebarState {
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}:${sessionId}`)
     if (raw !== null) {
@@ -419,13 +427,15 @@ function loadState(sessionId: string): SidebarState {
   } catch {
     // Corrupt or unavailable storage: fall through to the default.
   }
-  // New sessions open at half the CONTENT area (the viewport minus the
-  // left sidebar's default width), so the panel never swallows half the
-  // whole window; the same default applies to every session.
-  const contentHalf = typeof window !== 'undefined'
-    ? Math.max(PANEL_MIN, Math.round((window.innerWidth - LEFT_SIDEBAR_DEFAULT) / 2))
-    : PANEL_DEFAULT
-  return makeDefaultState(contentHalf)
+  // New sessions seed from the user's side card prefs: the width is the
+  // chosen percent of the window (clamped to the panel floor and the
+  // viewport so a huge percent can never crush the app shell), and the
+  // panel starts open only when the preference says so.
+  const viewport = typeof window !== 'undefined' ? window.innerWidth : undefined
+  const width = viewport === undefined
+    ? PANEL_DEFAULT
+    : defaultWidthFor(viewport, prefs.defaultWidthPercent)
+  return makeDefaultState(width, prefs.openByDefault)
 }
 
 /**
@@ -537,6 +547,18 @@ export class SidebarStore {
   private snapshot: SidebarSnapshot = { sessionId: undefined, state: undefined }
   private readonly listeners = new Set<() => void>()
   private persistTimer: number | undefined
+  /** User-facing side card prefs seeding brand-new session states (defaults until the settings RPC resolves). */
+  private prefs: SidebarPrefs = { ...SIDEBAR_PREFS_DEFAULTS }
+
+  /** Replace the side card prefs (the settings RPC result / settings page write). */
+  setPrefs(prefs: SidebarPrefs): void {
+    this.prefs = { ...prefs }
+  }
+
+  /** The current side card prefs (seeds new sessions; persisted states win). */
+  getPrefs(): SidebarPrefs {
+    return { ...this.prefs }
+  }
 
   /** Select a session (or none); loads its persisted state. */
   setSession(sessionId: string | undefined): void {
@@ -546,7 +568,7 @@ export class SidebarStore {
     } else {
       let state = this.bySession.get(sessionId)
       if (state === undefined) {
-        state = loadState(sessionId)
+        state = loadState(sessionId, this.prefs)
         this.bySession.set(sessionId, state)
       } else {
         // Cache hit: another session's load/ops may have left the uid

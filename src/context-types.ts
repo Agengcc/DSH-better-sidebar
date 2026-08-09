@@ -80,6 +80,12 @@ export interface SidebarSlotRegisterOptions {
 /** The client slots service face (register returns the disposer). */
 export interface SidebarSlotsService {
   register(options: SidebarSlotRegisterOptions, component: unknown): () => void
+  /**
+   * Run a callback for each declaration lifetime of a slot (the runtime
+   * SlotsService.inject): a no-op while the slot is undeclared, so the
+   * settings section registration waits for the settings shell.
+   */
+  inject(key: string, callback: () => () => void): () => void
 }
 
 /** The client session list row the sidebar reads (cwd for the explorer). */
@@ -139,12 +145,42 @@ export interface SidebarInvariantsService {
   ): () => void
 }
 
+/** The settings service face (mirror of @deepseek-ai/dsh-settings' Settings). */
+export interface SidebarSettingsService {
+  /**
+   * Register one namespace schema (the resolved value layers schema defaults,
+   * then the composition base, then the user document).
+   */
+  register<T>(
+    ns: string,
+    schema: unknown,
+    options?: { base?: Partial<T>; applies?: 'live' | 'restart' },
+  ): {
+    get(): T
+    watch(callback: (next: T, prev: T) => void | Promise<void>): () => void
+    update(patch: object): Promise<void>
+    replace(section: object): Promise<void>
+  }
+  /** Redacted descriptors of every registered namespace (secrets stripped). */
+  describe(options?: { redactSecrets?: boolean }): Array<{
+    ns: string
+    value?: unknown
+    base?: unknown
+    user?: unknown
+    applies: 'live' | 'restart'
+    revision: number
+  }>
+  /** Service-level merge write with the revision guard (a stale writer is refused). */
+  update(ns: string, patch: object, expectedRevision?: number): Promise<void>
+}
+
 declare module 'cordis' {
   interface Context {
     httpServer: SidebarHttpServer
     sessions: SidebarSessionStore & SidebarSessionsService
     loader: SidebarLoader
     slots: SidebarSlotsService
+    settings: SidebarSettingsService
     invariants: SidebarInvariantsService
     /**
      * Register a lifecycle callback (DSH-vendored cordis): runs at plugin

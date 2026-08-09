@@ -105,6 +105,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-primitives
         version: link:../../.dsh/source/current/packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-settings
+        version: link:../../.dsh/source/current/packages/client/ui-settings
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-slots
         version: link:../../.dsh/source/current/packages/client/ui-slots
@@ -120,6 +123,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/core/session
         version: link:../../.dsh/source/current/packages/core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: link:/Users/menghuan/.dsh/source/current/packages/settings/settings
+        version: link:../../.dsh/source/current/packages/settings/settings
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

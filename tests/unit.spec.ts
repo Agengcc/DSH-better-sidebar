@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '../src/fs-tree.ts'
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
-  activateTab, allLeaves, closeTab, insertLeafAt, makeDefaultState, moveTab, moveTabToEdge,
-  openTab, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
+  moveTab, moveTabToEdge, openTab, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
+import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
+import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
 import { relativeTo } from '../src/client/paths.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
@@ -448,5 +450,66 @@ describe('editor language mapping', () => {
     expect(languageKeyForExt('txt')).toBeNull()
     expect(languageKeyForExt('log')).toBeNull()
     expect(languageKeyForExt('')).toBeNull()
+  })
+})
+
+describe('side card preferences', () => {
+  /** A fake settings wire face whose settingsGet resolves to one raw value. */
+  const wire = (value: unknown): SidebarSettingsClient => ({
+    settingsGet: async () => ({ value, revision: 1 }),
+    settingsUpdate: async () => ({ value, revision: 2 }),
+  })
+
+  const rejecting = (): SidebarSettingsClient => ({
+    settingsGet: async () => { throw new Error('route rejected') },
+    settingsUpdate: async () => { throw new Error('route rejected') },
+  })
+
+  it('falls back to the defaults when the settings route rejects', async () => {
+    expect(await loadPrefs(rejecting())).toEqual(SIDEBAR_PREFS_DEFAULTS)
+  })
+
+  it('falls back to the defaults when the value is absent or malformed', async () => {
+    expect(await loadPrefs(wire(undefined))).toEqual(SIDEBAR_PREFS_DEFAULTS)
+    expect(await loadPrefs(wire('garbage'))).toEqual(SIDEBAR_PREFS_DEFAULTS)
+  })
+
+  it('parses a valid value and clamps the percent into the contract range', async () => {
+    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80 })))
+      .toEqual({ openByDefault: false, defaultWidthPercent: 60 })
+  })
+
+  it('falls back per-field when a stored field is malformed', async () => {
+    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33 })))
+      .toEqual({ openByDefault: true, defaultWidthPercent: 33 })
+  })
+
+  it('seeds new-session defaults from the store prefs (open flag + width)', () => {
+    const store = createSidebarStore()
+    // Node environment: no window → the width falls back to PANEL_DEFAULT,
+    // while the open flag still follows the preference.
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45 })
+    store.setSession('fresh-session')
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45 })
+    const snapshot = store.getSnapshot()
+    expect(snapshot.sessionId).toBe('fresh-session')
+    expect(snapshot.state?.panelOpen).toBe(false)
+    expect(snapshot.state?.width).toBe(400)
+    // The default prefs keep the panel open.
+    const openStore = createSidebarStore()
+    openStore.setSession('another-fresh')
+    expect(openStore.getSnapshot().state?.panelOpen).toBe(true)
+  })
+
+  it('derives the default width from the window percent with clamps', () => {
+    expect(defaultWidthFor(1440, 30)).toBe(432)
+    expect(defaultWidthFor(800, 30)).toBe(280) // the panel floor
+    expect(defaultWidthFor(1440, 100)).toBe(1440) // the viewport cap
+  })
+
+  it('makeDefaultState honors the open flag', () => {
+    expect(makeDefaultState().panelOpen).toBe(true)
+    expect(makeDefaultState(400, false).panelOpen).toBe(false)
+    expect(makeDefaultState(400, false).width).toBe(400)
   })
 })

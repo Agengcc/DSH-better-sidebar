@@ -1,16 +1,22 @@
 /**
- * Client half of dsh-better-sidebar: mounts the right sidebar portal (inside
- * an error boundary so a rendering failure shows an error strip instead of a
- * blank panel) and registers the turn-tail interception. Requires the
- * runtime's slots and sessions services; the bundle itself is a module-table
- * consumer only (react + ui-primitives + xterm, all provided or inlined).
+ * Client half of dsh-better-sidebar: resolves the user's "Side card"
+ * preferences through the plugin's own fenced settings route, mounts the
+ * right sidebar portal (inside an error boundary so a rendering failure
+ * shows an error strip instead of a blank panel), registers the turn-tail
+ * interception, and contributes the Side card settings section to the DSH
+ * Settings shell. Requires the runtime's slots and sessions services; the
+ * bundle itself is a module-table consumer only (react + ui-primitives +
+ * xterm, all provided or inlined).
  */
 import { Component, createElement, type ErrorInfo, type ReactNode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import type { Context } from '../context-types.ts'
 import { createSidebarStore } from './state.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { registerTurnTailInterception } from './intercept.tsx'
+import { loadPrefs } from './prefs.ts'
+import { SideCardSection } from './SideCardSection.tsx'
+import { api } from './api.ts'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
 import './layout.css'
@@ -60,7 +66,7 @@ class SidebarBoundary extends Component<{ children: ReactNode }, { error: string
 export function apply(ctx: Context): void {
   // One store instance per activation: production code creates it only here,
   // then hands it to the mounted panel and closes over it in the slot
-  // registration (the official createXXXStore() factory rule — no
+  // registrations (the official createXXXStore() factory rule — no
   // module-level singleton).
   const sidebarStore = createSidebarStore()
   // A failure anywhere in the client lifecycle must never take the app down
@@ -81,19 +87,35 @@ export function apply(ctx: Context): void {
   }
   try {
     ctx.effect(() => {
-      try {
-        const host = document.createElement('div')
-        host.setAttribute('data-dsh-better-sidebar', '')
-        document.body.appendChild(host)
-        const root = createRoot(host)
-        root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx, store: sidebarStore })))
-        return () => {
-          root.unmount()
-          host.remove()
+      let disposed = false
+      let root: Root | undefined
+      let host: HTMLDivElement | undefined
+      void (async () => {
+        // Resolve the user's side card prefs BEFORE the first session seeds,
+        // so a brand-new conversation opens (or stays closed) at the chosen
+        // width from first paint. A settings route failure falls back to the
+        // schema defaults; the sidebar still mounts (a stalled wire gives up
+        // after the timeout and mounts on the defaults).
+        const prefs = await Promise.race([
+          loadPrefs(api),
+          new Promise<null>(resolve => { const timer = window.setTimeout(() => resolve(null), 2000) }),
+        ])
+        if (prefs !== null) sidebarStore.setPrefs(prefs)
+        if (disposed) return
+        try {
+          host = document.createElement('div')
+          host.setAttribute('data-dsh-better-sidebar', '')
+          document.body.appendChild(host)
+          root = createRoot(host)
+          root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx, store: sidebarStore })))
+        } catch (error) {
+          fail('mount', error)
         }
-      } catch (error) {
-        fail('mount', error)
-        return undefined
+      })()
+      return () => {
+        disposed = true
+        root?.unmount()
+        host?.remove()
       }
     }, 'dsh-better-sidebar: sidebar mount')
 
@@ -108,6 +130,18 @@ export function apply(ctx: Context): void {
       },
       'dsh-better-sidebar: turn-tail interception',
     )
+
+    // The "Side card" settings section: appears in the DSH Settings shell
+    // once the shell's declaration is on the ledger (slots.inject waits for
+    // it); the section reads/writes the prefs through the plugin's own
+    // fenced settings route and keeps the shared store in sync.
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: 'better-sidebar',
+      order: 100,
+      label: () => t('settingsNav'),
+      inject: () => ({ store: sidebarStore }),
+    }, SideCardSection))
   } catch (error) {
     fail('load', error)
   }

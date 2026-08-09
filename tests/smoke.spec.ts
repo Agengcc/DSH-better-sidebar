@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import { resolve as resolvePath } from 'node:path'
+import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { apply } from '../src/index.ts'
 import * as git from '../src/git.ts'
 import { listDirectory } from '../src/fs-tree.ts'
@@ -20,6 +21,9 @@ interface FakeContext {
   }
   sessions: { get: (id: string) => { header: { cwd?: string } } | undefined }
   effect: (fn: () => void | (() => void), label?: string) => void
+  /** The settings service never appears in the smoke context: the inject
+   *  callback must never run (mirror of cordis' service-less inject). */
+  inject: (deps: readonly string[], callback: (sctx: never) => void) => () => void
 }
 
 describe('host plugin smoke', () => {
@@ -40,6 +44,9 @@ describe('host plugin smoke', () => {
         const cleanup = fn()
         if (typeof cleanup === 'function') effects.push(cleanup)
       },
+      // No settings service in the smoke context: the registration callback
+      // never runs (cordis' service-less inject behaves the same).
+      inject: () => () => {},
     }
     apply(ctx as never)
     expect(routes.map(route => route.path)).toEqual(['/sidebar/api', '/sidebar/file'])
@@ -167,6 +174,8 @@ describe('session cwd resolution over the API route', () => {
       sessions: overrides.sessions ?? { get: () => undefined },
       // The vendored cordis runs registration effects immediately.
       effect: (fn: () => void | (() => void)) => { fn() },
+      // No settings service: the namespace registration never runs.
+      inject: () => () => {},
     }
     apply(ctx as never)
     return routes.find(route => route.path === '/sidebar/api')!
@@ -233,5 +242,124 @@ describe('session cwd resolution over the API route', () => {
     expect(result.ok).toBe(true)
     const missing = await invoke(route, 'pty.close', { sessionId: 's-pty' })
     expect(missing.ok).toBe(false)
+  })
+})
+
+describe('side card settings routes', () => {
+  /** A minimal settings seam: register/describe/update with the revision guard. */
+  const createFakeSettings = () => {
+    const namespaces = new Map<string, {
+      schema: unknown
+      value: Record<string, unknown> | undefined
+      revision: number
+    }>()
+    const resolve = (entry: { schema: unknown; value: Record<string, unknown> | undefined }): unknown => {
+      const schema = entry.schema as (input: unknown) => unknown
+      return entry.value === undefined ? schema(undefined) : schema(entry.value)
+    }
+    return {
+      register(ns: string, schema: unknown) {
+        namespaces.set(ns, { schema, value: undefined, revision: 0 })
+        return { get: () => ({}), watch: () => () => {}, update: async () => {}, replace: async () => {} }
+      },
+      describe() {
+        return [...namespaces.entries()].map(([ns, entry]) => ({
+          ns,
+          value: resolve(entry),
+          applies: 'live' as const,
+          revision: entry.revision,
+        }))
+      },
+      async update(ns: string, patch: Record<string, unknown>, expectedRevision?: number) {
+        const entry = namespaces.get(ns)
+        if (entry === undefined) throw new Error(`settings namespace "${ns}" is not registered`)
+        if (expectedRevision !== undefined && expectedRevision !== entry.revision) {
+          throw new SettingsConflictError(settingsNamespace(ns), expectedRevision, entry.revision)
+        }
+        entry.value = { ...entry.value, ...patch }
+        entry.revision += 1
+      },
+    }
+  }
+
+  const mountWithSettings = (settings?: unknown): SidebarWebRoute => {
+    const routes: SidebarWebRoute[] = []
+    const ctx = {
+      loader: { entries: () => [] },
+      httpServer: {
+        register: (route: SidebarWebRoute) => { routes.push(route); return () => {} },
+        registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
+      },
+      sessions: { get: () => undefined },
+      effect: (fn: () => void | (() => void)) => { fn() },
+      inject: (deps: string[], callback: (sctx: { settings: unknown }) => void) => {
+        if (deps.includes('settings') && settings !== undefined) callback({ settings })
+        return () => {}
+      },
+    }
+    apply(ctx as never)
+    return routes.find(route => route.path === '/sidebar/api')!
+  }
+
+  const invoke = async (route: SidebarWebRoute, method: string, payload: unknown): Promise<{
+    ok: boolean
+    value?: unknown
+    error?: { code?: string; message: string }
+  }> => {
+    const body = Buffer.from(JSON.stringify(payload))
+    const req = {
+      method: 'POST',
+      url: `/sidebar/api/${method}`,
+      headers: { host: '127.0.0.1:3080' },
+      [Symbol.asyncIterator]: async function* () { yield body },
+    } as never
+    const out: { status: number; body: string } = { status: 200, body: '' }
+    const res = {
+      writeHead: (status: number) => { out.status = status },
+      end: (chunk: unknown) => { out.body += String(chunk ?? '') },
+    } as never
+    await route.handler(req, res)
+    return JSON.parse(out.body) as { ok: boolean; value?: unknown; error?: { code?: string; message: string } }
+  }
+
+  it('serves the schema defaults when the settings service is absent', async () => {
+    const route = mountWithSettings(undefined)
+    const result = await invoke(route, 'settings.get', {})
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual({ value: undefined, revision: undefined })
+  })
+
+  it('reads the resolved prefs and writes a patch through the seam', async () => {
+    const route = mountWithSettings(createFakeSettings())
+    const read = await invoke(route, 'settings.get', {})
+    expect(read.ok).toBe(true)
+    expect(read.value).toEqual({ value: { openByDefault: true, defaultWidthPercent: 30 }, revision: 0 })
+
+    const written = await invoke(route, 'settings.update', { patch: { openByDefault: false } })
+    expect(written.ok).toBe(true)
+    const view = written.value as { value: { openByDefault: boolean; defaultWidthPercent: number }; revision: number }
+    expect(view.value.openByDefault).toBe(false)
+    expect(view.value.defaultWidthPercent).toBe(30)
+    expect(view.revision).toBe(1)
+  })
+
+  it('refuses a stale write with settings-conflict (409)', async () => {
+    const route = mountWithSettings(createFakeSettings())
+    await invoke(route, 'settings.update', { patch: { openByDefault: false } })
+    // The second write carries the pre-write revision: the seam refuses it.
+    const stale = await invoke(route, 'settings.update', {
+      patch: { defaultWidthPercent: 40 },
+      expectedRevision: 0,
+    })
+    expect(stale.ok).toBe(false)
+    expect(stale.error?.code).toBe('settings-conflict')
+    expect(stale.error?.message).toMatch(/changed since it was read/)
+  })
+
+  it('rejects a non-object patch as bad-request', async () => {
+    const route = mountWithSettings(createFakeSettings())
+    const result = await invoke(route, 'settings.update', { patch: 'nope' })
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/plain object/)
   })
 })

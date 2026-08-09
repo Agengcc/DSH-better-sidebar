@@ -6,6 +6,23 @@
  */
 
 import z from 'schemastery'
+import {
+  SIDEBAR_PREFS_DEFAULTS,
+  SIDEBAR_PREFS_NS,
+  WIDTH_PERCENT_DEFAULT,
+  WIDTH_PERCENT_MAX,
+  WIDTH_PERCENT_MIN,
+  type SidebarPrefs,
+} from './prefs-shared.ts'
+
+export {
+  SIDEBAR_PREFS_DEFAULTS,
+  SIDEBAR_PREFS_NS,
+  WIDTH_PERCENT_DEFAULT,
+  WIDTH_PERCENT_MAX,
+  WIDTH_PERCENT_MIN,
+  type SidebarPrefs,
+} from './prefs-shared.ts'
 
 /** Tunable sidebar host limits (every field optional; defaults fill in). */
 export interface SidebarConfig {
@@ -54,3 +71,11 @@ export function resolveSidebarConfig(config: SidebarConfig | undefined): Resolve
     reconnectGraceMs: config?.reconnectGraceMs ?? 30_000,
   }
 }
+
+// ── User-facing "Side card" preferences ─────────────────────────────────────
+
+/** Schemastery schema for the user-facing preferences (validated by the settings service). */
+export const PrefsSchema: z<SidebarPrefs> = z.object({
+  openByDefault: z.boolean().default(true),
+  defaultWidthPercent: z.number().step(1).min(WIDTH_PERCENT_MIN).max(WIDTH_PERCENT_MAX).default(WIDTH_PERCENT_DEFAULT),
+})

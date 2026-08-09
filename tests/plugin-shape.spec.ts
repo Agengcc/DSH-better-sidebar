@@ -35,4 +35,20 @@ describe('dsh-better-sidebar plugin export shape', () => {
     expect(resolved.terminalsPerSession).toBe(3)
     expect(resolved.reconnectGraceMs).toBe(30_000)
   })
+
+  it('registers the side card preferences schema with the documented defaults', async () => {
+    const { PrefsSchema, SIDEBAR_PREFS_NS } = await import('../src/config.ts')
+    expect(SIDEBAR_PREFS_NS).toBe('dsh-better-sidebar')
+    const resolved = (PrefsSchema as unknown as {
+      (input: Record<string, unknown> | undefined): Record<string, unknown>
+    })(undefined)
+    expect(resolved.openByDefault).toBe(true)
+    expect(resolved.defaultWidthPercent).toBe(30)
+    // A stored overridden value resolves through (the range contract is
+    // enforced by the settings service on write).
+    const overridden = (PrefsSchema as unknown as {
+      (input: Record<string, unknown> | undefined): Record<string, unknown>
+    })({ openByDefault: false, defaultWidthPercent: 45 })
+    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45 })
+  })
 })

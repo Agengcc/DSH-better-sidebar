@@ -1,9 +1,11 @@
 /**
  * Sidebar styles. Per the DSH web-styling rules every visual value rides the
  * theme: --dsw-alias-* semantic tokens for colors, --dsw-font-* typography
- * roles (size paired with line-height), --dsw-shadow-* for elevation, and
- * --ds-* for motion. No static palette values, no color literals, no theme
- * selectors — light/dark adaptation is the theme package's job.
+ * roles (size paired with line-height), and --ds-* for motion. The chrome
+ * mirrors the native DSH sidebar: flat (NO box-shadows anywhere), the
+ * sidebar fill surface, hairline borders, and the 28/36px circular icon
+ * controls with hover fills. No static palette values, no color literals, no
+ * theme selectors — light/dark adaptation is the theme package's job.
  */
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
@@ -16,28 +18,31 @@
   z-index: 55;
   display: flex;
   align-items: center;
+  /* Native rail inset: the 36px control sits 10px off the column edge. */
+  padding: 0 10px;
 }
 
+/* The closed-state affordance is the native rail icon control: a plain 36px
+   circle, transparent fill, secondary ink; hover raises the fill. No border,
+   no shadow — the icon alone is the affordance (SidebarRoot .iconButton). */
 .toggleButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 64px;
-  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  border-right: none;
-  border-radius: 10px 0 0 10px;
-  background: var(--dsw-alias-button-floating-fill);
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  box-shadow: var(--dsw-shadow-lv1);
   transition:
     background var(--ds-transition-duration-slow) var(--ds-ease-in-out),
     color var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .toggleButton:hover:not(:disabled) {
-  background: var(--dsw-alias-button-floating-hover);
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
@@ -54,9 +59,10 @@
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: var(--dsw-alias-bg-layer-1);
+  /* The native sidebar surface: bluish-50 over white / bluish-900 over dark,
+     exactly like the app's own sidebar column (SidebarRoot .root). */
+  background: var(--dsw-specific-sidebar-fill);
   border-left: 1px solid var(--dsw-alias-border-l2);
-  box-shadow: var(--dsw-shadow-lv2);
   /* Expand/collapse slides the panel; fullscreen animates the width. */
   transition:
     transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
@@ -67,7 +73,6 @@
 .panelHidden {
   transform: translateX(102%);
   pointer-events: none;
-  box-shadow: none;
   visibility: hidden;
   transition:
     transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
@@ -107,7 +112,7 @@
 }
 
 .panelTitle {
-  font: var(--dsw-font-xxs-strong-12);
+  font: var(--dsw-font-s-14);
   color: var(--dsw-alias-label-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -371,8 +376,8 @@
 
 .tabActive {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-base);
-  box-shadow: inset 0 -2px 0 var(--dsw-alias-brand-primary);
+  /* Native selected fill (Rows .sessionRow.selected) — no underline, no shadow. */
+  background: var(--dsw-alias-interactive-bg-active);
 }
 
 .tabTitle {
@@ -449,7 +454,7 @@
 }
 
 .explorerRoot {
-  font: var(--dsw-font-xxs-strong-12);
+  font: var(--dsw-font-s-14);
   color: var(--dsw-alias-label-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -463,9 +468,9 @@
   padding: 2px 6px 8px;
 }
 
-/* One tree row: the app's tree-row cell (34px, radius 8, inset, hover
-   fill, 22px indent step) with a mount fade so expanding a directory
-   reveals its children gently (stable keys keep existing rows from
+/* One tree row: the app's session-row cell (34px, radius 8, inset, hover
+   fill, 22px indent step, 14px ink) with a mount fade so expanding a
+   directory reveals its children gently (stable keys keep existing rows from
    replaying it). */
 .explorerRow {
   display: flex;
@@ -473,10 +478,10 @@
   gap: 6px;
   width: 100%;
   height: 34px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: none;
   background: transparent;
-  font: var(--dsw-font-xxs-12);
+  font: var(--dsw-font-s-14);
   color: var(--dsw-alias-label-primary);
   text-align: left;
   cursor: pointer;
@@ -490,7 +495,7 @@
 }
 
 .explorerDir {
-  font: var(--dsw-font-xxs-strong-12);
+  font: var(--dsw-font-s-strong-14);
 }
 
 .explorerHidden {
@@ -843,7 +848,7 @@
   gap: 6px;
   min-height: 34px;
   margin: 0 6px;
-  padding: 0 6px 0 12px;
+  padding: 0 8px;
   border-radius: 8px;
   animation: dsh-row-in 150ms var(--ds-ease-in-out);
 }
@@ -888,7 +893,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: var(--dsw-font-xxs-12);
+  font: var(--dsw-font-s-14);
   color: var(--dsw-alias-label-primary);
 }
 

@@ -1,0 +1,90 @@
+/**
+ * Side card settings section chrome: the native settings-row recipe (figma
+ * row 16/0 padding, hairline separator, 14px/22px title, 12px/17px desc) with
+ * the native checkbox (16px, brand accent) and the Input atom + "%" suffix.
+ * The shell strips the last row's separator via the trailing-child rule.
+ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.section > :last-child {
+  border-bottom: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  cursor: pointer;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.desc {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Native checkbox: 16px, brand accent, no custom chrome (RiskConfirmation recipe). */
+.toggle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--dsw-alias-button-primary-fill);
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l4);
+  outline-offset: 2px;
+}
+
+.control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.percentInput {
+  width: 76px;
+}
+
+.suffix {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.error {
+  padding: 10px 0 2px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}
