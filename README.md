@@ -29,6 +29,25 @@
 
 > 安装 = 把插件登记进 web profile 的依赖清单（等价于 `dsh plugin --profile web add link:<路径>`）+ 一行 cordis 挂载行，**与 portal 无关**——portal 只指侧边栏面板在页面上的渲染方式（见下文[规范符合性](#规范符合性)）。
 
+### 更新（同样把提示词发给 DSH）
+
+已安装过（`link:` 引用）时，把下面提示词**整段**发给 DSH 即可更新到最新版：
+
+```text
+请帮我更新 dsh-better-sidebar 插件（仓库在 ~/Code/DSH-better-sidebar，已通过 link: 安装到我的 web profile）：
+
+1. 拉取最新代码并重新构建：
+   cd ~/Code/DSH-better-sidebar && git pull && pnpm install && pnpm build
+   （若 pnpm install 因 @deepseek-ai/* 的 link: 依赖解析失败，说明 DSH 源码 checkout 不在 ~/.dsh/source/current —— 停下来告诉我，不要继续）
+2. 核对注册仍然有效（缺失才需要补）：
+   a. ~/.dsh/profiles/web/package.json 的 dependencies 中含 "dsh-better-sidebar": "link:<仓库目录的绝对路径>"
+   b. ~/.dsh/profiles/web/cordis.patch.yml 中含挂载行（id: better-sidebar, name: 'dsh-better-sidebar'）
+   c. 若有缺失，补齐后在该 profile 目录执行 pnpm install
+3. 完成后告诉我本次改动涉及 client 还是 host：
+   - 仅 client（src/client/*）→ 我硬刷新（Cmd/Ctrl+Shift+R）即可
+   - 含 host（src/index.ts、src/config.ts 等）→ 我需要重启 DSH 再硬刷新
+```
+
 ## 为什么用它
 
 - **⚡ 工作流不断档**：编辑文件、跑终端、看 Git 状态、拖 Tab 分栏对比，全在对话旁边完成，无需切窗口
@@ -142,8 +161,10 @@ dsh plugin --profile web add link:/绝对路径/DSH-better-sidebar
 
 ### 更新
 
+不想用提示词时手动更新（等价于[更新提示词](#更新同样把提示词发给-dsh)）：
+
 ```sh
-pnpm build            # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js (client) + lib/types
+git pull && pnpm install && pnpm build   # 在插件仓库目录执行
 ```
 
 - 只改了 **client** 代码（`src/client/*`）→ 硬刷新页面即可（bundle 由服务器按请求读取）
