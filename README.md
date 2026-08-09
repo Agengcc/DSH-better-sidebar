@@ -3,8 +3,7 @@
 > DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件 —— 文件管理、编辑预览、真实终端、Git 面板，一个面板全部搞定。
 
 <img width="4632" height="2720" alt="image" src="https://github.com/user-attachments/assets/39d86636-7654-412f-86ea-c60a2d5f20f0" />
-<img width="990" height="818" alt="image" src="https://github.com/user-attachments/assets/27b9c9b9-3799-4e63-8169-dd4a3dc8b2e1" />
-
+<img width="1000" height="1186" alt="image" src="https://github.com/user-attachments/assets/9dadffe0-0738-4b6d-b929-f452f51768a2" />
 
 ## 🚀 一键安装（把提示词发给 DSH）
 
