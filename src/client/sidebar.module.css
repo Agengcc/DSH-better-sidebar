@@ -184,9 +184,18 @@
 }
 
 .divider {
+  position: relative;
   flex: none;
   z-index: 3;
   touch-action: none;
+}
+
+/* The hit area stays 7px wide enough to grab, but the visual is a 1px
+   hairline centered in it — a divider line, not a thick band. */
+.dividerRow::after,
+.dividerCol::after {
+  content: '';
+  position: absolute;
   background: var(--dsw-alias-border-l2);
   transition: background var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
@@ -197,14 +206,30 @@
   cursor: col-resize;
 }
 
+.dividerRow::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
 .dividerCol {
   height: 7px;
   margin: -2px 0;
   cursor: row-resize;
 }
 
-.divider:hover,
-.dividerActive {
+.dividerCol::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.divider:hover::after,
+.dividerActive::after {
   background: var(--dsw-alias-interactive-bg-hover-accent);
 }
 
@@ -1056,7 +1081,9 @@
   .paneCard,
   .explorerRow,
   .gitRow,
-  .divider {
+  .divider,
+  .dividerRow::after,
+  .dividerCol::after {
     transition: none;
     animation: none;
   }
