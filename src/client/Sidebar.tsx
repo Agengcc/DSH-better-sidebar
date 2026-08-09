@@ -16,8 +16,8 @@ import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutlin
 import type { Context, SidebarConversation } from '../context-types.ts'
 import {
   allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
-  resizeSplit, sidebarStore, setWidth, toggleExpanded, togglePanel,
-  TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarTab, type SplitNode,
+  resizeSplit, setWidth, toggleExpanded, togglePanel,
+  TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
 } from './state.ts'
 import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import type { NewTabOption } from './TabBar.tsx'
@@ -42,8 +42,9 @@ function TabContent(props: {
   onToggleDir: (path: string) => void
   onReferenceFile: (path: string) => void
   ctx: Context
+  store: SidebarStore
 }) {
-  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx } = props
+  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store } = props
   const scope = { sessionId, cwd }
   switch (tab.type) {
     case 'explorer':
@@ -53,14 +54,14 @@ function TabContent(props: {
           cwd={cwd}
           expanded={expanded}
           onToggle={onToggleDir}
-          onOpenFile={(path) => { openSidebarFile(ctx, sessionId, path) }}
+          onOpenFile={(path) => { openSidebarFile(ctx, store, sessionId, path) }}
           onReferenceFile={onReferenceFile}
         />
       )
     case 'git':
       return <GitView scope={scope} />
     case 'terminal':
-      return <TerminalView scope={scope} tabId={tab.id} />
+      return <TerminalView scope={scope} tabId={tab.id} store={store} />
     case 'editor':
       return <EditorView scope={scope} path={tab.path ?? ''} title={tab.title} />
   }
@@ -83,8 +84,8 @@ function buildNewTabOptions(state: SidebarState): NewTabOption[] {
   ]
 }
 
-export function Sidebar(props: { ctx: Context }) {
-  const { ctx } = props
+export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
+  const { ctx, store } = props
 
   // Current conversation (the sessions list feed).
   const sessionList = useSyncExternalStore(
@@ -95,10 +96,10 @@ export function Sidebar(props: { ctx: Context }) {
 
   // Per-session sidebar state.
   const snapshot = useSyncExternalStore(
-    useCallback((callback: () => void) => sidebarStore.subscribe(callback), []),
-    useCallback(() => sidebarStore.getSnapshot(), []),
+    useCallback((callback: () => void) => store.subscribe(callback), [store]),
+    useCallback(() => store.getSnapshot(), [store]),
   )
-  useEffect(() => { sidebarStore.setSession(current) }, [current])
+  useEffect(() => { store.setSession(current) }, [current, store])
 
   const state = snapshot.state
   const sessionId = snapshot.sessionId
@@ -149,16 +150,16 @@ export function Sidebar(props: { ctx: Context }) {
       // A closed terminal releases its pty immediately — including when its
       // socket is mid-reconnect, where the unmount close frame never reaches
       // the host and the process would hold the quota until the grace ends.
-      const current = sidebarStore.getSnapshot().state
+      const current = store.getSnapshot().state
       const leaf = current === undefined ? undefined : leafWithTab(current.splits, tabId)
       const tab = leaf?.tabs.find(candidate => candidate.id === tabId)
-      sidebarStore.reduce(s => closeTab(s, paneId, tabId))
+      store.reduce(s => closeTab(s, paneId, tabId))
       if (sessionId !== undefined && tab?.type === 'terminal') {
         void api.ptyClose({ sessionId, cwd }, tabId).catch(() => { /* the host may already have released it */ })
       }
     },
     activateTab: (paneId, tabId) => {
-      sidebarStore.reduce(s => ({
+      store.reduce(s => ({
         ...s,
         activePane: paneId,
         splits: mapLeaf(s.splits, paneId, (leaf) => {
@@ -166,12 +167,12 @@ export function Sidebar(props: { ctx: Context }) {
         }),
       }))
     },
-    focusPane: (paneId) => { sidebarStore.reduce(s => ({ ...s, activePane: paneId })) },
+    focusPane: (paneId) => { store.reduce(s => ({ ...s, activePane: paneId })) },
     moveTabToEdge: (payload: TabDragPayload, toPane: string, zone: DropZone) => {
-      sidebarStore.reduce(s => moveTabToEdge(s, payload.paneId, payload.tabId, toPane, zone))
+      store.reduce(s => moveTabToEdge(s, payload.paneId, payload.tabId, toPane, zone))
     },
     moveTabBefore: (payload: TabDragPayload, toPane: string, beforeTabId: string) => {
-      sidebarStore.reduce((s) => {
+      store.reduce((s) => {
         let index = -1
         const source = leafWithTab(s.splits, beforeTabId)
         if (source !== undefined && source.id === toPane) {
@@ -181,9 +182,9 @@ export function Sidebar(props: { ctx: Context }) {
       })
     },
     resizeSplit: (splitId, index, deltaFrac) => {
-      sidebarStore.reduce(s => ({ ...s, splits: resizeSplit(s.splits, splitId, index, deltaFrac) }))
+      store.reduce(s => ({ ...s, splits: resizeSplit(s.splits, splitId, index, deltaFrac) }))
     },
-  }), [sessionId, cwd])
+  }), [store, sessionId, cwd])
 
   /**
    * The explorer's @-reference button: append `@<relative path>` to the
@@ -223,7 +224,7 @@ export function Sidebar(props: { ctx: Context }) {
   }
 
   const onNewTab = (optionId: string): void => {
-    sidebarStore.reduce((s) => {
+    store.reduce((s) => {
       if (optionId === 'explorer') {
         return openTab(s, { id: 'explorer', type: 'explorer', title: t('explorer') })
       }
@@ -256,9 +257,10 @@ export function Sidebar(props: { ctx: Context }) {
       sessionId={sessionId}
       cwd={cwd}
       expanded={state.expanded}
-      onToggleDir={(path) => { sidebarStore.reduce(s => toggleExpanded(s, path)) }}
+      onToggleDir={(path) => { store.reduce(s => toggleExpanded(s, path)) }}
       onReferenceFile={referenceInChat}
       ctx={ctx}
+      store={store}
     />
   )
 
@@ -271,7 +273,7 @@ export function Sidebar(props: { ctx: Context }) {
               type="button"
               className={css.toggleButton}
               aria-label={t('expand')}
-              onClick={() => { sidebarStore.reduce(togglePanel) }}
+              onClick={() => { store.reduce(togglePanel) }}
             >
               <IconPanelLeftOutline16 size={16} />
             </button>
@@ -298,7 +300,7 @@ export function Sidebar(props: { ctx: Context }) {
             onPointerMove={(event) => {
               if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
               const { startX, startWidth } = widthDrag.current
-              sidebarStore.reduce(s => setWidth(s, startWidth + (startX - event.clientX)))
+              store.reduce(s => setWidth(s, startWidth + (startX - event.clientX)))
             }}
             onPointerUp={(event) => {
               if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
@@ -314,7 +316,7 @@ export function Sidebar(props: { ctx: Context }) {
               title={fullscreen ? t('restoreFullscreen') : t('expandFullscreen')}
               onClick={() => {
                 const viewport = window.innerWidth
-                sidebarStore.reduce(s => setWidth(s, fullscreen
+                store.reduce(s => setWidth(s, fullscreen
                   ? Math.max(280, Math.round((viewport - 320) / 2))
                   : viewport))
               }}
@@ -330,7 +332,7 @@ export function Sidebar(props: { ctx: Context }) {
               className={css.iconButton}
               aria-label={t('collapse')}
               title={t('collapse')}
-              onClick={() => { sidebarStore.reduce(togglePanel) }}
+              onClick={() => { store.reduce(togglePanel) }}
             >
               <IconChevronRightOutline14 />
             </button>

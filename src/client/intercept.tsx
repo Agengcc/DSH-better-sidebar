@@ -8,19 +8,18 @@
  */
 import { IconCodeOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
-import { openTab } from './state.ts'
-import { sidebarStore } from './state.ts'
+import { openTab, type SidebarStore } from './state.ts'
 import { t } from './locales.ts'
 import { resolveSidebarPath, selectProducedFiles } from './produced-files.ts'
 import css from './sidebar.module.css'
 
 /** Open a file in the sidebar's editor (used by the intercepted row and the explorer). */
-export function openSidebarFile(ctx: Context, sessionId: string, path: string): void {
+export function openSidebarFile(ctx: Context, store: SidebarStore, sessionId: string, path: string): void {
   const summary = ctx.sessions.list.getSnapshot().byId[sessionId]
   const absolute = resolveSidebarPath(summary?.cwd, path)
   const at = Math.max(absolute.lastIndexOf('/'), absolute.lastIndexOf('\\'))
   const title = at === -1 ? absolute : absolute.slice(at + 1)
-  sidebarStore.reduce(state => openTab(state, {
+  store.reduce(state => openTab(state, {
     id: `editor:${absolute}`,
     type: 'editor',
     title,
@@ -61,14 +60,14 @@ export function SidebarProducedFiles(props: {
 }
 
 /** Register the turn-tail interception (returns the disposer). */
-export function registerTurnTailInterception(ctx: Context): () => void {
+export function registerTurnTailInterception(ctx: Context, store: SidebarStore): () => void {
   return ctx.slots.register({
     name: 'conversation.chat.turnTail',
     select: selectProducedFiles,
     priority: -1,
     registrant: 'dsh-better-sidebar',
     inject: (sessionId: string) => ({
-      openInSidebar: (path: string) => { openSidebarFile(ctx, sessionId, path) },
+      openInSidebar: (path: string) => { openSidebarFile(ctx, store, sessionId, path) },
     }),
   }, SidebarProducedFiles)
 }

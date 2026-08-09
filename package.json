@@ -5,29 +5,64 @@
   "private": true,
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
   "exports": {
     ".": {
+      "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
     "./client": {
+      "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dshClient": {
+    "inject": [
+      "@deepseek-ai/dsh-client-runtime",
+      "@deepseek-ai/dsh-client-ui-slots",
+      "@deepseek-ai/dsh-client-ui-conversation"
+    ],
     "platform": "web"
   },
   "files": [
-    "lib"
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "src"
   ],
   "scripts": {
-    "build": "tsc --noEmit && tsdown",
+    "build": "rm -rf lib && tsc -p tsconfig.build.json && tsdown",
     "typecheck": "tsc --noEmit",
     "bundle": "tsdown",
     "watch": "tsdown --watch",
+    "prepare": "tsdown",
     "test": "vitest run"
   },
   "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-runtime": "^0.0.1",
+    "@deepseek-ai/dsh-client-schema-form": "^0.0.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.0.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.0.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.0.1",
+    "@deepseek-ai/dsh-client-web-react": "^0.0.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.0.1",
+    "@deepseek-ai/dsh-invariants": "^0.0.1",
+    "@deepseek-ai/dsh-session": "^0.0.1",
+    "cordis": "^4.0.0-rc.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-cpp": "^6.0.3",
@@ -53,20 +88,25 @@
     "@xterm/addon-fit": "^0.10.0",
     "clsx": "^2.1.1",
     "node-pty": "^1.1.0",
+    "schemastery": "^3.18.0",
     "ws": "^8.18.0",
     "xterm": "^5.3.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-client-runtime": "link:/Users/menghuan/.dsh/source/current/packages/client/runtime",
+    "@deepseek-ai/dsh-client-schema-form": "link:/Users/menghuan/.dsh/source/current/packages/client/schema-form",
     "@deepseek-ai/dsh-client-ui-conversation": "link:/Users/menghuan/.dsh/source/current/packages/client/ui-conversation",
     "@deepseek-ai/dsh-client-ui-primitives": "link:/Users/menghuan/.dsh/source/current/packages/client/ui-primitives",
     "@deepseek-ai/dsh-client-ui-slots": "link:/Users/menghuan/.dsh/source/current/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-web-react": "link:/Users/menghuan/.dsh/source/current/packages/client/web-react",
     "@deepseek-ai/dsh-host-webserver": "link:/Users/menghuan/.dsh/source/current/packages/host/webserver",
+    "@deepseek-ai/dsh-invariants": "link:/Users/menghuan/.dsh/source/current/packages/support/invariants",
     "@deepseek-ai/dsh-session": "link:/Users/menghuan/.dsh/source/current/packages/core/session",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.1",
     "@types/ws": "^8.5.10",
+    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
     "cordis": "^4.0.0-rc.7",
     "lightningcss": "^1.32.0",
     "react": "^18.2.0",

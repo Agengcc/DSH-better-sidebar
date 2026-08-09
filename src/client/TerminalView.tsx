@@ -14,7 +14,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
-import { sidebarStore } from './state.ts'
+import type { SidebarStore } from './state.ts'
 import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
 import css from './sidebar.module.css'
 
@@ -60,8 +60,8 @@ function xtermTheme(): ITheme {
   }
 }
 
-export function TerminalView(props: { scope: SessionScope; tabId: string }) {
-  const { scope, tabId } = props
+export function TerminalView(props: { scope: SessionScope; tabId: string; store: SidebarStore }) {
+  const { scope, tabId, store } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
@@ -180,7 +180,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
       // the process to the host's reconnect grace: switching back or
       // refreshing reattaches the SAME shell instead of respawning one.
       // (The host respawns on its own when the authoritative cwd changed.)
-      if (!sidebarStore.tabOpen(scope.sessionId, tabId)
+      if (!store.tabOpen(scope.sessionId, tabId)
         && socket !== null && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }))
       }
@@ -188,7 +188,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string }) {
       term.dispose()
       connectRef.current = null
     }
-  }, [scope.sessionId, scope.cwd, tabId])
+  }, [scope.sessionId, scope.cwd, tabId, store])
 
   return (
     <div className={css.terminalWrap}>

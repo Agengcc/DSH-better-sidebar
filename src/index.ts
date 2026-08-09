@@ -16,28 +16,26 @@ import { dirname, extname } from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { Context } from './context-types.ts'
+import {
+  Config,
+  resolveSidebarConfig,
+  type ResolvedSidebarConfig,
+  type SidebarConfig,
+} from './config.ts'
 import { parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
 import { isTrustedApiRequest } from './trust-fence.ts'
 import * as git from './git.ts'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
+export { Config }
+export type { SidebarConfig, ResolvedSidebarConfig }
+
 /** Plugin identity for cordis.yml rows. */
 export const name = 'dsh-better-sidebar'
 
-/** Services required before mounting: the webserver routes and the session store. */
-export const inject = ['httpServer', 'sessions']
-
-/** Read cap of one text file (bytes); larger files return truncated. */
-const READ_LIMIT = 512 * 1024
-/** Media route cap (bytes); larger binaries are refused. */
-const MEDIA_LIMIT = 20 * 1024 * 1024
-/** Explorer row bound of one level. */
-const LIST_LIMIT = 1000
-/** Terminals per session. */
-const TERMINALS_PER_SESSION = 3
-/** How long a disconnected terminal process survives awaiting a reconnect. */
-const TERMINAL_RECONNECT_GRACE_MS = 30_000
+/** Services required before mounting: the webserver routes, the session store, and the loader's connection row. */
+export const inject = ['httpServer', 'sessions', 'loader']
 
 /** Content types for the media route, by extension. */
 const MEDIA_TYPES: Record<string, string> = {
@@ -88,7 +86,7 @@ function sessionCwdOf(ctx: Context, sessionId: string, clientCwd?: string): stri
 }
 
 /** Text read of a file with the size cap; binary detection via NUL probe. */
-async function readText(path: string): Promise<{ content: string; truncated: boolean; binary: boolean; size: number }> {
+async function readText(path: string, readLimit: number): Promise<{ content: string; truncated: boolean; binary: boolean; size: number }> {
   const info = await stat(path).catch((error: unknown) => {
     throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
   })
@@ -96,12 +94,12 @@ async function readText(path: string): Promise<{ content: string; truncated: boo
     throw new SidebarError('fs-error', `"${path}" is a directory`, 400)
   }
   const size = info.size
-  const truncated = size > READ_LIMIT
+  const truncated = size > readLimit
   const handle = await open(path, 'r').catch((error: unknown) => {
     throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
   })
   try {
-    const buffer = Buffer.alloc(Math.min(size, READ_LIMIT))
+    const buffer = Buffer.alloc(Math.min(size, readLimit))
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
     const slice = buffer.subarray(0, bytesRead)
     const binary = slice.includes(0)
@@ -114,8 +112,8 @@ async function readText(path: string): Promise<{ content: string; truncated: boo
 /** One API method dispatch table entry. */
 type ApiMethod = (payload: unknown) => Promise<unknown> | unknown
 
-/** Build the API method table bound to the plugin context and pty manager. */
-function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMethod> {
+/** Build the API method table bound to the plugin context, pty manager, and resolved config. */
+function buildApi(ctx: Context, ptyManager: PtyManager, resolved: ResolvedSidebarConfig): Record<string, ApiMethod> {
   const cwdOf = (payload: unknown): { sessionId: string; cwd: string } => {
     const sessionId = requireString(payload, 'sessionId')
     const record = payload as { cwd?: unknown } | null
@@ -131,12 +129,12 @@ function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMetho
       const { cwd } = cwdOf(payload)
       const record = payload as { path?: unknown }
       const target = record.path === undefined ? cwd : requireAbsolute(requireString(payload, 'path'))
-      return listDirectory(target, LIST_LIMIT)
+      return listDirectory(target, resolved.listLimit)
     },
     'fs.read': async (payload) => {
       const { cwd } = cwdOf(payload)
       const path = requireAbsolute(requireString(payload, 'path'))
-      const { content, truncated, binary, size } = await readText(path)
+      const { content, truncated, binary, size } = await readText(path, resolved.readLimit)
       if (binary) return { kind: 'binary', size, truncated }
       return { kind: 'text', content, truncated }
     },
@@ -220,17 +218,21 @@ function buildApi(ctx: Context, ptyManager: PtyManager): Record<string, ApiMetho
 /**
  * Plugin body: mount the fenced routes and the pty lifecycle.
  * @param ctx - host plugin context (httpServer, sessions, loader).
+ * @param config - deployment-provided limits; the Loader validates against
+ * {@link Config} and fills defaults, direct callers get them from
+ * {@link resolveSidebarConfig}.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config?: SidebarConfig): void {
   // pnpm strips the executable bit from node-pty's prebuilt spawn-helper;
   // restore it before any terminal can spawn (idempotent).
   ensureSpawnHelper()
+  const resolved = resolveSidebarConfig(config)
   const trustedHosts = trustedHostsOf(ctx)
   const fence = (req: IncomingMessage): boolean => isTrustedApiRequest(req, trustedHosts)
-  const ptyManager = new PtyManager(defaultShell(), TERMINALS_PER_SESSION)
+  const ptyManager = new PtyManager(defaultShell(), resolved.terminalsPerSession)
 
   // ── JSON API ────────────────────────────────────────────────────────────
-  const api = buildApi(ctx, ptyManager)
+  const api = buildApi(ctx, ptyManager, resolved)
   ctx.effect(() => ctx.httpServer.register({
     kind: 'prefix',
     path: '/sidebar/api',
@@ -290,7 +292,7 @@ export function apply(ctx: Context): void {
           throw new SidebarError('fs-error', 'media path outside the session working directory', 403)
         }
         const info = await stat(path)
-        if (!info.isFile() || info.size > MEDIA_LIMIT) {
+        if (!info.isFile() || info.size > resolved.mediaLimit) {
           throw new SidebarError('fs-error', 'not a file or too large', 400)
         }
         const type = MEDIA_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream'
@@ -312,7 +314,7 @@ export function apply(ctx: Context): void {
         socket.destroy()
         return
       }
-      wss.handleUpgrade(req, socket, head, (ws) => { void attachTerminal(ctx, ptyManager, ws, req) })
+      wss.handleUpgrade(req, socket, head, (ws) => { void attachTerminal(ctx, ptyManager, ws, req, resolved) })
     },
   }), 'dsh-better-sidebar: terminal WebSocket')
 
@@ -328,6 +330,7 @@ async function attachTerminal(
   ptyManager: PtyManager,
   ws: WebSocket,
   req: IncomingMessage,
+  resolved: ResolvedSidebarConfig,
 ): Promise<void> {
   try {
     const url = new URL(req.url ?? '/', 'http://dsh.internal')
@@ -386,7 +389,7 @@ async function attachTerminal(
       // A bare socket drop (refresh, tab switch) leaves the process alive
       // for a grace period so a quick reconnect keeps it; the reconnect's
       // open() cancels the pending close.
-      ptyManager.scheduleClose(handle.key, TERMINAL_RECONNECT_GRACE_MS)
+      ptyManager.scheduleClose(handle.key, resolved.reconnectGraceMs)
     })
   } catch (error) {
     ws.close(1011, error instanceof Error ? error.message : String(error))

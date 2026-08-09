@@ -31,10 +31,17 @@ export interface WorkbenchActions {
   resizeSplit: (splitId: string, index: number, deltaFrac: number) => void
 }
 
-/** One divider: pointer-capture drag translating px deltas into fractions. */
+/** One divider: pointer-capture drag translating px deltas into fractions.
+ * Deltas are incremental — each move reports the displacement since the
+ * previous move — because the store adds every reported delta to the pane
+ * sizes; a cumulative (since-pointer-down) delta would be re-added on each
+ * move and the divider would run away from the cursor. */
 function Divider(props: { dir: 'row' | 'col'; onResize: (deltaFrac: number) => void }) {
   const { dir, onResize } = props
-  const start = useRef({ x: 0, y: 0, size: 0 })
+  // `last` is the previous pointer position while dragging; `size` is the
+  // container size at pointer-down (constant during the drag), used to
+  // normalize the px delta into a fraction.
+  const last = useRef({ x: 0, y: 0, size: 0 })
   const [dragging, setDragging] = useState(false)
 
   return (
@@ -44,7 +51,7 @@ function Divider(props: { dir: 'row' | 'col'; onResize: (deltaFrac: number) => v
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
         const box = event.currentTarget.parentElement?.getBoundingClientRect()
-        start.current = {
+        last.current = {
           x: event.clientX,
           y: event.clientY,
           size: box === undefined ? 1 : (dir === 'row' ? box.width : box.height),
@@ -53,9 +60,10 @@ function Divider(props: { dir: 'row' | 'col'; onResize: (deltaFrac: number) => v
       }}
       onPointerMove={(event) => {
         if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-        const delta = dir === 'row' ? event.clientX - start.current.x : event.clientY - start.current.y
-        const size = Math.max(1, start.current.size)
-        onResize(delta / size)
+        const delta = dir === 'row' ? event.clientX - last.current.x : event.clientY - last.current.y
+        onResize(delta / Math.max(1, last.current.size))
+        last.current.x = event.clientX
+        last.current.y = event.clientY
       }}
       onPointerUp={(event) => {
         if (!event.currentTarget.hasPointerCapture(event.pointerId)) return

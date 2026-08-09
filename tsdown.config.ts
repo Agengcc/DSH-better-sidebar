@@ -1,15 +1,22 @@
 /**
- * tsdown build for dsh-better-sidebar: the host-half lib (lib/index.js, ESM
- * node) plus the browser client bundle (lib/client.js, CJS closure factory).
+ * tsdown build for dsh-better-sidebar: the host-half lib (lib/index.js and
+ * the lib/invariant.js companion, ESM node) plus the browser client bundle
+ * (lib/client.js, CJS closure factory).
  *
- * The client bundle replicates the DSH client-bundle contract:
- * - externals resolve through the loader module table at runtime (platform
- *   seed words from apps/web's seed.ts, plus the runtime/client exemption),
+ * The client bundle replicates the official DSH client-bundle preset
+ * (packages/client/tsdown.client.ts):
+ * - externals resolve through the loader module table at runtime (the
+ *   PLATFORM_MODULES seed list from apps/web's platform.ts, plus the
+ *   runtime/client exemption),
  * - everything else is inlined into the bundle (xterm, clsx, ...),
+ * - the purity gate rejects any other @deepseek-ai value import: cross-plugin
+ *   collaboration goes through cordis services, never value imports,
  * - CSS Modules compile to hashed class maps and inject <style data-plugin>
  *   tags at factory execution,
  * - the artifact registers itself via window.__ModuleLoader__.load({id,
  *   factory}) with the (require) => exports CJS closure shape.
+ *
+ * Types ship from lib/types (tsc -p tsconfig.build.json), not from tsdown.
  */
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, relative, resolve as resolvePath, sep } from 'node:path'
@@ -22,7 +29,7 @@ const require = createRequire(import.meta.url)
 
 const PLUGIN_ID = 'dsh-better-sidebar'
 
-/** Module specifiers the web shell shares into the frozen module table (apps/web/src/seed.ts). */
+/** Module specifiers the web shell shares into the frozen module table (the official PLATFORM_MODULES list, plus the runtime/client exemption). */
 const CLIENT_EXTERNALS = [
   'react',
   'react/jsx-runtime',
@@ -35,6 +42,14 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/dsh-client-schema-form',
   '@deepseek-ai/dsh-client-runtime/client',
 ]
+
+/**
+ * Wire/type layers a client bundle may inline (mirror of the official
+ * INLINE_SAFE list): browser-safe contract surfaces with no runtime identity
+ * to share. Everything else under @deepseek-ai/* is either a module-table
+ * entry (external) or a leak the purity gate rejects.
+ */
+const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)/
 
 /** Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline. */
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
@@ -68,14 +83,17 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
 
 export default [
   {
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', invariant: 'src/invariant.ts' },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
     dts: false,
-    clean: true,
+    // clean stays off: the build script removes lib/ wholesale before tsc, so
+    // a tsdown clean here would wipe the lib/types declarations tsc just
+    // emitted (and `watch` must never touch them).
+    clean: false,
   },
   {
     entry: { client: 'src/client/index.tsx' },
@@ -94,6 +112,24 @@ export default [
     // External wins for module-table entries; every other dependency inlines.
     noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
     plugins: [{
+      // Bundle purity gate (mirror of the official preset): platform seed
+      // entries stay external, inline-safe wire layers inline, and every
+      // other @deepseek-ai value import is a build error — a cross-plugin
+      // value import either inlines a duplicate runtime instance or requires
+      // a specifier the frozen module table cannot answer. Cross-plugin
+      // collaboration goes through cordis services instead. Type-only
+      // imports are erased and never reach this gate.
+      name: 'dsh-client-bundle-purity',
+      resolveId(source: string) {
+        if (!source.startsWith('@deepseek-ai/')) return null
+        if (CLIENT_EXTERNALS.includes(source)) return null // platform module: external wins
+        if (INLINE_SAFE.test(source)) return null // wire/type layer: inline is the point
+        throw new Error(
+          `client bundle purity: "${source}" is not a platform module (CLIENT_EXTERNALS) and not an inline-safe wire layer — `
+          + 'cross-plugin value imports are forbidden; collaborate through cordis services (type-only imports are erased and never reach this gate)',
+        )
+      },
+    }, {
       name: 'dsh-css-inline',
       resolveId(source: string, importer: string | undefined) {
         if (!source.endsWith('.css')) return null

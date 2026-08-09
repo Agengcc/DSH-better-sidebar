@@ -8,6 +8,7 @@
 import { Component, createElement, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Context } from '../context-types.ts'
+import { createSidebarStore } from './state.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { registerTurnTailInterception } from './intercept.tsx'
 import { t } from './locales.ts'
@@ -57,6 +58,11 @@ class SidebarBoundary extends Component<{ children: ReactNode }, { error: string
  * @param ctx - the client cordis context (slots, sessions).
  */
 export function apply(ctx: Context): void {
+  // One store instance per activation: production code creates it only here,
+  // then hands it to the mounted panel and closes over it in the slot
+  // registration (the official createXXXStore() factory rule — no
+  // module-level singleton).
+  const sidebarStore = createSidebarStore()
   // A failure anywhere in the client lifecycle must never take the app down
   // silently: log with the plugin prefix and pin a visible diagnostic strip
   // to the page so a blank panel is never the only symptom.
@@ -80,7 +86,7 @@ export function apply(ctx: Context): void {
         host.setAttribute('data-dsh-better-sidebar', '')
         document.body.appendChild(host)
         const root = createRoot(host)
-        root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx })))
+        root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx, store: sidebarStore })))
         return () => {
           root.unmount()
           host.remove()
@@ -94,7 +100,7 @@ export function apply(ctx: Context): void {
     ctx.effect(
       () => {
         try {
-          return registerTurnTailInterception(ctx)
+          return registerTurnTailInterception(ctx, sidebarStore)
         } catch (error) {
           fail('interception', error)
           return undefined

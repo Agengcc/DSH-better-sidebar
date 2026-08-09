@@ -624,5 +624,13 @@ export class SidebarStore {
   }
 }
 
-/** Module-level store instance (one per page; the plugin mounts once). */
-export const sidebarStore = new SidebarStore()
+/**
+ * Create one sidebar store instance. Production code calls this only from
+ * the client plugin's `apply` (the instance is handed to components as a
+ * prop); tests call it directly. No module-level singleton: the store's
+ * lifetime belongs to the plugin activation, exactly like the official
+ * `createXXXStore()` factory rule.
+ */
+export function createSidebarStore(): SidebarStore {
+  return new SidebarStore()
+}

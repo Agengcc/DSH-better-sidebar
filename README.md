@@ -82,7 +82,7 @@
 ### 前置条件
 
 - 已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10
-- DSH 源码 checkout 位于 `~/.dsh/source/current`（`@deepseek-ai/*` 类型依赖以 `link:` 指向它；若 checkout 在其他路径，修改 `package.json` 中对应的 `link:` 路径）
+- **构建/类型检查**需要 DSH 源码 checkout 位于 `~/.dsh/source/current`（`devDependencies` 中的 `@deepseek-ai/*` 以 `link:` 指向它；若 checkout 在其他路径，修改 `package.json` 中对应的 `link:` 路径）。**运行期不依赖该 checkout**——`@deepseek-ai/*` 声明在 `peerDependencies`，由 web profile 提供
 
 ### 1. 克隆、安装、构建
 
@@ -90,10 +90,24 @@
 git clone https://github.com/dsh-external/DSH-better-sidebar.git
 cd DSH-better-sidebar
 pnpm install
-pnpm build        # 产物: lib/index.js (host) + lib/client.js (client)
+pnpm build        # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js (client) + lib/types/*.d.ts
 ```
 
-### 2. 注册到 web profile
+> 运行期依赖（cordis、react、`@deepseek-ai/dsh-client-*` 等）按官方插件清单规范声明在 `peerDependencies`——web profile 已内置全部 peer 依赖，安装本插件无需额外装包；`dependencies` 只保留插件自有的运行时依赖（node-pty、ws、xterm、CodeMirror、schemastery 等）。
+
+### 2. 注册到 web profile（安装）
+
+> **安装走 profile 清单注册，与 portal 无关**：安装 = 把插件登记进 web profile 的依赖（`dsh plugin` 命令或手动编辑 `package.json`）并加一行 cordis 挂载行；"portal" 只指侧边栏面板在页面上的**渲染方式**（见下文[规范符合性](#规范符合性)），不是安装通道。
+
+**方式 A（推荐）：`dsh plugin` 命令**
+
+```sh
+dsh plugin --profile web add link:/绝对路径/DSH-better-sidebar
+```
+
+等价于在 `~/.dsh/profiles/web` 目录执行 `pnpm add link:...`：写入该 profile 的 `package.json` `dependencies` 并安装依赖。
+
+**方式 B：手动编辑**
 
 编辑 `~/.dsh/profiles/web/package.json`，在 `dependencies` 加入：
 
@@ -101,18 +115,18 @@ pnpm build        # 产物: lib/index.js (host) + lib/client.js (client)
 "dsh-better-sidebar": "link:/绝对路径/DSH-better-sidebar"
 ```
 
-编辑 `~/.dsh/profiles/web/cordis.patch.yml`，追加插件行：
+然后安装依赖：
+
+```sh
+(cd ~/.dsh/profiles/web && pnpm install)
+```
+
+**两种方式都要**在 `~/.dsh/profiles/web/cordis.patch.yml` 追加插件挂载行（`dsh plugin` 只管理依赖清单，不写挂载行）：
 
 ```yaml
 - insert:
     - id: better-sidebar
       name: 'dsh-better-sidebar'
-```
-
-然后安装依赖：
-
-```sh
-(cd ~/.dsh/profiles/web && pnpm install)
 ```
 
 ### 3. 重启 GUI 并刷新页面
@@ -125,16 +139,32 @@ pm2 restart dsh-web   # 或你自己的 dsh web 启动方式
 
 ### 更新
 
-重新 `pnpm build`（host/client 双产物）→ `pm2 restart dsh-web` → 刷新页面；`link:` 引用无需重新 install。
+```sh
+pnpm build            # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js (client) + lib/types
+```
+
+- 只改了 **client** 代码（`src/client/*`）→ 硬刷新页面即可（bundle 由服务器按请求读取）
+- 改了 **host** 代码（`src/index.ts`、`src/config.ts` 等）→ `pm2 restart dsh-web` + 硬刷新
+
+`link:` 引用无需重新 install。
 
 ## 🛠️ 开发
 
 ```sh
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest（单元 + 冒烟：真实 git/fs/node-pty 交互）
-pnpm build       # tsc + tsdown → lib/index.js + lib/client.js
+pnpm test        # vitest（单元 + 冒烟 + 插件形态 guard：真实 git/fs/node-pty 交互）
+pnpm build       # rm -rf lib && tsc(声明) + tsdown → lib/index.js + lib/invariant.js + lib/client.js + lib/types
 pnpm watch       # tsdown --watch（client bundle 热重建）
 ```
+
+### 规范符合性
+
+插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`）。**安装通道与渲染方式是两个独立概念**：安装始终走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[快速开始](#快速开始)）；下面的 portal 条目只描述面板在页面上的渲染方式。
+
+- **插件形态**：`export const name / inject / Config / apply`，无 default 导出；`tests/plugin-shape.spec.ts` 通过 `Loader.unwrapExports` 守卫该形态
+- **清单**：`types` + `exports`（`.` / `./invariant` / `./client` / `./src/*` / `./package.json`）、`dshClient`（`platform: 'web'` + 信息性 `inject` 边）、peerDependencies、`engines`、`files` 产物明细、`prepare`（消费者侧 `tsdown`，git 安装可用）
+- **client 契约**：仅导出 `apply`/`inject`（+ 类型）；store 为 `createSidebarStore()` 工厂，实例归 `apply` 所有；`src/invariant.ts` 伴生；client bundle 复刻官方 preset（externals = 平台模块表 + runtime/client 豁免、纯度门、CSS Modules 内联）
+- **已知偏差**：侧边栏面板经 portal（`document.body` + `createRoot`）挂载而非 slot——官方 slot 系统的 `'root'` 由 ui-layout 独占声明，重复声明 fail loud，外部插件无整面板 slot 可用；与 shell 的集成点（`conversation.chat.turnTail`）走官方 chain-slot 机制
 
 ## 🏗️ 架构
 
@@ -142,7 +172,8 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 
 | 半 | 入口 | 职责 |
 |---|---|---|
-| host | `src/index.ts` → `lib/index.js` | cordis 插件：`/sidebar/api/*` JSON API、`/sidebar/file` 媒体路由、`/sidebar/ws/terminal` WebSocket；fs / git / pty 服务 |
+| host | `src/index.ts` → `lib/index.js` | cordis 插件（`Config` 为 schemastery schema，可调 readLimit/mediaLimit/listLimit/terminalsPerSession/reconnectGraceMs）：`/sidebar/api/*` JSON API、`/sidebar/file` 媒体路由、`/sidebar/ws/terminal` WebSocket；fs / git / pty 服务 |
+| invariant | `src/invariant.ts` → `lib/invariant.js` | 包属 invariant 伴生（注册包名，无运行时断言） |
 | client | `src/client/index.tsx` → `lib/client.js` | 浏览器 bundle（`__ModuleLoader__.load` 闭包工厂）：portal 侧边栏 + 各视图 + turnTail 拦截 |
 
 - 所有 API 携带 `sessionId`；cwd 权威值取自会话 header，会话未附加（页面加载竞态）时回退客户端摘要 cwd，再回退进程 cwd；终端按 `${sessionId}:${tabId}` 键控，重连时若权威 cwd 变化则重启 shell 到正确目录

@@ -125,12 +125,27 @@ export interface SidebarConversation {
   }
 }
 
+/**
+ * The invariant service face (mirror of @deepseek-ai/dsh-invariants'
+ * InvariantService). The upstream augmentation does not reach this Context
+ * (dual-cordis-instance resolution), so the register signature is restated
+ * structurally, exactly like the other service faces above.
+ */
+export interface SidebarInvariantsService {
+  /** Reserve one package's checks and install them in the service's child fiber. */
+  register(
+    packageName: string,
+    installer: (ctx: Context, fail: (message: string) => never) => void | Promise<void>,
+  ): () => void
+}
+
 declare module 'cordis' {
   interface Context {
     httpServer: SidebarHttpServer
     sessions: SidebarSessionStore & SidebarSessionsService
     loader: SidebarLoader
     slots: SidebarSlotsService
+    invariants: SidebarInvariantsService
     /**
      * Register a lifecycle callback (DSH-vendored cordis): runs at plugin
      * activation; its returned cleanup runs at disposal.
