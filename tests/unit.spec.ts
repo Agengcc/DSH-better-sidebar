@@ -3,7 +3,7 @@ import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
   activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openTab, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  moveTab, moveTabToEdge, openTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -250,6 +250,62 @@ describe('sidebar state', () => {
     // A terminal tab added later is open too.
     s = openTab(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
     expect(tabOpenIn(s, 'terminal:9')).toBe(true)
+  })
+})
+
+describe('agent terminal reconciliation', () => {
+  it('adds tabs for new agent terminals', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'dev server' },
+      { uuid: 'bbb-222', title: 'python repl' },
+    ])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(true)
+    // The titles are preserved.
+    const tabs = allLeaves(s.splits).flatMap(leaf => leaf.tabs)
+    const agentTab = tabs.find(t => t.id === 'agent:aaa-111')
+    expect(agentTab?.title).toBe('dev server')
+    expect(agentTab?.type).toBe('terminal')
+  })
+
+  it('removes tabs for agent terminals that vanished from the server list', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'keep' },
+      { uuid: 'bbb-222', title: 'remove' },
+    ])
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(true)
+    // Next push drops bbb-222.
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'keep' }])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(false)
+  })
+
+  it('is a no-op (same reference) when the lists already match', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'stable' }])
+    const next = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'stable' }])
+    expect(next).toBe(s)
+  })
+
+  it('does not touch non-agent terminal tabs', () => {
+    let s = makeDefaultState(400, true)
+    s = openTab(s, { id: 'terminal:1', type: 'terminal', title: 'UI Tab' })
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'agent' }])
+    expect(tabOpenIn(s, 'terminal:1')).toBe(true)
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+  })
+
+  it('handles an empty server list (removes all agent tabs)', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'a' },
+      { uuid: 'bbb-222', title: 'b' },
+    ])
+    s = reconcileAgentTerminals(s, [])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(false)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(false)
   })
 })
 

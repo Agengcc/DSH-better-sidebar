@@ -16,6 +16,7 @@ import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutlin
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
   allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
+  reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
   TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
 } from './state.ts'
@@ -138,6 +139,49 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const cwd = summaryCwd ?? fetchedCwd
 
   /**
+   * Agent terminals push: subscribe to the host's live list of agent-owned
+   * terminals for this session (created by the model through the
+   * `terminal_create` tool). The host pushes a JSON array on every
+   * create / close / exit; the sidebar reconciles the list into tabs
+   * (id `agent:<uuid>`, title from the agent). A disconnected socket
+   * retries with a short backoff so a refresh or transient drop reattaches
+   * the same shell without losing the agent's work.
+   */
+  useEffect(() => {
+    if (sessionId === undefined) return
+    let socket: WebSocket | null = null
+    let retry: number | undefined
+    let closed = false
+    const connect = (): void => {
+      if (closed) return
+      const url = new URL('/sidebar/ws/agent-terminals', location.origin)
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+      url.search = new URLSearchParams({ sessionId }).toString()
+      socket = new WebSocket(url.toString())
+      socket.onmessage = (event) => {
+        if (typeof event.data !== 'string') return
+        try {
+          const list = JSON.parse(event.data) as Array<{ uuid: string; title: string; command: string; exited: boolean }>
+          if (!Array.isArray(list)) return
+          store.reduce(s => reconcileAgentTerminals(s, list))
+        } catch {
+          // Malformed push: ignore (the next push will reconcile).
+        }
+      }
+      socket.onclose = () => {
+        if (!closed) retry = window.setTimeout(connect, 2000)
+      }
+      socket.onerror = () => { socket?.close() }
+    }
+    connect()
+    return () => {
+      closed = true
+      window.clearTimeout(retry)
+      socket?.close()
+    }
+  }, [sessionId, store])
+
+  /**
    * Subagent auto-activation: the moment the current conversation spawns its
    * FIRST direct subagent (a 0 → N transition on the list feed) and the
    * "auto open" pref is on, open the panel (if collapsed) and focus the
@@ -212,12 +256,21 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       // A closed terminal releases its pty immediately — including when its
       // socket is mid-reconnect, where the unmount close frame never reaches
       // the host and the process would hold the quota until the grace ends.
+      // Agent terminals (tabId `agent:<uuid>`) close through a different
+      // host route: the WS close frame is the primary path (sent by
+      // TerminalView on unmount), and the agent-pty.close HTTP route is the
+      // fallback when the WS is down.
       const current = store.getSnapshot().state
       const leaf = current === undefined ? undefined : leafWithTab(current.splits, tabId)
       const tab = leaf?.tabs.find(candidate => candidate.id === tabId)
       store.reduce(s => closeTab(s, paneId, tabId))
-      if (sessionId !== undefined && tab?.type === 'terminal') {
-        void api.ptyClose({ sessionId, cwd }, tabId).catch(() => { /* the host may already have released it */ })
+      if (tab?.type === 'terminal') {
+        if (tabId.startsWith('agent:')) {
+          const uuid = tabId.slice('agent:'.length)
+          void api.agentPtyClose(uuid).catch(() => { /* the host may already have released it */ })
+        } else if (sessionId !== undefined) {
+          void api.ptyClose({ sessionId, cwd }, tabId).catch(() => { /* the host may already have released it */ })
+        }
       }
     },
     activateTab: (paneId, tabId) => {

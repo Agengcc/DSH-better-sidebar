@@ -119,6 +119,9 @@ export const api = {
    *  this explicit route). */
   ptyClose: (scope: SessionScope, tab: string) =>
     call<{ ok: true }>('pty.close', scopePayload(scope, { tab })),
+  /** Release an agent terminal by uuid (tab closed while WS was down). */
+  agentPtyClose: (uuid: string) =>
+    call<{ ok: true }>('agent-pty.close', { uuid }),
   /** Read the side card preferences (plugin-global, no session scope). */
   settingsGet: () =>
     call<{ value?: unknown; revision?: number }>('settings.get', {}),

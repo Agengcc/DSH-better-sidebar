@@ -20,6 +20,7 @@ interface FakeContext {
     registerUpgrade: (route: SidebarWebUpgradeRoute) => () => void
   }
   sessions: { get: (id: string) => { header: { cwd?: string } } | undefined }
+  tools: { register: (tool: unknown) => () => void }
   effect: (fn: () => void | (() => void), label?: string) => void
   /** The settings service never appears in the smoke context: the inject
    *  callback must never run (mirror of cordis' service-less inject). */
@@ -43,6 +44,7 @@ describe('host plugin smoke', () => {
         registerUpgrade: (route) => { upgrades.push(route); return () => {} },
       },
       sessions: { get: () => undefined },
+      tools: { register: () => () => {} },
       // The DSH-vendored cordis runs the registration effect immediately and
       // keeps its cleanup for disposal.
       effect: (fn) => {
@@ -55,7 +57,7 @@ describe('host plugin smoke', () => {
     }
     apply(ctx as never)
     expect(routes.map(route => route.path)).toEqual(['/sidebar/api', '/sidebar/file'])
-    expect(upgrades.map(route => route.path)).toEqual(['/sidebar/ws/terminal'])
+    expect(upgrades.map(route => route.path)).toEqual(['/sidebar/ws/terminal', '/sidebar/ws/agent-terminals'])
     // Teardown runs without throwing (pty manager has nothing open).
     for (const cleanup of effects) cleanup()
   })
@@ -177,6 +179,7 @@ describe('session cwd resolution over the API route', () => {
         registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
       },
       sessions: overrides.sessions ?? { get: () => undefined },
+      tools: { register: () => () => {} },
       // The vendored cordis runs registration effects immediately.
       effect: (fn: () => void | (() => void)) => { fn() },
       // No settings service: the namespace registration never runs.
@@ -296,6 +299,7 @@ describe('side card settings routes', () => {
         registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
       },
       sessions: { get: () => undefined },
+      tools: { register: () => () => {} },
       effect: (fn: () => void | (() => void)) => { fn() },
       inject: (deps: string[], callback: (sctx: { settings: unknown }) => void) => {
         if (deps.includes('settings') && settings !== undefined) callback({ settings })

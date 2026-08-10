@@ -111,39 +111,48 @@ importers:
       '@cordisjs/plugin-loader':
         specifier: ^1.0.0-rc.5
         version: 1.0.0-rc.5(cordis@4.0.0-rc.7)
+      '@deepseek-ai/dsh-agent':
+        specifier: link:/Users/menghuan/.dsh/source/current/packages/core/agent
+        version: link:/Users/menghuan/.dsh/source/current/packages/core/agent
       '@deepseek-ai/dsh-client-runtime':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/runtime
-        version: link:../../.dsh/source/current/packages/client/runtime
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/runtime
       '@deepseek-ai/dsh-client-schema-form':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/schema-form
-        version: link:../../.dsh/source/current/packages/client/schema-form
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/schema-form
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-conversation
-        version: link:../../.dsh/source/current/packages/client/ui-conversation
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/ui-conversation
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-primitives
-        version: link:../../.dsh/source/current/packages/client/ui-primitives
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/ui-primitives
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-settings
-        version: link:../../.dsh/source/current/packages/client/ui-settings
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/ui-settings
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/ui-slots
-        version: link:../../.dsh/source/current/packages/client/ui-slots
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/ui-slots
       '@deepseek-ai/dsh-client-web-react':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/client/web-react
-        version: link:../../.dsh/source/current/packages/client/web-react
+        version: link:/Users/menghuan/.dsh/source/current/packages/client/web-react
       '@deepseek-ai/dsh-host-webserver':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/host/webserver
-        version: link:../../.dsh/source/current/packages/host/webserver
+        version: link:/Users/menghuan/.dsh/source/current/packages/host/webserver
       '@deepseek-ai/dsh-invariants':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/support/invariants
-        version: link:../../.dsh/source/current/packages/support/invariants
+        version: link:/Users/menghuan/.dsh/source/current/packages/support/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: link:/Users/menghuan/.dsh/source/current/packages/llm/llm
+        version: link:/Users/menghuan/.dsh/source/current/packages/llm/llm
       '@deepseek-ai/dsh-session':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/core/session
-        version: link:../../.dsh/source/current/packages/core/session
+        version: link:/Users/menghuan/.dsh/source/current/packages/core/session
       '@deepseek-ai/dsh-settings':
         specifier: link:/Users/menghuan/.dsh/source/current/packages/settings/settings
-        version: link:../../.dsh/source/current/packages/settings/settings
+        version: link:/Users/menghuan/.dsh/source/current/packages/settings/settings
+      '@deepseek-ai/dsh-tools':
+        specifier: link:/Users/menghuan/.dsh/source/current/packages/core/tools
+        version: link:/Users/menghuan/.dsh/source/current/packages/core/tools
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
