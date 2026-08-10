@@ -122,7 +122,7 @@ function LeafView(props: {
   newTabOptions: NewTabOption[]
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
-  renderTab: (tab: SidebarTab, active: boolean) => ReactNode
+  renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
 }) {
   const { leaf, newTabOptions, actions, onNewTab, renderTab } = props
   const [dropZone, setDropZone] = useState<DropZone | null>(null)
@@ -196,7 +196,7 @@ function LeafView(props: {
               key={tab.id}
               className={clsx(css.paneTab, tab.id !== activeTab?.id && css.paneTabHidden)}
             >
-              {renderTab(tab, tab.id === activeTab?.id)}
+              {renderTab(tab, tab.id === activeTab?.id, leaf.id)}
             </div>
           ))}
         </div>
@@ -214,7 +214,7 @@ function NodeView(props: {
   newTabOptions: NewTabOption[]
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
-  renderTab: (tab: SidebarTab, active: boolean) => ReactNode
+  renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
 }) {
   const { node, state, newTabOptions, actions, onNewTab, renderTab } = props
   if (node.kind === 'leaf') {
@@ -264,7 +264,7 @@ export function Workbench(props: {
   newTabOptions: NewTabOption[]
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
-  renderTab: (tab: SidebarTab, active: boolean) => ReactNode
+  renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
 }) {
   const { state, newTabOptions, actions, onNewTab, renderTab } = props
   return (

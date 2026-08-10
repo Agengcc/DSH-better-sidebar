@@ -22,6 +22,15 @@ export const IconTerminalOutline16 = ({ size = 16, className }: IconProps) => (
   </svg>
 )
 
+/** Diff glyph in the app's outline style: a file frame with a plus and a minus row. */
+export const IconDiffOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M4 5h3M5.5 3.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M9.5 12.5h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+)
+
 /** The one icon per tab type (shared by tabs, the + menu, and pane cards). */
 export function tabTypeIcon(type: TabType, size = 16): ReactNode {
   switch (type) {
@@ -30,5 +39,6 @@ export function tabTypeIcon(type: TabType, size = 16): ReactNode {
     case 'terminal': return <IconTerminalOutline16 size={size} />
     case 'subagent': return <IconThinkOutline16 size={size} />
     case 'editor': return <IconCodeOutline16 size={size} />
+    case 'diff': return <IconDiffOutline16 size={size} />
   }
 }

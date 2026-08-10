@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '../src/fs-tree.ts'
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
+import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
 import {
   activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
-  type SidebarState, type SplitNode,
+  moveTab, moveTabToEdge, openDiffTab, openTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  type SidebarState, type SidebarTab, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
 import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
@@ -89,11 +90,124 @@ describe('git parsing', () => {
     ])
   })
 
-  it('parses log rows with unit separators', () => {
-    const rows = parseLogLines('abc1234\x1fFirst subject\x1fAlice\x1f2024-01-01 10:00:00 +0800\n')
+  it('parses log rows with unit separators (full hash + refs)', () => {
+    const rows = parseLogLines(
+      'abc1234\x1fFirst subject\x1fAlice\x1f2024-01-01 10:00:00 +0800\x1fabc1234def5678abc1234def5678abc1234def5678\x1fHEAD -> main, origin/main\n'
+      + 'def5678\x1fSecond subject\x1fBob\x1f2024-01-02 10:00:00 +0800\x1fdef5678abc1234def5678abc1234def5678abc1234\x1f\n',
+    )
     expect(rows).toEqual([
-      { hash: 'abc1234', subject: 'First subject', author: 'Alice', date: '2024-01-01 10:00:00 +0800' },
+      {
+        hash: 'abc1234',
+        subject: 'First subject',
+        author: 'Alice',
+        date: '2024-01-01 10:00:00 +0800',
+        hashFull: 'abc1234def5678abc1234def5678abc1234def5678',
+        refs: 'HEAD -> main, origin/main',
+      },
+      {
+        hash: 'def5678',
+        subject: 'Second subject',
+        author: 'Bob',
+        date: '2024-01-02 10:00:00 +0800',
+        hashFull: 'def5678abc1234def5678abc1234def5678abc1234',
+        refs: '',
+      },
     ])
+  })
+
+  it('parses a multi-file unified diff with aligned line numbers', () => {
+    const diff = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      'index 1234567..89abcde 100644',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,4 +1,5 @@ section with @@ inside',
+      ' line1',
+      '-line2',
+      '+line2b',
+      ' context',
+      '+trailing',
+      'diff --git a/README.md b/README.md',
+      'new file mode 100644',
+      'index 0000000..1234567',
+      '--- /dev/null',
+      '+++ b/README.md',
+      '@@ -0,0 +1,2 @@',
+      '+hello',
+      '+world',
+      '',
+    ].join('\n')
+    const parsed = parseUnifiedDiff(diff)
+    expect(parsed.files).toHaveLength(2)
+    const first = parsed.files[0]!
+    expect(first.oldPath).toBe('a/src/a.ts')
+    expect(first.newPath).toBe('b/src/a.ts')
+    expect(first.binary).toBe(false)
+    expect(first.hunks).toHaveLength(1)
+    expect(first.hunks[0]!.oldStart).toBe(1)
+    expect(first.hunks[0]!.newStart).toBe(1)
+    expect(first.hunks[0]!.header).toBe(' section with @@ inside')
+    expect(first.hunks[0]!.lines).toEqual([
+      { kind: 'ctx', text: 'line1', oldNum: 1, newNum: 1 },
+      { kind: 'del', text: 'line2', oldNum: 2, newNum: null },
+      { kind: 'add', text: 'line2b', oldNum: null, newNum: 2 },
+      { kind: 'ctx', text: 'context', oldNum: 3, newNum: 3 },
+      { kind: 'add', text: 'trailing', oldNum: null, newNum: 4 },
+    ])
+    const second = parsed.files[1]!
+    expect(second.oldPath).toBe('/dev/null')
+    expect(second.hunks[0]!.lines[0]).toEqual({ kind: 'add', text: 'hello', oldNum: null, newNum: 1 })
+    expect(second.hunks[0]!.lines[1]).toEqual({ kind: 'add', text: 'world', oldNum: null, newNum: 2 })
+  })
+
+  it('parses binary, deletion and no-newline markers', () => {
+    const diff = [
+      'diff --git a/img.png b/img.png',
+      'index 111..222 100644',
+      'Binary files a/img.png and b/img.png differ',
+      'diff --git a/gone.ts b/gone.ts',
+      'deleted file mode 100644',
+      '--- a/gone.ts',
+      '+++ /dev/null',
+      '@@ -1,2 +0,0 @@',
+      '-one',
+      '-two',
+      '\\ No newline at end of file',
+      '',
+    ].join('\n')
+    const parsed = parseUnifiedDiff(diff)
+    expect(parsed.files).toHaveLength(2)
+    expect(parsed.files[0]!.binary).toBe(true)
+    expect(parsed.files[0]!.hunks).toHaveLength(0)
+    const gone = parsed.files[1]!
+    expect(gone.newPath).toBe('/dev/null')
+    expect(gone.hunks[0]!.lines).toEqual([
+      { kind: 'del', text: 'one', oldNum: 1, newNum: null },
+      { kind: 'del', text: 'two', oldNum: 2, newNum: null },
+      { kind: 'meta', text: ' No newline at end of file', oldNum: null, newNum: null },
+    ])
+  })
+
+  it('keeps mode/rename-only sections hunkless', () => {
+    const parsed = parseUnifiedDiff([
+      'diff --git a/run.sh b/run.sh',
+      'old mode 100644',
+      'new mode 100755',
+      'diff --git a/old.ts b/new.ts',
+      'similarity index 90%',
+      'rename from old.ts',
+      'rename to new.ts',
+      '',
+    ].join('\n'))
+    expect(parsed.files).toHaveLength(2)
+    expect(parsed.files[0]!.oldPath).toBe('')
+    expect(parsed.files[0]!.hunks).toHaveLength(0)
+    expect(parsed.files[1]!.hunks).toHaveLength(0)
+  })
+
+  it('parses an empty or junk diff into no files', () => {
+    expect(parseUnifiedDiff('').files).toEqual([])
+    expect(parseUnifiedDiff('no diff here\n').files).toEqual([])
   })
 })
 
@@ -117,6 +231,109 @@ describe('sidebar state', () => {
     s = openTab(s, { id: 'e1', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     const after = openTab(s, { id: 'e2', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     expect((after.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([firstId, 'e1'])
+  })
+
+  const diffTab = (id: string): SidebarTab => ({
+    id,
+    type: 'diff',
+    title: id,
+    diff: { kind: 'worktree', path: 'src/a.ts', staged: false },
+  })
+
+  it('first diff splits the source pane vertically (diff below)', () => {
+    const s = state()
+    const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
+    const withGit = openTab(s, gitTab)
+    const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
+    const after = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
+    expect(after.splits.kind).toBe('split')
+    const split = after.splits as { dir: string; children: { kind: string; tabs?: SidebarTab[]; id: string }[] }
+    expect(split.dir).toBe('col')
+    expect(split.children).toHaveLength(2)
+    // The source stays on TOP (first child), the diff lands in the new bottom leaf.
+    expect(split.children[0]!.id).toBe(sourcePane)
+    expect(split.children[1]!.tabs?.map(tab => tab.id)).toEqual(['diff:w:u:src/a.ts'])
+    expect(after.activePane).toBe(split.children[1]!.id)
+  })
+
+  it('reopening the same diff focuses its existing tab', () => {
+    const s = state()
+    const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
+    const withGit = openTab(s, gitTab)
+    const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
+    const first = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
+    const second = openDiffTab(first, sourcePane, diffTab('diff:w:u:src/a.ts'))
+    // No new panes, no duplicate tabs.
+    expect(second.splits.kind).toBe('split')
+    const split = second.splits as { children: { kind: string; tabs?: SidebarTab[] }[] }
+    const allTabs = split.children.flatMap(child => child.tabs ?? [])
+    expect(allTabs.filter(tab => tab.type === 'diff')).toHaveLength(1)
+  })
+
+  it('subsequent diffs stack into the existing diff pane', () => {
+    const s = state()
+    const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
+    const withGit = openTab(s, gitTab)
+    const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
+    const first = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
+    const second = openDiffTab(first, sourcePane, diffTab('diff:c:abc1234def5678abc1234def5678abc1234def5678'))
+    // Still one split: the second diff joins the bottom leaf instead of splitting again.
+    expect(second.splits.kind).toBe('split')
+    const split = second.splits as { children: { kind: string; tabs?: SidebarTab[] }[] }
+    const diffLeaves = split.children.filter(child => child.tabs?.some(tab => tab.type === 'diff'))
+    expect(diffLeaves).toHaveLength(1)
+    expect(diffLeaves[0]!.tabs?.map(tab => tab.id)).toEqual([
+      'diff:w:u:src/a.ts',
+      'diff:c:abc1234def5678abc1234def5678abc1234def5678',
+    ])
+  })
+
+  it('openDiffTab degrades to a regular open when the source pane is gone', () => {
+    const s = state()
+    const after = openDiffTab(s, 'pane:gone', diffTab('diff:w:u:src/a.ts'))
+    expect(after.splits.kind).toBe('leaf')
+    expect((after.splits as { tabs: SidebarTab[] }).tabs.map(tab => tab.id)).toContain('diff:w:u:src/a.ts')
+  })
+
+  it('sanitize drops diff tabs (ephemeral, like VSCode diff editors)', () => {
+    const valid = sanitizeState({
+      panelOpen: true,
+      width: 400,
+      nextTerminal: 1,
+      activePane: 'pane:1',
+      expanded: [],
+      splits: {
+        kind: 'leaf',
+        id: 'pane:1',
+        active: 'd1',
+        tabs: [
+          { id: 'explorer-tab', type: 'explorer', title: 'Explorer' },
+          { id: 'd1', type: 'diff', title: 'a.ts', diff: { kind: 'worktree', path: 'src/a.ts', staged: false } },
+        ],
+      },
+    })
+    expect(valid?.splits.kind).toBe('leaf')
+    const tabs = (valid?.splits as { tabs: SidebarTab[] }).tabs
+    expect(tabs.map(tab => tab.id)).toEqual(['explorer-tab'])
+    // The dropped diff tab was the active one: the leaf falls back to a null
+    // active instead of resetting the whole state.
+    expect((valid?.splits as { active: string | null }).active).toBeNull()
+    // A leaf of ONLY diff tabs survives as an empty pane (welcome cards).
+    const onlyDiff = sanitizeState({
+      panelOpen: true,
+      width: 400,
+      nextTerminal: 1,
+      activePane: 'pane:1',
+      expanded: [],
+      splits: {
+        kind: 'leaf',
+        id: 'pane:1',
+        active: 'd1',
+        tabs: [{ id: 'd1', type: 'diff', title: 'a.ts' }],
+      },
+    })
+    expect(onlyDiff?.splits.kind).toBe('leaf')
+    expect((onlyDiff?.splits as { tabs: SidebarTab[] }).tabs).toEqual([])
   })
 
   it('dedupes the single-instance subagent tab (focuses instead of duplicating)', () => {

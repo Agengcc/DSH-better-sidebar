@@ -40,10 +40,16 @@ export interface GitStatusResult {
 
 /** One git log row. */
 export interface GitLogEntry {
+  /** Short hash (7+ chars, display). */
   hash: string
+  /** Full 40-char hash (advanced operations). */
+  hashFull: string
   subject: string
   author: string
+  /** ISO 8601 author date (`%ai`). */
   date: string
+  /** Ref decorations (--decorate=short), e.g. `HEAD -> main, origin/main`; '' when none. */
+  refs: string
 }
 
 /** Text read result. */
@@ -100,8 +106,6 @@ export const api = {
     call<GitStatusResult>('git.status', scopePayload(scope, {}), signal),
   gitDiff: (scope: SessionScope, path: string | undefined, staged: boolean, signal?: AbortSignal) =>
     call<{ diff: string }>('git.diff', scopePayload(scope, { ...(path !== undefined ? { path } : {}), staged }), signal),
-  gitShow: (scope: SessionScope, rev: string, path: string, signal?: AbortSignal) =>
-    call<{ content: string | null }>('git.show', scopePayload(scope, { rev, path }), signal),
   gitStage: (scope: SessionScope, path?: string) =>
     call<{ ok: true }>('git.stage', scopePayload(scope, { ...(path !== undefined ? { path } : {}) })),
   gitUnstage: (scope: SessionScope, path?: string) =>
@@ -112,8 +116,24 @@ export const api = {
     call<{ current: string; names: string[] }>('git.branch', scopePayload(scope, {}), signal),
   gitCheckout: (scope: SessionScope, branch: string) =>
     call<{ ok: true }>('git.checkout', scopePayload(scope, { branch })),
-  gitLog: (scope: SessionScope, signal?: AbortSignal) =>
-    call<GitLogEntry[]>('git.log', scopePayload(scope, {}), signal),
+  /** Recent commit history, lazily pageable (skip/count; defaults 0/30). */
+  gitLog: (scope: SessionScope, count?: number, skip?: number, signal?: AbortSignal) =>
+    call<GitLogEntry[]>('git.log', scopePayload(scope, {
+      ...(count !== undefined ? { count } : {}),
+      ...(skip !== undefined ? { skip } : {}),
+    }), signal),
+  /** Full patch text of one commit (diff display for the history rows). */
+  gitCommitDiff: (scope: SessionScope, hash: string, signal?: AbortSignal) =>
+    call<{ diff: string }>('git.commit-diff', scopePayload(scope, { hash }), signal),
+  /** Discard the worktree changes of one file (the index is untouched). */
+  gitDiscard: (scope: SessionScope, path: string) =>
+    call<{ ok: true }>('git.discard', scopePayload(scope, { path })),
+  /** Revert one commit onto the current branch. */
+  gitRevert: (scope: SessionScope, hash: string) =>
+    call<{ ok: true }>('git.revert', scopePayload(scope, { hash })),
+  /** Cherry-pick one commit onto the current branch. */
+  gitCherryPick: (scope: SessionScope, hash: string) =>
+    call<{ ok: true }>('git.cherry-pick', scopePayload(scope, { hash })),
   /** Release a terminal's process immediately (tab closed; the WS close frame
    *  may be unreachable while the socket is down, so the host also accepts
    *  this explicit route). */

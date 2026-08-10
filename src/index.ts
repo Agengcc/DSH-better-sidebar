@@ -12,7 +12,7 @@
  * processes are keyed by session.
  */
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join } from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { Context } from './context-types.ts'
@@ -97,6 +97,19 @@ function sessionCwdOf(ctx: Context, sessionId: string, clientCwd?: string): stri
   return process.cwd()
 }
 
+/**
+ * Resolve a path that a git command reported — `git status`/`git diff`
+ * print paths RELATIVE TO THE REPO TOP LEVEL, which may sit above the
+ * session cwd (a session inside a subdirectory of a repository). Absolute
+ * paths pass through; relative ones join the repo root (falling back to the
+ * cwd when the root cannot be resolved, e.g. a bare directory).
+ */
+async function resolveGitPath(cwd: string, raw: string): Promise<string> {
+  if (isAbsolute(raw)) return requireAbsolute(raw)
+  const root = await git.repoRoot(cwd).catch(() => cwd)
+  return requireAbsolute(join(root, raw))
+}
+
 /** Text read of a file with the size cap; binary detection via NUL probe. */
 async function readText(path: string, readLimit: number): Promise<{ content: string; truncated: boolean; binary: boolean; size: number }> {
   const info = await stat(path).catch((error: unknown) => {
@@ -165,7 +178,9 @@ function buildApi(
     },
     'fs.read': async (payload) => {
       const { cwd } = cwdOf(payload)
-      const path = requireAbsolute(requireString(payload, 'path'))
+      // Relative paths are git-derived (status/diff report repo-root-relative
+      // names; the untracked diff view reads the file through this route).
+      const path = await resolveGitPath(cwd, requireString(payload, 'path'))
       const { content, truncated, binary, size } = await readText(path, resolved.readLimit)
       if (binary) return { kind: 'binary', size, truncated }
       return { kind: 'text', content, truncated }
@@ -192,7 +207,7 @@ function buildApi(
     'git.diff': async (payload) => {
       const { cwd } = cwdOf(payload)
       const record = payload as { path?: unknown; staged?: unknown }
-      const path = record.path === undefined ? undefined : requireAbsolute(requireString(payload, 'path'))
+      const path = record.path === undefined ? undefined : await resolveGitPath(cwd, requireString(payload, 'path'))
       return { diff: await git.diff(cwd, path, record.staged === true) }
     },
     'git.stage': async (payload) => {
@@ -226,11 +241,37 @@ function buildApi(
     },
     'git.log': async (payload) => {
       const { cwd } = cwdOf(payload)
-      return git.log(cwd)
+      const record = payload as { count?: unknown; skip?: unknown }
+      const count = typeof record.count === 'number' && Number.isInteger(record.count) && record.count > 0
+        ? record.count
+        : undefined
+      const skip = typeof record.skip === 'number' && Number.isInteger(record.skip) && record.skip >= 0
+        ? record.skip
+        : undefined
+      return git.log(cwd, count, skip)
+    },
+    'git.commit-diff': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      return { diff: await git.commitDiff(cwd, requireString(payload, 'hash')) }
+    },
+    'git.discard': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      await git.discard(cwd, await resolveGitPath(cwd, requireString(payload, 'path')))
+      return { ok: true }
+    },
+    'git.revert': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      await git.revert(cwd, requireString(payload, 'hash'))
+      return { ok: true }
+    },
+    'git.cherry-pick': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      await git.cherryPick(cwd, requireString(payload, 'hash'))
+      return { ok: true }
     },
     'git.show': async (payload) => {
       const { cwd } = cwdOf(payload)
-      const path = requireAbsolute(requireString(payload, 'path'))
+      const path = await resolveGitPath(cwd, requireString(payload, 'path'))
       const rev = requireString(payload, 'rev')
       return { content: await git.show(cwd, rev, path) }
     },

@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
+  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab, openTab,
   reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
   TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
@@ -29,6 +29,7 @@ import { ExplorerView } from './ExplorerView.tsx'
 import { EditorView } from './EditorView.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { GitView } from './GitView.tsx'
+import { DiffTab } from './DiffTab.tsx'
 import { SubagentView } from './SubagentView.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
 import { t } from './locales.ts'
@@ -54,8 +55,10 @@ function TabContent(props: {
   visible: boolean
   /** Fired before a topology node jumps to its child session (see Sidebar). */
   onSubagentJump: (childSessionId: string) => void
+  /** Open a diff tab from the git panel (placement handled by the store). */
+  onOpenDiff: (tab: SidebarTab) => void
 }) {
-  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store, visible, onSubagentJump } = props
+  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store, visible, onSubagentJump, onOpenDiff } = props
   const scope = { sessionId, cwd }
   switch (tab.type) {
     case 'explorer':
@@ -70,7 +73,17 @@ function TabContent(props: {
         />
       )
     case 'git':
-      return <GitView scope={scope} />
+      return (
+        <GitView
+          scope={scope}
+          onOpenFile={(path) => { openSidebarFile(ctx, store, sessionId, path) }}
+          onOpenDiff={onOpenDiff}
+        />
+      )
+    case 'diff':
+      return tab.diff === undefined
+        ? null
+        : <DiffTab sessionId={sessionId} cwd={cwd} diff={tab.diff} />
     case 'terminal':
       return <TerminalView scope={scope} tabId={tab.id} store={store} />
     case 'editor':
@@ -390,9 +403,10 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
    * Render one tab's content. `active` (from the workbench) tells whether
    * this tab is the active one in its pane; combined with the panel's
    * open/closed state it gates live views (the Subagent topology pauses its
-   * polling while the page is not actually visible).
+   * polling while the page is not actually visible). The pane id travels
+   * with the tab so diff tabs can split below their source pane.
    */
-  const renderTab = (tab: SidebarTab, active: boolean) => (
+  const renderTab = (tab: SidebarTab, active: boolean, paneId: string) => (
     <TabContent
       tab={tab}
       sessionId={sessionId}
@@ -404,6 +418,7 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       store={store}
       visible={state.panelOpen && active}
       onSubagentJump={(childSessionId) => { subagentJumpRef.current = childSessionId }}
+      onOpenDiff={(diffTab) => { store.reduce(s => openDiffTab(s, paneId, diffTab)) }}
     />
   )
 

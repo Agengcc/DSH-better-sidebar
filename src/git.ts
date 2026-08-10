@@ -27,10 +27,16 @@ export interface GitStatusResult {
 
 /** One `git log` row. */
 export interface GitLogEntry {
+  /** Short hash (7+ chars, display). */
   hash: string
+  /** Full 40-char hash (advanced operations: revert / cherry-pick). */
+  hashFull: string
   subject: string
   author: string
+  /** ISO 8601 author date (`%ai`), e.g. `2024-01-01 10:00:00 +0800`. */
   date: string
+  /** Ref decorations (`%D` with --decorate=short), e.g. `HEAD -> main, origin/main`; '' when none. */
+  refs: string
 }
 
 /** One git failure (stderr text as the message). */
@@ -65,14 +71,21 @@ export function parsePorcelainZ(output: string): GitStatusEntry[] {
   return entries
 }
 
-/** Parse `git log --pretty=format:%h%x1f%s%x1f%an%x1f%ai` rows. */
+/** Parse `git log --pretty=format:%h%x1f%s%x1f%an%x1f%ai%x1f%H%x1f%D` rows. */
 export function parseLogLines(output: string): GitLogEntry[] {
   const rows: GitLogEntry[] = []
   for (const line of output.split('\n')) {
     if (line === '') continue
-    const [hash, subject, author, date] = line.split('\x1f')
+    const [hash, subject, author, date, hashFull, refs] = line.split('\x1f')
     if (hash === undefined || subject === undefined) continue
-    rows.push({ hash, subject, author: author ?? '', date: date ?? '' })
+    rows.push({
+      hash,
+      subject,
+      author: author ?? '',
+      date: date ?? '',
+      hashFull: hashFull ?? hash,
+      refs: refs ?? '',
+    })
   }
   return rows
 }
@@ -116,6 +129,12 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** The repository top level containing `cwd` (`git rev-parse --show-toplevel`). */
+export async function repoRoot(cwd: string): Promise<string> {
+  const out = await runGit(cwd, ['rev-parse', '--show-toplevel'])
+  return out.trim()
 }
 
 /** The current branch name (`git rev-parse --abbrev-ref HEAD`; 'HEAD' when detached). */
@@ -173,9 +192,12 @@ export async function checkout(cwd: string, branch: string): Promise<void> {
   await runGit(cwd, ['checkout', branch])
 }
 
-/** Recent commit history (newest first). */
-export async function log(cwd: string, count = 30): Promise<GitLogEntry[]> {
-  const raw = await runGit(cwd, ['log', `-n ${count}`, '--pretty=format:%h%x1f%s%x1f%an%x1f%ai'])
+/** Recent commit history (newest first), lazily pageable via skip/count. */
+export async function log(cwd: string, count = 30, skip = 0): Promise<GitLogEntry[]> {
+  const raw = await runGit(cwd, [
+    'log', '-n', String(count), '--skip', String(skip), '--decorate=short',
+    '--pretty=format:%h%x1f%s%x1f%an%x1f%ai%x1f%H%x1f%D',
+  ])
   return parseLogLines(raw)
 }
 
@@ -189,4 +211,26 @@ export async function show(cwd: string, rev: string, path: string): Promise<stri
   } catch {
     return null
   }
+}
+
+/** Full patch text of one commit (`git show` with the commit header suppressed).
+ *  Merge commits show their diff against the first parent (`-m --first-parent`
+ *  is a no-op for regular commits), so a history click always has content. */
+export async function commitDiff(cwd: string, hash: string): Promise<string> {
+  return runGit(cwd, ['show', '--no-ext-diff', '--no-color', '--format=', '-m', '--first-parent', hash])
+}
+
+/** Discard the worktree changes of one path (`git checkout -- <path>`; the index is untouched). */
+export async function discard(cwd: string, path: string): Promise<void> {
+  await runGit(cwd, ['checkout', '--', path])
+}
+
+/** Revert one commit onto the current branch with an auto-generated message. */
+export async function revert(cwd: string, hash: string): Promise<void> {
+  await runGit(cwd, ['revert', '--no-edit', hash])
+}
+
+/** Cherry-pick one commit onto the current branch. */
+export async function cherryPick(cwd: string, hash: string): Promise<void> {
+  await runGit(cwd, ['cherry-pick', hash])
 }

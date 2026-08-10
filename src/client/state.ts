@@ -11,14 +11,21 @@
  */
 import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
 
-export type TabType = 'explorer' | 'git' | 'editor' | 'terminal' | 'subagent'
+export type TabType = 'explorer' | 'git' | 'editor' | 'terminal' | 'subagent' | 'diff'
 
-/** One open tab. `path` carries the file (editor) or is absent (explorer/git). */
+/** What a diff tab shows: a worktree/index change of one path, or one commit's full patch. */
+export type SidebarDiffRef =
+  | { kind: 'worktree'; path: string; staged: boolean; untracked?: boolean }
+  | { kind: 'commit'; hash: string; hashFull: string; subject: string }
+
+/** One open tab. `path` carries the file (editor) or is absent (explorer/git);
+ *  `diff` carries the change a diff tab shows. */
 export interface SidebarTab {
   id: string
   type: TabType
   title: string
   path?: string
+  diff?: SidebarDiffRef
 }
 
 /** A tab group. */
@@ -320,6 +327,13 @@ export function openTab(state: SidebarState, tab: SidebarTab): SidebarState {
       if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
     }
   }
+  if (tab.type === 'diff') {
+    // One tab per change: the same path+side (or commit) focuses its instance.
+    for (const leaf of allLeaves(state.splits)) {
+      const existing = leaf.tabs.find(candidate => candidate.type === 'diff' && candidate.id === tab.id)
+      if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
+    }
+  }
   return {
     ...state,
     activePane: targetId,
@@ -356,6 +370,38 @@ export function moveTab(state: SidebarState, fromPane: string, tabId: string, to
 export function splitPane(state: SidebarState, dir: 'row' | 'col'): SidebarState {
   const paneId = state.activePane ?? firstLeaf(state.splits).id
   return { ...state, splits: splitLeafAt(state.splits, paneId, dir) }
+}
+
+/**
+ * Open a diff tab the VSCode way: an existing instance of the same change is
+ * focused wherever it lives; otherwise the tab joins the first pane that
+ * already holds diff tabs (diff panes are sticky — repeated clicks stack
+ * there); on the FIRST diff of a layout the source pane splits vertically so
+ * the diff lands in a fresh pane below it ("默认在下半栏新增一个").
+ * @returns the new state, with the diff pane active.
+ */
+export function openDiffTab(state: SidebarState, sourcePaneId: string, tab: SidebarTab): SidebarState {
+  const existingLeaf = leafWithTab(state.splits, tab.id)
+  if (existingLeaf !== undefined) return activateTab(state, existingLeaf.id, tab.id)
+  const diffLeaf = allLeaves(state.splits).find(leaf => leaf.tabs.some(candidate => candidate.type === 'diff'))
+  if (diffLeaf !== undefined) {
+    return {
+      ...state,
+      activePane: diffLeaf.id,
+      splits: mapLeaf(state.splits, diffLeaf.id, (leaf) => {
+        leaf.tabs = [...leaf.tabs, tab]
+        leaf.active = tab.id
+      }),
+    }
+  }
+  // First diff: split the source pane, the diff tab in the new LOWER leaf.
+  // (A stale sourcePaneId — its pane closed meanwhile — degrades to the
+  // regular open path instead of dropping the tab into an orphaned leaf.)
+  if (!allLeaves(state.splits).some(leaf => leaf.id === sourcePaneId)) {
+    return openTab(state, tab)
+  }
+  const result = insertLeafAt(state.splits, sourcePaneId, 'col', tab, false)
+  return { ...state, splits: result.node, activePane: result.leafId }
 }
 
 /** Toggle the panel open/closed (opening restores the previous layout). */
@@ -563,10 +609,19 @@ function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string
   if (record.kind === 'leaf') {
     if (typeof record.id !== 'string' || !Array.isArray(record.tabs)) return undefined
     const tabs: SidebarTab[] = []
+    let droppedDiff = false
     for (const tab of record.tabs) {
       if (tab === null || typeof tab !== 'object') return undefined
       const candidate = tab as Record<string, unknown>
       if (typeof candidate.id !== 'string' || typeof candidate.title !== 'string') return undefined
+      // Diff tabs are ephemeral by nature (like VSCode's diff editors):
+      // they never survive a reload, so a stale ref (e.g. a wrong staged
+      // side persisted by an older build) cannot resurface as a dead tab
+      // showing "no text changes" after every refresh.
+      if (candidate.type === 'diff') {
+        droppedDiff = true
+        continue
+      }
       if (
         candidate.type !== 'explorer' && candidate.type !== 'git'
         && candidate.type !== 'editor' && candidate.type !== 'terminal'
@@ -582,8 +637,10 @@ function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string
       })
     }
     const active = typeof record.active === 'string' ? record.active : null
-    if (active !== null && !tabs.some(tab => tab.id === active)) return undefined
-    return { kind: 'leaf', id: uniqueNodeId(record.id, seen, reid), tabs, active }
+    // An active pointer into a dropped diff tab is expected after the drop;
+    // any other missing active is structural corruption → reset the state.
+    if (active !== null && !tabs.some(tab => tab.id === active) && !droppedDiff) return undefined
+    return { kind: 'leaf', id: uniqueNodeId(record.id, seen, reid), tabs, active: active !== null && tabs.some(tab => tab.id === active) ? active : null }
   }
   if (record.kind === 'split') {
     if (typeof record.id !== 'string' || (record.dir !== 'row' && record.dir !== 'col')) return undefined

@@ -54,6 +54,34 @@ const zh = {
   changes: '变更',
   staged: '已暂存',
   unstaged: '未暂存',
+  cancel: '取消',
+  diffEmpty: '没有文本差异',
+  diffLoadError: '加载差异失败',
+  diffBinary: '二进制',
+  diffAdded: '新增',
+  diffDeleted: '删除',
+  diffRenamed: '重命名',
+  diffExpand: '展开其余 {count} 行',
+  diffCollapse: '收起',
+  discard: '放弃更改',
+  discardTitle: '放弃更改',
+  discardDesc: '将丢弃「{path}」的工作区修改（不可恢复）。',
+  viewCommitDiff: '查看提交差异',
+  copyShortHash: '复制短哈希',
+  copyFullHash: '复制完整哈希',
+  copySubject: '复制提交信息',
+  revertCommit: '还原此提交',
+  revertTitle: '还原此提交',
+  revertDesc: '将在当前分支创建一个反转「{subject}」的新提交。',
+  cherryPickCommit: '捡取此提交',
+  cherryPickTitle: '捡取此提交',
+  cherryPickDesc: '将「{subject}」的更改应用到当前分支。',
+  timeJustNow: '刚刚',
+  timeMinutesAgo: '{n} 分钟前',
+  timeHoursAgo: '{n} 小时前',
+  timeYesterday: '昨天',
+  loadMore: '加载更多',
+  historyLoadError: '加载更多历史失败',
   produced: '本次产出',
   producedOpen: '在侧边栏中打开',
   disconnected: '终端连接断开，重连中…',
@@ -158,6 +186,34 @@ const en: Record<keyof typeof zh, string> = {
   changes: 'Changes',
   staged: 'Staged',
   unstaged: 'Unstaged',
+  cancel: 'Cancel',
+  diffEmpty: 'No text changes',
+  diffLoadError: 'Failed to load diff',
+  diffBinary: 'Binary',
+  diffAdded: 'Added',
+  diffDeleted: 'Deleted',
+  diffRenamed: 'Renamed',
+  diffExpand: 'Expand {count} more rows',
+  diffCollapse: 'Collapse',
+  discard: 'Discard changes',
+  discardTitle: 'Discard changes',
+  discardDesc: 'This discards the worktree changes of "{path}" (not recoverable).',
+  viewCommitDiff: 'View commit diff',
+  copyShortHash: 'Copy short hash',
+  copyFullHash: 'Copy full hash',
+  copySubject: 'Copy subject',
+  revertCommit: 'Revert commit',
+  revertTitle: 'Revert commit',
+  revertDesc: 'Create a new commit on the current branch that reverts "{subject}".',
+  cherryPickCommit: 'Cherry-pick commit',
+  cherryPickTitle: 'Cherry-pick commit',
+  cherryPickDesc: 'Apply the changes of "{subject}" to the current branch.',
+  timeJustNow: 'just now',
+  timeMinutesAgo: '{n} min ago',
+  timeHoursAgo: '{n} h ago',
+  timeYesterday: 'yesterday',
+  loadMore: 'Load more',
+  historyLoadError: 'Failed to load more history',
   produced: 'Produced',
   producedOpen: 'Open in sidebar',
   disconnected: 'Terminal disconnected, reconnecting…',
@@ -232,4 +288,18 @@ export function t(key: CopyKey, params?: Record<string, string | number>): strin
 /** Whether the browser language is Chinese (used for selectors). */
 export function isZh(): boolean {
   return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh')
+}
+
+/** Format an ISO 8601 author date relative to now (刚刚 / N 分钟前 / N 小时前 / 昨天 / date). */
+export function relativeTime(iso: string): string {
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return iso
+  const seconds = Math.floor((Date.now() - then) / 1000)
+  if (seconds < 60) return t('timeJustNow')
+  if (seconds < 3600) return t('timeMinutesAgo', { n: Math.floor(seconds / 60) })
+  if (seconds < 86400) return t('timeHoursAgo', { n: Math.floor(seconds / 3600) })
+  if (seconds < 172800) return t('timeYesterday')
+  const date = new Date(then)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }

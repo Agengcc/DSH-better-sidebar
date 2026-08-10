@@ -4,8 +4,10 @@
  * actual repository, and a real directory listing. Runs with `pnpm test`.
  */
 import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve as resolvePath } from 'node:path'
+import { join, resolve as resolvePath } from 'node:path'
 import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { apply, mediaTypeForPath } from '../src/index.ts'
 import * as git from '../src/git.ts'
@@ -73,6 +75,31 @@ describe('host plugin smoke', () => {
     expect(log[0]!.hash).toMatch(/^[0-9a-f]{7,}$/)
     const branches = await git.branches(cwd)
     expect(branches.names).toContain(branches.current)
+  })
+
+  it('enriches the log (full hash + refs) and renders commit diffs', async () => {
+    const cwd = process.cwd()
+    const log = await git.log(cwd)
+    const first = log[0]!
+    expect(first.hashFull).toMatch(/^[0-9a-f]{40}$/)
+    expect(typeof first.refs).toBe('string')
+    const patch = await git.commitDiff(cwd, first.hashFull)
+    expect(patch).toContain('diff --git')
+  })
+
+  it('pages the log lazily with skip/count', async () => {
+    const cwd = process.cwd()
+    const first = await git.log(cwd, 5, 0)
+    expect(first).toHaveLength(5)
+    const second = await git.log(cwd, 5, 5)
+    expect(second).toHaveLength(5)
+    // The pages are disjoint windows over the same ordered history.
+    expect(first[0]!.hashFull).not.toBe(second[0]!.hashFull)
+    const all = await git.log(cwd, 10, 0)
+    expect(all.slice(0, 5)).toEqual(first)
+    expect(all.slice(5)).toEqual(second)
+    // A skip past the end returns an empty page (the lazy loader's stop sign).
+    expect(await git.log(cwd, 5, 10_000)).toEqual([])
   })
 
   it('pty manager releases the quota on close and respawns after exit', async () => {
@@ -165,6 +192,110 @@ describe('host plugin smoke', () => {
   })
 })
 
+/**
+ * Destructive git operations (discard / revert / cherry-pick) run against a
+ * throwaway repository under the OS temp dir — never the plugin repo. The
+ * fixture's commit identity comes from the GIT_AUTHOR / GIT_COMMITTER
+ * environment variables, confined to the fixture process: no git config is
+ * touched anywhere (the plugin never sets an identity, and neither does its
+ * test fixture).
+ */
+describe('git destructive operations (scratch repository)', () => {
+  const FIXTURE_IDENTITY = {
+    GIT_AUTHOR_NAME: 'dsh-better-sidebar-test',
+    GIT_AUTHOR_EMAIL: 'test@dsh.invalid',
+    GIT_COMMITTER_NAME: 'dsh-better-sidebar-test',
+    GIT_COMMITTER_EMAIL: 'test@dsh.invalid',
+  }
+
+  const gitRun = (cwd: string, args: string[]): string => {
+    const result = spawnSync('git', ['-C', cwd, '--no-pager', '-c', 'color.ui=false', ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, ...FIXTURE_IDENTITY },
+    })
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `git ${args[0] ?? ''} exited with ${String(result.status)}`)
+    }
+    return result.stdout
+  }
+
+  /** A fresh repo on branch `main` with one committed file `a.txt`. */
+  const makeScratchRepo = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-sidebar-git-'))
+    gitRun(dir, ['init', '-q'])
+    gitRun(dir, ['checkout', '-q', '-b', 'main'])
+    writeFileSync(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
+    gitRun(dir, ['add', '-A'])
+    gitRun(dir, ['commit', '-q', '-m', 'base'])
+    return dir
+  }
+
+  it('discard restores the worktree file from the index (staged changes kept)', async () => {
+    const dir = makeScratchRepo()
+    try {
+      // Unstaged-only changes: fully reverts to the committed content.
+      writeFileSync(join(dir, 'a.txt'), 'one\nCHANGED\nthree\n')
+      await git.discard(dir, 'a.txt')
+      expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree\n')
+      // Staged changes: the worktree snaps back to the STAGED content and
+      // the index is untouched (`git checkout -- <path>` restores from the
+      // index — VSCode's "Discard Changes" semantics).
+      writeFileSync(join(dir, 'a.txt'), 'one\nCHANGED\nthree\n')
+      gitRun(dir, ['add', '-A'])
+      await git.discard(dir, 'a.txt')
+      expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('one\nCHANGED\nthree\n')
+      const staged = await git.diff(dir, 'a.txt', true)
+      expect(staged).toContain('-two')
+      expect(staged).toContain('+CHANGED')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('revert creates a revert commit', async () => {
+    const dir = makeScratchRepo()
+    try {
+      writeFileSync(join(dir, 'a.txt'), 'one\nTWO\nthree\n')
+      gitRun(dir, ['add', '-A'])
+      gitRun(dir, ['commit', '-q', '-m', 'change'])
+      const featureHash = (await git.log(dir))[0]!.hashFull
+      await git.revert(dir, featureHash)
+      expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree\n')
+      expect((await git.log(dir))[0]!.subject).toBe('Revert "change"')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('cherry-pick applies a commit from another branch', async () => {
+    const dir = makeScratchRepo()
+    try {
+      gitRun(dir, ['checkout', '-q', '-b', 'feature'])
+      writeFileSync(join(dir, 'b.txt'), 'feature work\n')
+      gitRun(dir, ['add', '-A'])
+      gitRun(dir, ['commit', '-q', '-m', 'feature work'])
+      const featureHash = (await git.log(dir))[0]!.hashFull
+      gitRun(dir, ['checkout', '-q', 'main'])
+      await git.cherryPick(dir, featureHash)
+      expect(readFileSync(join(dir, 'b.txt'), 'utf8')).toBe('feature work\n')
+      expect((await git.log(dir))[0]!.subject).toBe('feature work')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a failing destructive operation as a GitCommandError', async () => {
+    const dir = makeScratchRepo()
+    try {
+      // An unknown revision fails before touching anything.
+      await expect(git.revert(dir, 'deadbeef00000000000000000000000000000000')).rejects.toThrow()
+      await expect(git.cherryPick(dir, 'deadbeef00000000000000000000000000000000')).rejects.toThrow()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('session cwd resolution over the API route', () => {
   interface CtxOverrides {
     sessions?: { get: (id: string) => { header: { cwd?: string } } | undefined }
@@ -250,6 +381,35 @@ describe('session cwd resolution over the API route', () => {
     expect(result.ok).toBe(true)
     const missing = await invoke(route, 'pty.close', { sessionId: 's-pty' })
     expect(missing.ok).toBe(false)
+  })
+
+  it('git.diff resolves repo-relative paths (session in a subdirectory)', async () => {
+    // The plugin repo's status paths are relative to the repo top level
+    // (e.g. `src/git.ts`); a session whose cwd sits inside the repo must
+    // still load per-file diffs instead of failing with "not an absolute
+    // path". The session header points INTO the repository.
+    const route = mount({
+      sessions: {
+        get: () => ({ header: { cwd: join(process.cwd(), 'src') } }),
+      },
+    })
+    const result = await invoke(route, 'git.diff', { sessionId: 's-sub', path: 'src/git.ts', staged: false })
+    expect(result.ok).toBe(true)
+    const value = result as unknown as { ok: boolean; value?: { diff: string } }
+    expect(typeof value.value?.diff).toBe('string')
+  })
+
+  it('fs.read resolves repo-relative paths (untracked diff fallback)', async () => {
+    const route = mount({
+      sessions: {
+        get: () => ({ header: { cwd: join(process.cwd(), 'src') } }),
+      },
+    })
+    const result = await invoke(route, 'fs.read', { sessionId: 's-sub', path: 'src/git.ts' })
+    expect(result.ok).toBe(true)
+    const value = result as unknown as { ok: boolean; value?: { kind: string; content: string } }
+    expect(value.value?.kind).toBe('text')
+    expect(value.value?.content).toContain('runGit')
   })
 })
 
