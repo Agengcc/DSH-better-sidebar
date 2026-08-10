@@ -11,6 +11,7 @@ import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
 import { officeKindForExt } from '../src/client/office-types.ts'
 import { isPdfExt } from '../src/client/pdf-types.ts'
+import { isImageExt } from '../src/client/image-types.ts'
 import { relativeTo } from '../src/client/paths.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
 import { defaultShell, ensureSpawnHelper } from '../src/pty-manager.ts'
@@ -483,6 +484,17 @@ describe('pdf preview kind', () => {
     expect(isPdfExt('.PDF')).toBe(false)
     expect(isPdfExt('.docx')).toBe(false)
     expect(isPdfExt('')).toBe(false)
+  })
+})
+
+describe('image preview kind', () => {
+  it('routes supported image extensions before binary probing', () => {
+    expect(isImageExt('.png')).toBe(true)
+    expect(isImageExt('.jpg')).toBe(true)
+    expect(isImageExt('.svg')).toBe(true)
+    expect(isImageExt('.avif')).toBe(true)
+    expect(isImageExt('.pdf')).toBe(false)
+    expect(isImageExt('')).toBe(false)
   })
 })
 

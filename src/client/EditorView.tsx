@@ -23,9 +23,9 @@ import { DocxView, XlsxView } from './office-view.tsx'
 import { isPdfExt } from './pdf-types.ts'
 import { PdfView } from './PdfView.tsx'
 import { PptxView } from './PptxView.tsx'
+import { isImageExt } from './image-types.ts'
 import css from './sidebar.module.css'
 
-const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif']
 const MD_EXT = ['.md', '.markdown']
 
 type EditorLoad =
@@ -67,6 +67,12 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     // own renderers below. Detect by extension and skip fsRead entirely —
     // the renderer fetches bytes through the media route itself.
     const ext = extOfPath(path)
+    // Images are binary by nature; short-circuit before fsRead's NUL probe or
+    // every PNG/JPEG would be classified as an unsupported binary file.
+    if (isImageExt(ext)) {
+      setLoad({ status: 'ready', kind: 'image', content: '', truncated: false })
+      return
+    }
     if (isPdfExt(ext)) {
       setLoad({ status: 'ready', kind: 'pdf', content: '', truncated: false })
       return
@@ -84,10 +90,6 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
       if (cancelled) return
       if (result.kind === 'binary') {
         setLoad({ status: 'binary' })
-        return
-      }
-      if (IMAGE_EXT.includes(ext)) {
-        setLoad({ status: 'ready', kind: 'image', content: '', truncated: false })
         return
       }
       setLoad({
