@@ -644,10 +644,16 @@ describe('persisted state sanitization', () => {
     const withSplit = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withSplit.splits = { kind: 'split', id: 's1', dir: 'row', sizes: [0.5], children: [] }
     expect(sanitizeState(withSplit)).toBeUndefined()
-    // Unknown tab types (older layouts) are rejected.
-    const withBadTab = JSON.parse(JSON.stringify(makeDefaultState(400)))
-    withBadTab.splits.tabs[0].type = 'watcher'
-    expect(sanitizeState(withBadTab)).toBeUndefined()
+    // Unknown tab types (external plugins not yet loaded) are accepted —
+    // they render as <OrphanedTab/> at view time and recover if the plugin
+    // loads later. Only diff tabs are dropped (ephemeral).
+    const withExternalTab = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    withExternalTab.splits.tabs[0].type = 'my-plugin:db'
+    const externalClean = sanitizeState(withExternalTab)
+    expect(externalClean).toBeDefined()
+    if (externalClean !== undefined && externalClean.splits.kind === 'leaf') {
+      expect(externalClean.splits.tabs[0]!.type).toBe('my-plugin:db')
+    }
     // An active id that no tab carries is rejected.
     const withBadActive = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withBadActive.splits.active = 'ghost-tab'

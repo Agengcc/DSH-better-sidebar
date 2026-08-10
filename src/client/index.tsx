@@ -12,6 +12,8 @@ import { Component, createElement, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { Context } from '../context-types.ts'
 import { createSidebarStore } from './state.ts'
+import { createBetterSidebarService } from './service.ts'
+import { registerBuiltins } from './builtins.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { registerTurnTailInterception } from './intercept.tsx'
 import { loadPrefs } from './prefs.ts'
@@ -69,6 +71,19 @@ export function apply(ctx: Context): void {
   // registrations (the official createXXXStore() factory rule — no
   // module-level singleton).
   const sidebarStore = createSidebarStore()
+  // The sidebar registry service: external plugins register tab types and
+  // file previewers through `ctx.betterSidebar.registerTab/registerFileViewer`.
+  // Published before the panel mounts so consumers injecting 'betterSidebar'
+  // are ready by the time the sidebar renders.
+  const service = createBetterSidebarService(sidebarStore)
+  ctx.provide('betterSidebar', service)
+  // Register the plugin's own built-in tabs and viewers through the same
+  // service (eating our own dogfood). The disposer unregisters them on
+  // fiber disposal (HMR-safe).
+  ctx.effect(
+    () => registerBuiltins(ctx, service),
+    'dsh-better-sidebar: register built-in tabs and viewers',
+  )
   // A failure anywhere in the client lifecycle must never take the app down
   // silently: log with the plugin prefix and pin a visible diagnostic strip
   // to the page so a blank panel is never the only symptom.

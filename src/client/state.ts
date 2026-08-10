@@ -11,7 +11,18 @@
  */
 import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
 
-export type TabType = 'explorer' | 'git' | 'editor' | 'terminal' | 'subagent' | 'diff'
+/**
+ * Tab type identifier. Builtins use the strings below; external plugins
+ * register their own ids (e.g. `'my-plugin:db'`) through the sidebar
+ * service. Kept as `string` so the registry is open; {@link SIDEBAR_BUILTIN_TAB_TYPES}
+ * lists the builtins for back-compat checks.
+ */
+export type TabType = string
+
+/** The tab type ids the plugin itself registers (see {@link ./builtins.ts}). */
+export const SIDEBAR_BUILTIN_TAB_TYPES = [
+  'explorer', 'git', 'editor', 'terminal', 'subagent', 'diff',
+] as readonly string[]
 
 /** What a diff tab shows: a worktree/index change of one path, or one commit's full patch. */
 export type SidebarDiffRef =
@@ -622,13 +633,10 @@ function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string
         droppedDiff = true
         continue
       }
-      if (
-        candidate.type !== 'explorer' && candidate.type !== 'git'
-        && candidate.type !== 'editor' && candidate.type !== 'terminal'
-        && candidate.type !== 'subagent'
-      ) {
-        return undefined
-      }
+      // Tab types are an open set (external plugins register their own);
+      // accept any string type here — an unregistered type renders an
+      // <OrphanedTab/> at view time and recovers if its plugin loads later.
+      if (typeof candidate.type !== 'string') return undefined
       tabs.push({
         id: candidate.id,
         type: candidate.type,

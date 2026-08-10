@@ -20,6 +20,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type { Context } from 'cordis'
+import type { BetterSidebarService } from './client/service.ts'
 
 /** One named webserver route (mirror of the host-webserver WebRoute). */
 export interface SidebarWebRoute {
@@ -309,6 +310,12 @@ declare module 'cordis' {
     settings: SidebarSettingsService
     invariants: SidebarInvariantsService
     tools: SidebarToolsService
+    /**
+     * The client-side sidebar registry: external plugins register tab types
+     * and file previewers here. Provided by the client half (see
+     * {@link ./client/index.tsx}); undefined on the host side.
+     */
+    betterSidebar: BetterSidebarService
     /**
      * Register a lifecycle callback (DSH-vendored cordis): runs at plugin
      * activation; its returned cleanup runs at disposal.

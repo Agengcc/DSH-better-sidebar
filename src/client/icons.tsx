@@ -40,5 +40,6 @@ export function tabTypeIcon(type: TabType, size = 16): ReactNode {
     case 'subagent': return <IconThinkOutline16 size={size} />
     case 'editor': return <IconCodeOutline16 size={size} />
     case 'diff': return <IconDiffOutline16 size={size} />
+    default: return null
   }
 }
