@@ -42,6 +42,20 @@ const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8')) as P
 /** The registry's strict id validation (manifest.ts / client-modules registerExternal): exactly two lowercase slash-separated segments. */
 const ID_PATTERN = /^(?!node_modules\/)(?:@[a-z0-9][a-z0-9-.]*\/[a-z0-9][a-z0-9-.]*|[a-z0-9][a-z0-9-.]*\/[a-z0-9][a-z0-9-.]*)$/
 
+/** Literal require() specifiers the frozen browser module table can answer. */
+const CLIENT_REQUIRE_ALLOWED = new Set([
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
+  'cordis',
+  '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-web-react',
+  '@deepseek-ai/dsh-client-ui-primitives',
+  '@deepseek-ai/dsh-client-schema-form',
+  '@deepseek-ai/dsh-client-runtime/client',
+])
+
 /** The registered `__ModuleLoader__.load({ id })` value of a built client bundle. */
 function bundleId(file: string): string {
   const source = readFileSync(resolve(ROOT, file), 'utf8')
@@ -70,6 +84,16 @@ describe('registry manifest consistency (dsh.plugin.json)', () => {
     expect(registryId).toBe(manifest.id)
     expect(bundleId('lib/client.js')).toBe(pkg.name)
     expect(registryId).not.toBe(pkg.name)
+  })
+
+  it('client bundles require only frozen module-table entries', () => {
+    for (const file of ['lib/client.js', manifest.client!.main!]) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8')
+      // Exclude method calls such as `freeModule.require("util")`; only the
+      // loader factory's lexical require() is constrained by the module table.
+      const required = [...source.matchAll(/(^|[^.$\w])require\("([^"]+)"\)/gm)].map(match => match[2]!)
+      expect([...new Set(required)].filter(id => !CLIENT_REQUIRE_ALLOWED.has(id))).toEqual([])
+    }
   })
 
   it('contributes declares no tools or skills (the host half registers none)', () => {

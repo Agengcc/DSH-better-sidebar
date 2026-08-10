@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import { resolve as resolvePath } from 'node:path'
 import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { apply } from '../src/index.ts'
+import { apply, mediaTypeForPath } from '../src/index.ts'
 import * as git from '../src/git.ts'
 import { listDirectory } from '../src/fs-tree.ts'
 import { defaultShell, PtyManager } from '../src/pty-manager.ts'
@@ -27,6 +27,11 @@ interface FakeContext {
 }
 
 describe('host plugin smoke', () => {
+  it('serves PDF with the browser-native content type', () => {
+    expect(mediaTypeForPath('/work/report.PDF')).toBe('application/pdf')
+    expect(mediaTypeForPath('/work/archive.bin')).toBe('application/octet-stream')
+  })
+
   it('mounts the fenced routes', () => {
     const routes: SidebarWebRoute[] = []
     const upgrades: SidebarWebUpgradeRoute[] = []

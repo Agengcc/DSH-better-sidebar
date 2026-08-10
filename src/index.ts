@@ -51,6 +51,12 @@ const MEDIA_TYPES: Record<string, string> = {
   '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
   '.avif': 'image/avif',
+  '.pdf': 'application/pdf',
+}
+
+/** Content type served by /sidebar/file (binary-safe fallback for unknowns). */
+export function mediaTypeForPath(path: string): string {
+  return MEDIA_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream'
 }
 
 /** The connection row's resolved trustedHosts (live read; the /api fence's own list). */
@@ -375,7 +381,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         if (!info.isFile() || info.size > resolved.mediaLimit) {
           throw new SidebarError('fs-error', 'not a file or too large', 400)
         }
-        const type = MEDIA_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream'
+        const type = mediaTypeForPath(path)
         const body = await readFile(path)
         // Raw bytes either way (binary-safe); ?download=1 switches the
         // disposition so the browser saves the file instead of showing it.

@@ -31,12 +31,34 @@
  */
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, relative, resolve as resolvePath, sep } from 'node:path'
-import { createRequire } from 'node:module'
+import { builtinModules, createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
 const require = createRequire(import.meta.url)
+
+/** Node builtins must never survive into the browser module-loader factory. */
+const NODE_BUILTINS = new Set([
+  ...builtinModules,
+  ...builtinModules.map(id => `node:${id}`),
+])
+
+/**
+ * Browser-only standalone entries for dependencies whose package `browser`
+ * remaps Rolldown does not currently honor after CJS lowering. Without these
+ * aliases nanoid/SheetJS/JSZip leave Node builtin require() calls in the
+ * client factory, which the DSH module table correctly refuses.
+ */
+const DOCX_PREVIEW_ENTRY = require.resolve('docx-preview')
+const JSZIP_BROWSER_ENTRY = resolvePath(
+  dirname(require.resolve('jszip/package.json', { paths: [dirname(DOCX_PREVIEW_ENTRY)] })),
+  'dist/jszip.min.js',
+)
+const XLSX_BROWSER_ENTRY = resolvePath(
+  dirname(require.resolve('xlsx/package.json')),
+  'dist/xlsx.full.min.js',
+)
 
 /** Module specifiers the web shell shares into the frozen module table (the official PLATFORM_MODULES list, plus the runtime/client exemption). */
 const CLIENT_EXTERNALS = [
@@ -114,6 +136,22 @@ function clientBundle(pluginId: string, entryFile: string): UserConfig {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
+      // pptx-renderer only uses this to auto-discover its optional PDF.js
+      // fallback. PptxView passes pdfjs:false, so browser CJS has no resolver.
+      'import.meta.resolve': 'undefined',
+    },
+    alias: {
+      jszip: JSZIP_BROWSER_ENTRY,
+      xlsx: XLSX_BROWSER_ENTRY,
+    },
+    // CJS output otherwise makes some transitive packages (notably nanoid
+    // through Univer Core) resolve their Node entry even though this bundle
+    // runs in the browser. Keep browser conditional exports authoritative for
+    // both source import() and generated require() edges.
+    inputOptions: {
+      resolve: {
+        conditionNames: ['browser', 'import', 'require', 'default'],
+      },
     },
     // External wins for module-table entries; every other dependency inlines.
     noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
@@ -127,6 +165,12 @@ function clientBundle(pluginId: string, entryFile: string): UserConfig {
       // imports are erased and never reach this gate.
       name: 'dsh-client-bundle-purity',
       resolveId(source: string) {
+        if (NODE_BUILTINS.has(source)) {
+          throw new Error(
+            `client bundle purity: Node builtin "${source}" cannot run in the browser module table — `
+            + 'select the dependency browser export or add an explicit browser implementation',
+          )
+        }
         if (!source.startsWith('@deepseek-ai/')) return null
         if (CLIENT_EXTERNALS.includes(source)) return null // platform module: external wins
         if (INLINE_SAFE.test(source)) return null // wire/type layer: inline is the point
@@ -182,6 +226,12 @@ function clientBundle(pluginId: string, entryFile: string): UserConfig {
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(pluginId)}, factory: (require) => {`,
       footer: `return module.exports; } });`,
       intro: 'var module = { exports: {} }; var exports = module.exports;',
+      // The CJS wrapper factory's `require` only resolves module-table entries
+      // (react, cordis, ...); it cannot load relative chunk URLs in the browser.
+      // Disable code splitting so dynamic import() inlines into the single
+      // factory chunk (Office preview libs — docx-preview, Univer — pull in
+      // several MB but only when first opened, the trade-off for wrapper safety).
+      codeSplitting: false,
     },
   }
 }
