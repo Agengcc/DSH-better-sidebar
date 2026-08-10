@@ -95,7 +95,6 @@ describe('AgentPtyRegistry', () => {
       expect(page.totalLines).toBeGreaterThan(0)
       expect(page.text).toContain('line1')
       expect(page.text).toContain('line3')
-      expect(page.truncated).toBe(false)
       // Negative offset reads from the end.
       const tail = registry.read(uuid, -2)
       expect(tail.lineBegin).toBeGreaterThanOrEqual(0)
@@ -110,6 +109,38 @@ describe('AgentPtyRegistry', () => {
     try {
       const uuid = registry.create('s1', 'resizer', '', process.cwd(), 80, 24)
       expect(() => registry.resize(uuid, 120, 40)).not.toThrow()
+    } finally {
+      registry.disposeAll()
+    }
+  })
+
+  it('resize clamps to the 2..1024 range and returns the applied dimensions', () => {
+    const registry = new AgentPtyRegistry(testShell())
+    try {
+      const uuid = registry.create('s1', 'clamp', '', process.cwd(), 80, 24)
+      // Oversized / undersized requests report the clamped values, so the
+      // echoed result always matches the pty (the tool contract).
+      expect(registry.resize(uuid, 5000, 1)).toEqual({ cols: 1024, rows: 2 })
+      expect(registry.resize(uuid, -3, 80.9)).toEqual({ cols: 2, rows: 80 })
+      expect(registry.resize(uuid, 120, 40)).toEqual({ cols: 120, rows: 40 })
+      // create clamps through the same helper.
+      const other = registry.create('s1', 'clamped-create', '', process.cwd(), 1, 9999)
+      expect(registry.get(other)!.pty.cols).toBe(2)
+      expect(registry.get(other)!.pty.rows).toBe(1024)
+    } finally {
+      registry.disposeAll()
+    }
+  })
+
+  it('assertOwned rejects a uuid owned by another session', () => {
+    const registry = new AgentPtyRegistry(testShell())
+    try {
+      const mine = registry.create('s1', 'mine', '', process.cwd(), 80, 24)
+      const theirs = registry.create('s2', 'theirs', '', process.cwd(), 80, 24)
+      expect(() => registry.assertOwned(mine, 's1')).not.toThrow()
+      // A foreign uuid is indistinguishable from an unknown one.
+      expect(() => registry.assertOwned(theirs, 's1')).toThrow(/not found/)
+      expect(() => registry.assertOwned('nope', 's1')).toThrow(/not found/)
     } finally {
       registry.disposeAll()
     }
@@ -182,6 +213,10 @@ describe('AgentPtyRegistry', () => {
       // No pty or transcript fields on the snapshot.
       expect('pty' in snap).toBe(false)
       expect('transcript' in snap).toBe(false)
+      // sessionId is registry-internal ownership, never serialized (it would
+      // violate the terminal_list output schema's additionalProperties:false).
+      expect('sessionId' in snap).toBe(false)
+      expect('sessionId' in registry.list('s1')[0]!).toBe(false)
     } finally {
       registry.disposeAll()
     }

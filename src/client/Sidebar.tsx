@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
+  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
   reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
   TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
@@ -35,6 +35,10 @@ import { t } from './locales.ts'
 import { api } from './api.ts'
 import { openSidebarFile } from './intercept.tsx'
 import css from './sidebar.module.css'
+
+/** How many consecutive reconnect failures stop the agent-terminals push loop
+ * (mirror of the terminal view's own cap; the loop restarts on session switch). */
+const FAILURE_LIMIT = 3
 
 /** Render the content of one tab (dispatched by type). */
 function TabContent(props: {
@@ -83,19 +87,21 @@ function TabContent(props: {
   }
 }
 
-/** The + menu options for the current state (terminal cap applied). */
+/** The + menu options for the current state (UI-tab terminal cap applied).
+ * Agent-owned terminals (`agent:` tabs) are the model's, not the user's:
+ * they never count toward the per-session UI cap. */
 function buildNewTabOptions(state: SidebarState): NewTabOption[] {
-  const terminalCount = allLeaves(state.splits)
+  const uiTerminalCount = allLeaves(state.splits)
     .flatMap(leaf => leaf.tabs)
-    .filter(tab => tab.type === 'terminal').length
+    .filter(tab => tab.type === 'terminal' && !isAgentTabId(tab.id)).length
   return [
     { id: 'explorer', label: t('openExplorer'), icon: tabTypeIcon('explorer', 16) },
     { id: 'git', label: t('openGit'), icon: tabTypeIcon('git', 16) },
     { id: 'subagent', label: t('openSubagent'), icon: tabTypeIcon('subagent', 16) },
     {
       id: 'terminal',
-      label: terminalCount >= TERMINAL_LIMIT ? `${t('newTerminal')} (${t('terminalLimit')})` : t('newTerminal'),
-      disabled: terminalCount >= TERMINAL_LIMIT,
+      label: uiTerminalCount >= TERMINAL_LIMIT ? `${t('newTerminal')} (${t('terminalLimit')})` : t('newTerminal'),
+      disabled: uiTerminalCount >= TERMINAL_LIMIT,
       icon: tabTypeIcon('terminal', 16),
     },
   ]
@@ -145,13 +151,16 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
    * create / close / exit; the sidebar reconciles the list into tabs
    * (id `agent:<uuid>`, title from the agent). A disconnected socket
    * retries with a short backoff so a refresh or transient drop reattaches
-   * the same shell without losing the agent's work.
+   * the same shell without losing the agent's work — capped like the
+   * terminal view's own reconnect loop, so a refused endpoint never spins
+   * forever (the next session switch restarts the loop).
    */
   useEffect(() => {
     if (sessionId === undefined) return
     let socket: WebSocket | null = null
     let retry: number | undefined
     let closed = false
+    let failures = 0
     const connect = (): void => {
       if (closed) return
       const url = new URL('/sidebar/ws/agent-terminals', location.origin)
@@ -169,7 +178,13 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         }
       }
       socket.onclose = () => {
-        if (!closed) retry = window.setTimeout(connect, 2000)
+        if (closed) return
+        failures += 1
+        if (failures >= FAILURE_LIMIT) {
+          console.error('[dsh-better-sidebar] agent-terminals connection failed; stopping reconnect loop', sessionId)
+          return
+        }
+        retry = window.setTimeout(connect, 2000)
       }
       socket.onerror = () => { socket?.close() }
     }
@@ -265,8 +280,8 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       const tab = leaf?.tabs.find(candidate => candidate.id === tabId)
       store.reduce(s => closeTab(s, paneId, tabId))
       if (tab?.type === 'terminal') {
-        if (tabId.startsWith('agent:')) {
-          const uuid = tabId.slice('agent:'.length)
+        if (isAgentTabId(tabId)) {
+          const uuid = agentUuidOf(tabId)
           void api.agentPtyClose(uuid).catch(() => { /* the host may already have released it */ })
         } else if (sessionId !== undefined) {
           void api.ptyClose({ sessionId, cwd }, tabId).catch(() => { /* the host may already have released it */ })
@@ -350,7 +365,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         return openTab(s, { id: 'subagent', type: 'subagent', title: t('subagent') })
       }
       if (optionId === 'terminal') {
-        const count = allLeaves(s.splits).flatMap(leaf => leaf.tabs).filter(tab => tab.type === 'terminal').length
+        const count = allLeaves(s.splits)
+          .flatMap(leaf => leaf.tabs)
+          .filter(tab => tab.type === 'terminal' && !isAgentTabId(tab.id)).length
         if (count >= TERMINAL_LIMIT) return s
         const tab: SidebarTab = {
           id: `terminal:${s.nextTerminal}`,

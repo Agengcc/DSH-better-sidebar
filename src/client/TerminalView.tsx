@@ -25,25 +25,12 @@ import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
-import type { SidebarStore } from './state.ts'
+import { agentUuidOf, isAgentTabId, type SidebarStore } from './state.ts'
 import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
 import css from './sidebar.module.css'
 
 /** How many consecutive unreasoned failures before showing the error banner. */
 const FAILURE_LIMIT = 3
-
-/** Prefix marking a tab id as an agent-owned terminal (suffix is the uuid). */
-const AGENT_TAB_PREFIX = 'agent:'
-
-/** Whether a tab id refers to an agent-owned terminal. */
-function isAgentTab(tabId: string): boolean {
-  return tabId.startsWith(AGENT_TAB_PREFIX)
-}
-
-/** Extract the agent terminal uuid from an `agent:<uuid>` tab id. */
-function agentUuidOf(tabId: string): string {
-  return tabId.slice(AGENT_TAB_PREFIX.length)
-}
 
 /**
  * Curated ANSI palettes for the terminal. The surface colors (background,
@@ -126,7 +113,7 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
       // Agent terminals attach by uuid (the host looks them up in the agent
       // pty registry); UI-tab terminals attach by sessionId+tab (the host
       // uses the UI-tab pty manager). Same upgrade endpoint, different query.
-      if (isAgentTab(tabId)) {
+      if (isAgentTabId(tabId)) {
         url.search = new URLSearchParams({ uuid: agentUuidOf(tabId) }).toString()
       } else {
         const params = new URLSearchParams({ sessionId: scope.sessionId, tab: tabId })

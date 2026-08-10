@@ -45,12 +45,15 @@ describe('dsh-better-sidebar plugin export shape', () => {
     expect(resolved.openByDefault).toBe(true)
     expect(resolved.defaultWidthPercent).toBe(30)
     expect(resolved.autoOpenSubagent).toBe(true)
+    // The terminal tools default OFF (the feature is dormant until the user
+    // enables it in the side card settings).
+    expect(resolved.agentTerminalTools).toBe(false)
     // A stored overridden value resolves through (the range contract is
     // enforced by the settings service on write); the new pref keeps its
     // default when the stored document predates it.
     const overridden = (PrefsSchema as unknown as {
       (input: Record<string, unknown> | undefined): Record<string, unknown>
     })({ openByDefault: false, defaultWidthPercent: 45 })
-    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
+    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
   })
 })

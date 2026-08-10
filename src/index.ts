@@ -23,13 +23,14 @@ import {
   SIDEBAR_PREFS_NS,
   type ResolvedSidebarConfig,
   type SidebarConfig,
+  type SidebarPrefs,
 } from './config.ts'
 import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
 import { isTrustedApiRequest } from './trust-fence.ts'
 import * as git from './git.ts'
 import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
-import { AgentPtyRegistry, type AgentTerminalHandle } from './agent-pty.ts'
+import { AgentPtyRegistry, clampDims, type AgentTerminalHandle } from './agent-pty.ts'
 import { registerTools } from './tools.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
@@ -315,9 +316,34 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   // which call the seam in-process. Deployments without a settings service
   // simply never fill the face and the client falls back to the defaults.
   let settingsFace: SidebarSettingsFace | undefined
+  // The model-facing terminal tools are gated on the side-card setting
+  // `agentTerminalTools` (default off): nothing is injected until the user
+  // turns the feature on, and turning it off mid-session unregisters the
+  // tools and releases the agent terminals they created.
+  let toolsDisposers: (() => void) | null = null
+  const syncToolsGate = (scope: { get(): SidebarPrefs }): void => {
+    if (scope.get().agentTerminalTools) {
+      if (toolsDisposers === null) {
+        toolsDisposers = registerTools(ctx, agentPtyRegistry, (sessionId) => sessionCwdOf(ctx, sessionId))
+      }
+    } else if (toolsDisposers !== null) {
+      toolsDisposers()
+      toolsDisposers = null
+      // The feature is off: release every agent terminal the model created
+      // while it was on (they are only reachable through the tools). The
+      // registry change fires the push, so the sidebar reconciles them away.
+      agentPtyRegistry.disposeAll()
+    }
+  }
   ctx.inject(['settings'], (sctx) => {
     const ns: SettingsNamespace = settingsNamespace(SIDEBAR_PREFS_NS)
-    sctx.settings.register(ns, PrefsSchema)
+    // The structural settings mirror types `schema` as unknown, so the
+    // generic is not inferred here; the real service resolves it from the
+    // schemastery schema (PrefsSchema) — narrow the owner scope explicitly.
+    const scope = sctx.settings.register(ns, PrefsSchema) as {
+      get(): SidebarPrefs
+      watch(callback: (next: SidebarPrefs, prev: SidebarPrefs) => void): () => void
+    }
     const viewOf = (): { value?: unknown; revision?: number } => {
       const descriptor = sctx.settings.describe({ redactSecrets: true }).find(candidate => candidate.ns === ns)
       return descriptor === undefined
@@ -331,14 +357,11 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         return viewOf()
       },
     }
+    // Register (or unregister) the terminal tools from the current setting,
+    // and keep them in sync with every settings commit.
+    syncToolsGate(scope)
+    scope.watch(() => { syncToolsGate(scope) })
   })
-
-  // ── Model-facing tools (terminal_create / list / send / read / wait_for / resize / signal / close) ─
-  // Registered once at activation; the disposer is attached to the plugin
-  // fiber by the tools registry, so unloading unregisters them. The cwd
-  // resolver threads the live session cwd (authoritative from the session
-  // store, falling back to the process cwd) so the model never passes it.
-  registerTools(ctx, agentPtyRegistry, (sessionId) => sessionCwdOf(ctx, sessionId))
 
   // ── JSON API ────────────────────────────────────────────────────────────
   const api = buildApi(ctx, ptyManager, agentPtyRegistry, resolved, () => settingsFace)
@@ -467,6 +490,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   }), 'dsh-better-sidebar: agent-terminals push WebSocket')
 
   ctx.effect(() => () => {
+    toolsDisposers?.()
     ptyManager.disposeAll()
     agentPtyRegistry.disposeAll()
     wss.close()
@@ -530,7 +554,7 @@ async function attachTerminal(
         ws.close(1011, `agent terminal "${uuid}" not found`)
         return
       }
-      pumpAgentTerminal(agentPtyRegistry, handle, ws, resolved)
+      pumpAgentTerminal(agentPtyRegistry, handle, ws)
       return
     }
     const sessionId = url.searchParams.get('sessionId')
@@ -577,7 +601,8 @@ async function attachTerminal(
         && control.type === 'resize'
         && typeof control.cols === 'number' && typeof control.rows === 'number'
       ) {
-        handle.pty.resize(Math.max(2, Math.floor(control.cols)), Math.max(2, Math.floor(control.rows)))
+        const dims = clampDims(control.cols, control.rows)
+        handle.pty.resize(dims.cols, dims.rows)
       } else {
         handle.pty.write(text)
       }
@@ -606,7 +631,6 @@ function pumpAgentTerminal(
   registry: AgentPtyRegistry,
   handle: AgentTerminalHandle,
   ws: WebSocket,
-  _resolved: ResolvedSidebarConfig,
 ): void {
   if (handle.transcript !== '') ws.send(handle.transcript)
   const onData = (data: string): void => {
@@ -642,7 +666,8 @@ function pumpAgentTerminal(
       && control.type === 'resize'
       && typeof control.cols === 'number' && typeof control.rows === 'number'
     ) {
-      handle.pty.resize(Math.max(2, Math.floor(control.cols)), Math.max(2, Math.floor(control.rows)))
+      const dims = clampDims(control.cols, control.rows)
+      handle.pty.resize(dims.cols, dims.rows)
     } else if (control === null) {
       // Raw text input (a JSON-looking string the pty would have received
       // verbatim is reachable in theory but is exotic for an agent terminal;

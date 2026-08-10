@@ -602,19 +602,26 @@ describe('side card preferences', () => {
   })
 
   it('parses a valid value and clamps the percent into the contract range', async () => {
-    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false })
+    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false, agentTerminalTools: true })))
+      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false, agentTerminalTools: true })
   })
 
   it('falls back per-field when a stored field is malformed', async () => {
-    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no' })))
-      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true })
+    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no', agentTerminalTools: 'yes' })))
+      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true, agentTerminalTools: false })
   })
 
-  it('defaults autoOpenSubagent to true when the stored value is absent or malformed', async () => {
+  it('defaults autoOpenSubagent to true and agentTerminalTools to false when the stored value is absent or malformed', async () => {
     expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 40 })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true })
+      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true, agentTerminalTools: false })
     expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, autoOpenSubagent: 1 }))).autoOpenSubagent)
+      .toBe(true)
+    // The terminal-tools feature is OFF by default; only an explicit true turns it on.
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40 }))).agentTerminalTools)
+      .toBe(false)
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, agentTerminalTools: 1 }))).agentTerminalTools)
+      .toBe(false)
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, agentTerminalTools: true }))).agentTerminalTools)
       .toBe(true)
   })
 
@@ -622,9 +629,9 @@ describe('side card preferences', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)

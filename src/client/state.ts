@@ -399,6 +399,21 @@ export function resizeSplit(node: SplitNode, splitId: string, index: number, del
 /** Prefix marking a tab id as an agent-owned terminal (suffix is the uuid). */
 export const AGENT_TAB_PREFIX = 'agent:'
 
+/** Whether a tab id refers to an agent-owned terminal. */
+export function isAgentTabId(tabId: string): boolean {
+  return tabId.startsWith(AGENT_TAB_PREFIX)
+}
+
+/** Extract the agent terminal uuid from an `agent:<uuid>` tab id. */
+export function agentUuidOf(tabId: string): string {
+  return tabId.slice(AGENT_TAB_PREFIX.length)
+}
+
+/** Build the sidebar tab id for one agent terminal uuid. */
+export function agentTabId(uuid: string): string {
+  return `${AGENT_TAB_PREFIX}${uuid}`
+}
+
 /**
  * Reconcile the sidebar's agent-terminal tabs with the host's live list.
  * The host pushes the current list of agent terminals (created by the model
@@ -416,11 +431,11 @@ export function reconcileAgentTerminals(
   agentTerminals: ReadonlyArray<{ uuid: string; title: string }>,
 ): SidebarState {
   const existingTabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
-  const existingAgentTabs = existingTabs.filter(tab => tab.id.startsWith(AGENT_TAB_PREFIX))
-  const existingUuids = new Set(existingAgentTabs.map(tab => tab.id.slice(AGENT_TAB_PREFIX.length)))
+  const existingAgentTabs = existingTabs.filter(tab => isAgentTabId(tab.id))
+  const existingUuids = new Set(existingAgentTabs.map(tab => agentUuidOf(tab.id)))
   const serverUuids = new Set(agentTerminals.map(t => t.uuid))
   const toAdd = agentTerminals.filter(t => !existingUuids.has(t.uuid))
-  const toRemove = existingAgentTabs.filter(tab => !serverUuids.has(tab.id.slice(AGENT_TAB_PREFIX.length)))
+  const toRemove = existingAgentTabs.filter(tab => !serverUuids.has(agentUuidOf(tab.id)))
   if (toAdd.length === 0 && toRemove.length === 0) return state
   // Remove tabs whose uuids vanished from the server list (the agent closed
   // them, or the pty exited and was reaped). Reuse closeTab's leaf cleanup.
@@ -436,7 +451,7 @@ export function reconcileAgentTerminals(
   let next: SidebarState = { ...state, splits }
   for (const terminal of toAdd) {
     const tab: SidebarTab = {
-      id: `${AGENT_TAB_PREFIX}${terminal.uuid}`,
+      id: agentTabId(terminal.uuid),
       type: 'terminal',
       title: terminal.title,
     }

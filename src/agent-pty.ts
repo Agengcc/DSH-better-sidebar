@@ -27,17 +27,29 @@ export type AgentTerminalSignal = (typeof ALLOWED_SIGNALS)[number]
 /** Default read page size (lines) when the caller omits `count`. */
 export const DEFAULT_READ_COUNT = 500
 
+/** Smallest pty dimension the registry accepts (mirrors the tool contract). */
+export const TERMINAL_DIM_MIN = 2
+/** Largest pty dimension the registry accepts (mirrors the tool contract). */
+export const TERMINAL_DIM_MAX = 1024
+
+/** Clamp one cols×rows pair into the supported pty range (flooring decimals). */
+export function clampDims(cols: number, rows: number): { cols: number; rows: number } {
+  const clamp = (value: number): number =>
+    Math.min(TERMINAL_DIM_MAX, Math.max(TERMINAL_DIM_MIN, Math.floor(value)))
+  return { cols: clamp(cols), rows: clamp(rows) }
+}
+
 /**
  * Serializable snapshot of one agent terminal — the shape the model sees
  * through `terminal_list` and the sidebar sees through the push endpoint.
  * Carries no pty reference and no transcript (those are reached through
- * dedicated read/attach paths).
+ * dedicated read/attach paths), and no sessionId: ownership is registry
+ * internals, scoped by the caller (list filters by session, the push
+ * endpoint scopes by its query param), never part of the serialized view.
  */
 export interface AgentTerminalSnapshot {
   /** Stable opaque handle the model passes back to other terminal_* tools. */
   uuid: string
-  /** The conversation id this terminal belongs to (scope filter for list). */
-  sessionId: string
   /** Display title the model chose at create time. */
   title: string
   /** The command the model asked to run at create time (verbatim). */
@@ -115,8 +127,6 @@ export interface AgentTerminalReadResult {
   lineBegin: number
   /** 0-based index of the last line in `text` (exclusive). */
   lineEnd: number
-  /** Whether `text` was truncated to fit the read cap. */
-  truncated: boolean
 }
 
 /** Outcome of {@link AgentPtyRegistry.waitFor}. */
@@ -158,7 +168,6 @@ export type AgentTerminalWaitResult =
 export function snapshotOf(handle: AgentTerminalHandle): AgentTerminalSnapshot {
   const out: AgentTerminalSnapshot = {
     uuid: handle.uuid,
-    sessionId: handle.sessionId,
     title: handle.title,
     command: handle.command,
     exited: handle.exited,
@@ -201,10 +210,11 @@ export class AgentPtyRegistry {
     rows = 24,
   ): string {
     const uuid = randomUUID()
+    const dims = clampDims(cols, rows)
     const pty = nodePty.spawn(this.shell, [], {
       name: 'xterm-256color',
-      cols: Math.max(2, Math.floor(cols)),
-      rows: Math.max(2, Math.floor(rows)),
+      cols: dims.cols,
+      rows: dims.rows,
       cwd,
       env: { ...process.env },
     })
@@ -267,6 +277,20 @@ export class AgentPtyRegistry {
     return handle
   }
 
+  /**
+   * Resolve a live handle that belongs to `sessionId`, or throw `not-found`.
+   * The model-facing tools call this before every uuid-keyed operation: a
+   * uuid from another session is indistinguishable from an unknown one, so a
+   * model can never reach (or probe) a terminal it does not own.
+   */
+  assertOwned(uuid: string, sessionId: string): AgentTerminalHandle {
+    const handle = this.expect(uuid)
+    if (handle.sessionId !== sessionId) {
+      throw new SidebarError('not-found', `agent terminal "${uuid}" not found`, 404)
+    }
+    return handle
+  }
+
   /** Resolve a handle's snapshot, or undefined if it does not exist. */
   snapshot(uuid: string): AgentTerminalSnapshot | undefined {
     const handle = this.sessions.get(uuid)
@@ -310,15 +334,19 @@ export class AgentPtyRegistry {
       totalLines,
       lineBegin: start,
       lineEnd: end,
-      truncated: false,
     }
   }
 
-  /** Resize a terminal's pty (clamped to a 2..1024 sane range). */
-  resize(uuid: string, cols: number, rows: number): void {
+  /**
+   * Resize a terminal's pty, clamped to the 2..1024 sane range.
+   * @returns the dimensions actually applied (the caller echoes these, so the
+   * reported value always matches the pty).
+   */
+  resize(uuid: string, cols: number, rows: number): { cols: number; rows: number } {
     const handle = this.expect(uuid)
-    if (handle.exited) return
-    handle.pty.resize(Math.max(2, Math.floor(cols)), Math.max(2, Math.floor(rows)))
+    const dims = clampDims(cols, rows)
+    if (!handle.exited) handle.pty.resize(dims.cols, dims.rows)
+    return dims
   }
 
   /**

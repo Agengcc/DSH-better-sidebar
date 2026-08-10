@@ -27,17 +27,22 @@ import {
 /** Maximum UTF-8 bytes of one `terminal_read` result text. */
 const READ_BYTE_LIMIT = 256 * 1024
 
-/** Bound a string to a byte limit, marking truncation. */
-function boundBytes(text: string, maxBytes: number): { text: string; truncated: boolean } {
-  const bytes = Buffer.byteLength(text, 'utf8')
-  if (bytes <= maxBytes) return { text, truncated: false }
-  // Trim by character count proportional to the overage, then walk back to a
-  // valid UTF-8 boundary (Buffer.subarray with garbage on a trailing multibyte
-  // sequence would decode to U+FFFD).
-  const ratio = maxBytes / bytes
-  const cut = Math.floor(text.length * ratio)
-  const buf = Buffer.from(text, 'utf8').subarray(0, maxBytes)
-  return { text: buf.toString('utf8').slice(0, cut), truncated: true }
+/**
+ * Bound a string to a byte limit, marking truncation. Truncation never
+ * splits a multi-byte UTF-8 sequence: when the byte cap lands inside one,
+ * the walk-back retreats to the sequence's leading byte so the retained
+ * prefix decodes cleanly (a split would decode to U+FFFD).
+ * @internal exported for the unit tests, like {@link snapshotOf}.
+ */
+export function boundBytes(text: string, maxBytes: number): { text: string; truncated: boolean } {
+  const buf = Buffer.from(text, 'utf8')
+  if (buf.byteLength <= maxBytes) return { text, truncated: false }
+  // The byte at `end` is a continuation byte (10xxxxxx) exactly when the
+  // character that started before `end` spills past the cap. Stop at the
+  // first non-continuation byte — the retained prefix is then intact.
+  let end = maxBytes
+  while (end > 0 && ((buf[end] ?? 0) & 0xc0) === 0x80) end -= 1
+  return { text: buf.subarray(0, end).toString('utf8'), truncated: true }
 }
 
 /** Pure text projection helper (the canonical value is already structured). */
@@ -53,27 +58,36 @@ function requireAgent(agent: Agent | undefined): Agent {
   return agent
 }
 
-/** Resolve the calling agent's session id (the registry scope filter). */
-function sessionOf(exec: ToolRunContext): { agent: Agent; sessionId: string } {
-  const agent = requireAgent(exec.agent)
-  return { agent, sessionId: agent.session.id }
+/** Resolve the calling agent's session id (the registry scope + ownership key). */
+function sessionIdOf(exec: ToolRunContext): string {
+  return requireAgent(exec.agent).session.id
 }
 
 /**
- * Register the seven terminal tools against the host tool registry. The
+ * Register the eight terminal tools against the host tool registry. The
  * `resolveCwd` callback threads the live session cwd (authoritative from the
  * session store, falling back to the process cwd) so a freshly-created
  * terminal lands in the right directory without the model passing it.
+ * Every uuid-keyed tool first asserts the terminal belongs to the calling
+ * session (`registry.assertOwned`), so one agent can never reach another
+ * session's terminals.
  * @param ctx - host plugin context (carries the tools service).
  * @param registry - the agent-owned terminal registry.
  * @param resolveCwd - live cwd resolver for one session id.
+ * @returns a disposer that unregisters all eight tools (the caller gates
+ * registration on the side-card setting and calls this to turn them off).
  */
 export function registerTools(
   ctx: Context,
   registry: AgentPtyRegistry,
   resolveCwd: (sessionId: string) => string,
-): void {
-  ctx.tools.register(defineTool({
+): () => void {
+  const disposers: Array<() => void> = []
+  const register = (tool: ReturnType<typeof defineTool>): void => {
+    disposers.push(ctx.tools.register(tool))
+  }
+
+  register(defineTool({
     name: 'terminal_create',
     description:
       'Open a persistent terminal in the sidebar and run a command in it. '
@@ -111,14 +125,14 @@ export function registerTools(
     },
     execute: (args: { title: string; command: string }, exec) => {
       exec.signal.throwIfAborted()
-      const { sessionId } = sessionOf(exec)
+      const sessionId = sessionIdOf(exec)
       const cwd = resolveCwd(sessionId)
       const uuid = registry.create(sessionId, args.title, args.command, cwd, 80, 24)
       return Promise.resolve({ uuid, title: args.title })
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_list',
     description:
       'List every terminal the current agent has opened in this session. Returns each terminal\'s uuid, title, '
@@ -154,19 +168,19 @@ export function registerTools(
       },
     },
     execute: (_args, exec) => {
-      const { sessionId } = sessionOf(exec)
+      const sessionId = sessionIdOf(exec)
       return Promise.resolve(registry.list(sessionId))
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_send',
     description:
       'Send raw text (keystrokes) to a terminal opened with terminal_create — tmux send-keys semantics. '
       + 'The text is written verbatim to the pty stdin. '
       + 'To submit a command, set submit=true (appends an Enter key); do NOT put "\\n" or "\\r" in the text yourself. '
       + 'To send Ctrl+C (interrupt the running command), use the terminal_signal tool with signal="SIGINT" — do NOT try to send the control character "\\u0003" as text. '
-      + 'Similarly use terminal_signal for Ctrl+D (EOF), Ctrl+Z (suspend), etc. '
+      + 'Use terminal_signal with signal="SIGTSTP" for Ctrl+Z (suspend) as well. '
       + 'This tool does NOT wait for the command to finish or for output to settle — pair with terminal_read to observe the result. '
       + 'Throws if the terminal has exited.',
     parameters: {
@@ -200,13 +214,15 @@ export function registerTools(
     },
     execute: (args: { uuid: string; text: string; submit?: boolean }, exec) => {
       exec.signal.throwIfAborted()
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
       const payload = args.submit === true ? `${args.text}\r` : args.text
       registry.send(args.uuid, payload)
       return Promise.resolve({ uuid: args.uuid, bytes: Buffer.byteLength(payload, 'utf8') })
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_read',
     description:
       'Read a bounded page of retained output from an agent terminal without sending input. '
@@ -249,6 +265,8 @@ export function registerTools(
     },
     execute: (args: { uuid: string; offset?: number; count?: number }, exec) => {
       exec.signal.throwIfAborted()
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
       const result = registry.read(args.uuid, args.offset, args.count)
       const bounded = boundBytes(result.text, READ_BYTE_LIMIT)
       return Promise.resolve({
@@ -261,7 +279,7 @@ export function registerTools(
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_wait_for',
     description:
       'Block until a substring appears in a terminal\'s retained transcript, or until the timeout elapses, or until the terminal exits — whichever happens first. '
@@ -298,7 +316,7 @@ export function registerTools(
               needle: { type: 'string', required: true },
               line: { type: 'integer', required: true, description: '0-based line index in the retained transcript where the needle first appeared.' },
               column: { type: 'integer', required: true, description: '0-based column index within that line where the match starts.' },
-              elapsed_ms: { type: 'integer', required: true, description: 'Wall-clock milliseconds from wait start to match.' },
+              elapsedMs: { type: 'integer', required: true, description: 'Wall-clock milliseconds from wait start to match.' },
             },
           },
           {
@@ -307,8 +325,8 @@ export function registerTools(
             properties: {
               kind: { type: 'string', required: true, const: 'timeout' },
               needle: { type: 'string', required: true },
-              timeout_ms: { type: 'integer', required: true, description: 'The configured timeout that elapsed.' },
-              total_lines: { type: 'integer', required: true, description: 'Total lines retained when the timeout fired. Call terminal_read to inspect the tail.' },
+              timeoutMs: { type: 'integer', required: true, description: 'The configured timeout that elapsed.' },
+              totalLines: { type: 'integer', required: true, description: 'Total lines retained when the timeout fired. Call terminal_read to inspect the tail.' },
             },
           },
           {
@@ -317,55 +335,42 @@ export function registerTools(
             properties: {
               kind: { type: 'string', required: true, const: 'exited' },
               needle: { type: 'string', required: true },
-              exit_code: { type: 'integer', description: 'Exit code, if known.' },
-              exit_signal: { type: 'string', description: 'Exit signal name, if killed by a signal.' },
+              exitCode: { oneOf: [{ type: 'integer' }, { type: 'null' }], description: 'Exit code, if known.' },
+              exitSignal: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'Exit signal name, if killed by a signal.' },
             },
           },
         ],
       },
       render: (_args, value) => {
-        const v = value as { kind: 'found' | 'timeout' | 'exited'; needle: string; elapsed_ms?: number; timeout_ms?: number; line?: number; column?: number; exit_code?: number | null; exit_signal?: string | null }
+        const v = value as { kind: 'found' | 'timeout' | 'exited'; needle: string; elapsedMs?: number; timeoutMs?: number; line?: number; column?: number; exitCode?: number | null; exitSignal?: string | null }
         if (v.kind === 'found') {
-          return [{ type: 'text', text: `Found "${v.needle}" at line ${v.line}, column ${v.column} (after ${v.elapsed_ms}ms).` }]
+          return [{ type: 'text', text: `Found "${v.needle}" at line ${v.line}, column ${v.column} (after ${v.elapsedMs}ms).` }]
         }
         if (v.kind === 'timeout') {
-          return [{ type: 'text', text: `Timed out after ${v.timeout_ms}ms waiting for "${v.needle}". Call terminal_read to inspect the transcript.` }]
+          return [{ type: 'text', text: `Timed out after ${v.timeoutMs}ms waiting for "${v.needle}". Call terminal_read to inspect the transcript.` }]
         }
-        const exitInfo = v.exit_code !== undefined ? ` (exit code ${v.exit_code})` : ''
+        const exitInfo = v.exitCode !== undefined && v.exitCode !== null ? ` (exit code ${v.exitCode})` : ''
         return [{ type: 'text', text: `Terminal exited before "${v.needle}" appeared${exitInfo}.` }]
       },
     },
     async execute(args: { uuid: string; needle: string; timeout_ms?: number }, exec) {
       exec.signal.throwIfAborted()
-      if (args.needle === '') {
-        throw new Error('needle must be a non-empty string')
-      }
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
+      // The registry validates the needle (empty → bad-request) and returns
+      // the camelCase result the schema above declares directly — no
+      // field-by-field projection.
       const timeoutMs = args.timeout_ms ?? 10_000
-      const result = await registry.waitFor(args.uuid, args.needle, timeoutMs, exec.signal)
-      // Project the registry's camelCase result into the snake_case canonical
-      // value declared by the output schema (the model sees snake_case).
-      if (result.kind === 'found') {
-        return { kind: 'found' as const, needle: result.needle, line: result.line, column: result.column, elapsed_ms: result.elapsedMs }
-      }
-      if (result.kind === 'timeout') {
-        return { kind: 'timeout' as const, needle: result.needle, timeout_ms: result.timeoutMs, total_lines: result.totalLines }
-      }
-      const out: { kind: 'exited'; needle: string; exit_code?: number; exit_signal?: string } = {
-        kind: 'exited',
-        needle: result.needle,
-      }
-      if (result.exitCode !== null && result.exitCode !== undefined) out.exit_code = result.exitCode
-      if (result.exitSignal !== null && result.exitSignal !== undefined) out.exit_signal = result.exitSignal
-      return out
+      return await registry.waitFor(args.uuid, args.needle, timeoutMs, exec.signal)
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_resize',
     description:
       'Resize an agent terminal\'s pty ( cols × rows ). The host clamps both to a 2..1024 sane range. '
       + 'Most shells redraw their prompt and any full-screen TUI on the next output frame. '
-      + 'No-op if the terminal has exited.',
+      + 'No-op if the terminal has exited. Returns the dimensions actually applied.',
     parameters: {
       uuid: { type: 'string', required: true, description: 'Terminal uuid from terminal_create or terminal_list.' },
       cols: { type: 'integer', required: true, description: 'New column count ( clamped to 2..1024 ).' },
@@ -387,15 +392,17 @@ export function registerTools(
     },
     execute: (args: { uuid: string; cols: number; rows: number }, exec) => {
       exec.signal.throwIfAborted()
-      registry.resize(args.uuid, args.cols, args.rows)
-      return Promise.resolve({ uuid: args.uuid, cols: args.cols, rows: args.rows })
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
+      const dims = registry.resize(args.uuid, args.cols, args.rows)
+      return Promise.resolve({ uuid: args.uuid, ...dims })
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_signal',
     description:
-      'Send a POSIX signal to an agent terminal\'s foreground process — this is how you send Ctrl+C, Ctrl+D, Ctrl+Z, etc. '
+      'Send a POSIX signal to an agent terminal\'s foreground process — this is how you send Ctrl+C, Ctrl+Z, etc. '
       + 'Use signal="SIGINT" for Ctrl+C (interrupt the running command), signal="SIGTERM" to request termination, '
       + 'signal="SIGKILL" to force-kill the pty, signal="SIGHUP" to hang up (many shells exit), signal="SIGTSTP" for Ctrl+Z (suspend). '
       + 'Do NOT try to send control characters (like "\\u0003") through terminal_send — use this tool instead. '
@@ -425,12 +432,14 @@ export function registerTools(
     },
     execute: (args: { uuid: string; signal: AgentTerminalSignal }, exec) => {
       exec.signal.throwIfAborted()
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
       registry.signal(args.uuid, args.signal)
       return Promise.resolve({ uuid: args.uuid, signal: args.signal })
     },
   }))
 
-  ctx.tools.register(defineTool({
+  register(defineTool({
     name: 'terminal_close',
     description:
       'Close an agent terminal and release its process. The uuid becomes invalid for all subsequent tool calls. '
@@ -455,8 +464,14 @@ export function registerTools(
     },
     execute: (args: { uuid: string }, exec) => {
       exec.signal.throwIfAborted()
+      const sessionId = sessionIdOf(exec)
+      registry.assertOwned(args.uuid, sessionId)
       const closed = registry.close(args.uuid)
       return Promise.resolve({ uuid: args.uuid, closed })
     },
   }))
+
+  return () => {
+    for (const dispose of disposers) dispose()
+  }
 }

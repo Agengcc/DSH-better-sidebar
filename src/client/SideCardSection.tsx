@@ -128,6 +128,13 @@ export function SideCardSection({ store }: SideCardSectionProps) {
     void commit({ autoOpenSubagent: next }).then(outcome => applyOutcome(previous, outcome))
   }
 
+  const onToggleTools = (next: boolean): void => {
+    const previous = prefs
+    setPrefs({ ...previous, agentTerminalTools: next })
+    setError(null)
+    void commit({ agentTerminalTools: next }).then(outcome => applyOutcome(previous, outcome))
+  }
+
   const commitWidth = (): void => {
     const parsed = Number(widthDraft)
     if (!Number.isFinite(parsed)) {
@@ -191,6 +198,19 @@ export function SideCardSection({ store }: SideCardSectionProps) {
           checked={prefs.autoOpenSubagent}
           aria-label={t('settingsSubagentTitle')}
           onChange={event => { onToggleSubagent(event.currentTarget.checked) }}
+        />
+      </label>
+      <label className={css.row}>
+        <span className={css.rowText}>
+          <span className={css.title}>{t('settingsToolsTitle')}</span>
+          <span className={css.desc}>{t('settingsToolsDesc')}</span>
+        </span>
+        <input
+          type="checkbox"
+          className={css.toggle}
+          checked={prefs.agentTerminalTools}
+          aria-label={t('settingsToolsTitle')}
+          onChange={event => { onToggleTools(event.currentTarget.checked) }}
         />
       </label>
       {error !== null && (
