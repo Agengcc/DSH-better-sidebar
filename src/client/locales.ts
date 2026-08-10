@@ -78,6 +78,16 @@ const zh = {
   settingsWidthSuffix: '%',
   settingsSaveFailed: '保存失败',
   settingsConflict: '设置已被其他窗口修改，请重试',
+  binaryNoPreview: '此文件类型不支持预览',
+  downloadToView: '下载查看',
+  officeTooLarge: '文件过大，无法预览',
+  officeCorrupt: '文件损坏或格式无效',
+  officeEncrypted: '不支持加密文件',
+  officeLoadFailed: 'Office 预览组件加载失败',
+  previousSlide: '上一页',
+  nextSlide: '下一页',
+  zoom: '缩放',
+  zoomHint: 'Alt + 滚轮',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -153,6 +163,16 @@ const en: Record<keyof typeof zh, string> = {
   settingsWidthSuffix: '%',
   settingsSaveFailed: 'Failed to save',
   settingsConflict: 'The setting changed in another window — please retry',
+  binaryNoPreview: 'This file type cannot be previewed',
+  downloadToView: 'Download to view',
+  officeTooLarge: 'File too large to preview',
+  officeCorrupt: 'File is corrupt or in an invalid format',
+  officeEncrypted: 'Encrypted files are not supported',
+  officeLoadFailed: 'Office preview component failed to load',
+  previousSlide: 'Previous',
+  nextSlide: 'Next',
+  zoom: 'Zoom',
+  zoomHint: 'Alt + wheel',
 }
 
 /** Translate a copy key in the browser's language (zh → zh, else en). */

@@ -9,7 +9,7 @@
  * that merges the tab into the pane. The tree and all operations live in
  * state.ts; this file is pure presentation over them.
  */
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
@@ -127,6 +127,19 @@ function LeafView(props: {
   const { leaf, newTabOptions, actions, onNewTab, renderTab } = props
   const [dropZone, setDropZone] = useState<DropZone | null>(null)
   const activeTab = leaf.tabs.find(tab => tab.id === leaf.active) ?? leaf.tabs[leaf.tabs.length - 1]
+
+  useEffect(() => {
+    const clear = (): void => { setDropZone(null) }
+    window.addEventListener('dragend', clear, true)
+    window.addEventListener('drop', clear, true)
+    window.addEventListener('blur', clear)
+    return () => {
+      window.removeEventListener('dragend', clear, true)
+      window.removeEventListener('drop', clear, true)
+      window.removeEventListener('blur', clear)
+    }
+  }, [])
+
   return (
     <div
       className={clsx(css.pane, dropZone !== null && css.paneDrop)}

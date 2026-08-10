@@ -5,7 +5,7 @@
  * terminal). Tabs are draggable; dropping onto another tab inserts before it,
  * dropping on the strip background appends to this pane.
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   IconCloseFill14, IconPlusOutline16, Menu,
@@ -46,6 +46,12 @@ export function parseDrag(raw: string): TabDragPayload | null {
   }
 }
 
+/** Global tab-drag flag: PDF iframes become non-interactive synchronously. */
+function setTabDragging(active: boolean): void {
+  if (active) document.body.setAttribute('data-dsh-tab-dragging', '')
+  else document.body.removeAttribute('data-dsh-tab-dragging')
+}
+
 export function TabBar(props: {
   paneId: string
   tabs: SidebarTab[]
@@ -63,6 +69,18 @@ export function TabBar(props: {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
+  useEffect(() => {
+    const clear = (): void => { setTabDragging(false); setDragOver(false) }
+    window.addEventListener('dragend', clear, true)
+    window.addEventListener('drop', clear, true)
+    window.addEventListener('blur', clear)
+    return () => {
+      window.removeEventListener('dragend', clear, true)
+      window.removeEventListener('drop', clear, true)
+      window.removeEventListener('blur', clear)
+    }
+  }, [])
+
   return (
     <div
       className={clsx(css.tabBar, dragOver && css.tabBarDrop)}
@@ -79,6 +97,7 @@ export function TabBar(props: {
         event.preventDefault()
         event.stopPropagation()
         setDragOver(false)
+        setTabDragging(false)
         const raw = event.dataTransfer.getData(TAB_DRAG_TYPE)
         const payload = parseDrag(raw)
         if (payload !== null) onDropTab(payload, null)
@@ -92,13 +111,16 @@ export function TabBar(props: {
             title={tab.title}
             draggable
             onDragStart={(event) => {
+              setTabDragging(true)
               event.dataTransfer.setData(TAB_DRAG_TYPE, serializeDrag({ tabId: tab.id, paneId }))
               event.dataTransfer.effectAllowed = 'move'
             }}
+            onDragEnd={() => { setTabDragging(false); setDragOver(false) }}
             onDragOver={(event) => { event.preventDefault(); event.stopPropagation() }}
             onDrop={(event) => {
               event.preventDefault()
               event.stopPropagation()
+              setTabDragging(false)
               const raw = event.dataTransfer.getData(TAB_DRAG_TYPE)
               const payload = parseDrag(raw)
               if (payload !== null) onDropTab(payload, tab.id)

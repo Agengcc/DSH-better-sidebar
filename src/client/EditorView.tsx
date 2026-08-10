@@ -13,21 +13,26 @@ import { EditorState } from '@codemirror/state'
 import { EditorView as CodeMirrorView, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { IconCheckOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, mediaUrl, type SessionScope } from './api.ts'
+import { api, downloadUrl, mediaUrl, type SessionScope } from './api.ts'
 import { languageForPath } from './lang.ts'
 import { cmSurfaceTheme, CmThemeCompartment } from './cm-themes.ts'
 import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { t } from './locales.ts'
+import { officeKindForExt } from './office-types.ts'
+import { DocxView, XlsxView } from './office-view.tsx'
+import { isPdfExt } from './pdf-types.ts'
+import { PdfView } from './PdfView.tsx'
+import { PptxView } from './PptxView.tsx'
+import { isImageExt } from './image-types.ts'
 import css from './sidebar.module.css'
 
-const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif']
 const MD_EXT = ['.md', '.markdown']
 
 type EditorLoad =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; kind: 'text' | 'image' | 'md'; content: string; truncated: boolean }
-  | { status: 'binary' }
+  | { status: 'ready'; kind: 'text' | 'image' | 'md' | 'docx' | 'xlsx' | 'pptx' | 'pdf'; content: string; truncated: boolean }
+  | { status: 'binary' }  // unknown binary / OLE legacy formats → download button
 
 /** Previewable files (rendered output vs source editing). */
 type ViewMode = 'preview' | 'edit'
@@ -57,15 +62,34 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     setDraft(null)
     setDirty(false)
     setSaveState('idle')
+    // Office preview short-circuit: the host's readText would NUL-probe every
+    // Office file as binary (a wasted round-trip), and .docx/.xlsx have their
+    // own renderers below. Detect by extension and skip fsRead entirely —
+    // the renderer fetches bytes through the media route itself.
+    const ext = extOfPath(path)
+    // Images are binary by nature; short-circuit before fsRead's NUL probe or
+    // every PNG/JPEG would be classified as an unsupported binary file.
+    if (isImageExt(ext)) {
+      setLoad({ status: 'ready', kind: 'image', content: '', truncated: false })
+      return
+    }
+    if (isPdfExt(ext)) {
+      setLoad({ status: 'ready', kind: 'pdf', content: '', truncated: false })
+      return
+    }
+    const officeKind = officeKindForExt(ext)
+    if (officeKind === 'docx' || officeKind === 'xlsx' || officeKind === 'pptx') {
+      setLoad({ status: 'ready', kind: officeKind, content: '', truncated: false })
+      return
+    }
+    if (officeKind === 'download-only') {
+      setLoad({ status: 'binary' })
+      return
+    }
     api.fsRead(scope, path).then((result) => {
       if (cancelled) return
-      const ext = extOfPath(path)
       if (result.kind === 'binary') {
         setLoad({ status: 'binary' })
-        return
-      }
-      if (IMAGE_EXT.includes(ext)) {
-        setLoad({ status: 'ready', kind: 'image', content: '', truncated: false })
         return
       }
       setLoad({
@@ -207,7 +231,14 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
       </div>
       {load.status === 'loading' && <div className={css.editorPlaceholder}>{t('loading')}</div>}
       {load.status === 'error' && <div className={css.editorError}>{load.message}</div>}
-      {load.status === 'binary' && <div className={css.editorPlaceholder}>{t('binary')}</div>}
+      {load.status === 'binary' && (
+        <div className={css.editorBinary}>
+          <span className={css.editorBinaryNotice}>{t('binaryNoPreview')}</span>
+          <a className={css.editorDownloadLink} href={downloadUrl(scope, path)} download>
+            {t('downloadToView')}
+          </a>
+        </div>
+      )}
       {editable && (
         <>
           {load.truncated && mode === 'edit' && <div className={css.editorBanner}>{t('truncation')}</div>}
@@ -221,6 +252,18 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
         <div className={css.editorImageWrap}>
           <img className={css.editorImage} src={mediaUrl(scope, path)} alt={title} />
         </div>
+      )}
+      {load.status === 'ready' && load.kind === 'docx' && (
+        <DocxView scope={scope} path={path} title={title} />
+      )}
+      {load.status === 'ready' && load.kind === 'xlsx' && (
+        <XlsxView scope={scope} path={path} title={title} />
+      )}
+      {load.status === 'ready' && load.kind === 'pptx' && (
+        <PptxView scope={scope} path={path} title={title} />
+      )}
+      {load.status === 'ready' && load.kind === 'pdf' && (
+        <PdfView scope={scope} path={path} title={title} />
       )}
       {previewable && mode === 'preview' && (
         <div className={css.editorMd}>

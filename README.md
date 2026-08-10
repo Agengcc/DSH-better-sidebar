@@ -94,6 +94,12 @@ dsh registry enable dsh-external/dsh-better-sidebar
 - **CodeMirror 6**：自动换行 + 按扩展名语法高亮（js/ts/jsx/tsx、json、python、html、css、xml、yaml、sql、java、c/c++、rust、go、php、shell、toml、nginx、dockerfile、properties…）
 - 脏点标记 + **Ctrl/Cmd+S 保存**（原子写入）；512KB 截断横幅、二进制文件提示
 - 图片直接预览；**Markdown 预览/编辑切换**，预览实时渲染未保存草稿
+- **PDF 原生预览**：使用浏览器内置 PDF 查看器，预览区始终保留下载入口
+- **Office 三件套预览**：
+  - `.docx` — 保真渲染（保留样式 / 页眉页脚 / 图片 / 表格），基于 [docx-preview](https://github.com/VolodymyrBaydalka/docxjs)
+  - `.xlsx` — 完整电子表格（多 sheet / 公式计算 / 列宽行高 / 合并单元格），基于 [Univer](https://univer.ai) + [SheetJS](https://sheetjs.com)
+  - `.pptx` — 高保真幻灯片预览（图片 / 表格 / 图表 / SmartArt）+ 上一页 / 下一页导航，基于 [pptx-renderer](https://github.com/aiden0z/pptx-renderer)
+  - `.doc` / `.xls` / `.ppt` 及其他二进制 — 下载按钮（旧 OLE 格式纯前端无成熟渲染库）
 - 切换 Tab 不卸载：编辑器保留草稿与撤销栈
 
 ### 💻 终端
@@ -275,6 +281,8 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 - Git 无 push/pull/fetch；无文件 watcher（手动刷新）
 - 工具行内的文件打开按钮（核心代码）不可拦截，仅"产出文件"行被接管
 - 终端 Tab **拖拽到另一分栏**时会重挂载（shell 重开）；切换 Tab / 切换会话（30 秒内返回）/ 刷新页面不会
+- `.xlsx` 预览不保留单元格样式（字体/颜色/边框/条件格式/图表）——SheetJS 社区版不解析样式，需保真请下载查看
+- Office/PPTX 预览组件内联进 client bundle，当前约 23MB（gzip ~4.8MB），首次加载较慢
 
 ## 🖥️ 平台支持
 
