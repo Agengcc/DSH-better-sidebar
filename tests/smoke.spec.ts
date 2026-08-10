@@ -20,6 +20,7 @@ interface FakeContext {
     registerUpgrade: (route: SidebarWebUpgradeRoute) => () => void
   }
   sessions: { get: (id: string) => { header: { cwd?: string } } | undefined }
+  tools: { register: (tool: unknown) => () => void }
   effect: (fn: () => void | (() => void), label?: string) => void
   /** The settings service never appears in the smoke context: the inject
    *  callback must never run (mirror of cordis' service-less inject). */
@@ -43,6 +44,7 @@ describe('host plugin smoke', () => {
         registerUpgrade: (route) => { upgrades.push(route); return () => {} },
       },
       sessions: { get: () => undefined },
+      tools: { register: () => () => {} },
       // The DSH-vendored cordis runs the registration effect immediately and
       // keeps its cleanup for disposal.
       effect: (fn) => {
@@ -55,7 +57,7 @@ describe('host plugin smoke', () => {
     }
     apply(ctx as never)
     expect(routes.map(route => route.path)).toEqual(['/sidebar/api', '/sidebar/file'])
-    expect(upgrades.map(route => route.path)).toEqual(['/sidebar/ws/terminal'])
+    expect(upgrades.map(route => route.path)).toEqual(['/sidebar/ws/terminal', '/sidebar/ws/agent-terminals'])
     // Teardown runs without throwing (pty manager has nothing open).
     for (const cleanup of effects) cleanup()
   })
@@ -177,6 +179,7 @@ describe('session cwd resolution over the API route', () => {
         registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
       },
       sessions: overrides.sessions ?? { get: () => undefined },
+      tools: { register: () => () => {} },
       // The vendored cordis runs registration effects immediately.
       effect: (fn: () => void | (() => void)) => { fn() },
       // No settings service: the namespace registration never runs.
@@ -252,8 +255,7 @@ describe('session cwd resolution over the API route', () => {
 
 describe('side card settings routes', () => {
   /** A minimal settings seam: register/describe/update with the revision guard. */
-  const createFakeSettings = () => {
-    const namespaces = new Map<string, {
+  const createFakeSettings = () => {    const namespaces = new Map<string, {
       schema: unknown
       value: Record<string, unknown> | undefined
       revision: number
@@ -296,6 +298,7 @@ describe('side card settings routes', () => {
         registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
       },
       sessions: { get: () => undefined },
+      tools: { register: () => () => {} },
       effect: (fn: () => void | (() => void)) => { fn() },
       inject: (deps: string[], callback: (sctx: { settings: unknown }) => void) => {
         if (deps.includes('settings') && settings !== undefined) callback({ settings })
@@ -339,7 +342,7 @@ describe('side card settings routes', () => {
     const read = await invoke(route, 'settings.get', {})
     expect(read.ok).toBe(true)
     expect(read.value).toEqual({
-      value: { openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true },
+      value: { openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false },
       revision: 0,
     })
 
@@ -369,5 +372,64 @@ describe('side card settings routes', () => {
     const result = await invoke(route, 'settings.update', { patch: 'nope' })
     expect(result.ok).toBe(false)
     expect(result.error?.message).toMatch(/plain object/)
+  })
+})
+
+describe('agent terminal tool gating', () => {
+  it('injects the eight tools only when the side-card setting is enabled (default off)', () => {
+    let registered = 0
+    let disposed = 0
+    // The tools currently registered (registered minus disposed).
+    const live = (): number => registered - disposed
+    // A ref container: the watch callback is only assigned inside a closure,
+    // which TypeScript's control-flow analysis ignores (the bare variable
+    // would narrow to null and refuse the optional call).
+    const watcherRef: { current: (() => void) | null } = { current: null }
+    let enabled = false
+    const settings = {
+      register() {
+        return {
+          get: () => ({ agentTerminalTools: enabled }),
+          watch: (callback: () => void) => { watcherRef.current = callback; return () => {} },
+          update: async () => {},
+          replace: async () => {},
+        }
+      },
+      describe: () => [],
+      async update() {},
+    }
+    const ctx = {
+      loader: { entries: () => [] },
+      httpServer: {
+        register: (route: SidebarWebRoute) => { void route; return () => {} },
+        registerUpgrade: (route: SidebarWebUpgradeRoute) => { void route; return () => {} },
+      },
+      sessions: { get: () => undefined },
+      tools: { register: () => { registered += 1; return () => { disposed += 1 } } },
+      effect: (fn: () => void | (() => void)) => { fn() },
+      inject: (deps: readonly string[], callback: (sctx: { settings: unknown }) => void) => {
+        if (deps.includes('settings')) callback({ settings })
+        return () => {}
+      },
+    }
+    apply(ctx as never)
+    // Default off: no tools are registered even though the settings service is mounted.
+    expect(live()).toBe(0)
+    // Flipping the setting on registers all eight tools.
+    enabled = true
+    watcherRef.current?.()
+    expect(live()).toBe(8)
+    expect(disposed).toBe(0)
+    // Flipping it back off unregisters them (and releases any agent terminals).
+    enabled = false
+    watcherRef.current?.()
+    expect(live()).toBe(0)
+    expect(disposed).toBe(8)
+    // And a redundant toggle registers them fresh (no double-registration per
+    // flip: the guard only skips when the tools are already live).
+    enabled = true
+    watcherRef.current?.()
+    expect(live()).toBe(8)
+    expect(registered).toBe(16)
   })
 })

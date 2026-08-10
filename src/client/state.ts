@@ -396,6 +396,70 @@ export function resizeSplit(node: SplitNode, splitId: string, index: number, del
   }
 }
 
+/** Prefix marking a tab id as an agent-owned terminal (suffix is the uuid). */
+export const AGENT_TAB_PREFIX = 'agent:'
+
+/** Whether a tab id refers to an agent-owned terminal. */
+export function isAgentTabId(tabId: string): boolean {
+  return tabId.startsWith(AGENT_TAB_PREFIX)
+}
+
+/** Extract the agent terminal uuid from an `agent:<uuid>` tab id. */
+export function agentUuidOf(tabId: string): string {
+  return tabId.slice(AGENT_TAB_PREFIX.length)
+}
+
+/** Build the sidebar tab id for one agent terminal uuid. */
+export function agentTabId(uuid: string): string {
+  return `${AGENT_TAB_PREFIX}${uuid}`
+}
+
+/**
+ * Reconcile the sidebar's agent-terminal tabs with the host's live list.
+ * The host pushes the current list of agent terminals (created by the model
+ * through the `terminal_create` tool) over a dedicated WebSocket; this
+ * reducer mirrors that list into tabs: new uuids get a tab, vanished uuids
+ * lose theirs. The agent owns the lifetime — the user closing a tab sends a
+ * WS close frame that kills the pty, which fires a change, which converges
+ * the view. Idempotent: a no-op when the lists already match.
+ * @param state - the current per-session sidebar state.
+ * @param agentTerminals - the live agent terminal snapshots from the host.
+ * @returns the next state (or the same reference if no change was needed).
+ */
+export function reconcileAgentTerminals(
+  state: SidebarState,
+  agentTerminals: ReadonlyArray<{ uuid: string; title: string }>,
+): SidebarState {
+  const existingTabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
+  const existingAgentTabs = existingTabs.filter(tab => isAgentTabId(tab.id))
+  const existingUuids = new Set(existingAgentTabs.map(tab => agentUuidOf(tab.id)))
+  const serverUuids = new Set(agentTerminals.map(t => t.uuid))
+  const toAdd = agentTerminals.filter(t => !existingUuids.has(t.uuid))
+  const toRemove = existingAgentTabs.filter(tab => !serverUuids.has(agentUuidOf(tab.id)))
+  if (toAdd.length === 0 && toRemove.length === 0) return state
+  // Remove tabs whose uuids vanished from the server list (the agent closed
+  // them, or the pty exited and was reaped). Reuse closeTab's leaf cleanup.
+  let splits = state.splits
+  for (const tab of toRemove) {
+    const leaf = leafWithTab(splits, tab.id)
+    if (leaf !== undefined) {
+      splits = closeTab({ ...state, splits }, leaf.id, tab.id).splits
+    }
+  }
+  // Add tabs for new uuids (the agent created a terminal). They land in the
+  // active pane via openTab; the next reconcile is a no-op for them.
+  let next: SidebarState = { ...state, splits }
+  for (const terminal of toAdd) {
+    const tab: SidebarTab = {
+      id: agentTabId(terminal.uuid),
+      type: 'terminal',
+      title: terminal.title,
+    }
+    next = openTab(next, tab)
+  }
+  return next
+}
+
 // ── The per-session store ──────────────────────────────────────────────────
 
 const STORAGE_PREFIX = 'dsh-sidebar:v1'

@@ -41,6 +41,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     autoOpenSubagent: typeof record.autoOpenSubagent === 'boolean'
       ? record.autoOpenSubagent
       : SIDEBAR_PREFS_DEFAULTS.autoOpenSubagent,
+    agentTerminalTools: typeof record.agentTerminalTools === 'boolean'
+      ? record.agentTerminalTools
+      : SIDEBAR_PREFS_DEFAULTS.agentTerminalTools,
   }
 }
 

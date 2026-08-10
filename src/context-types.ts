@@ -274,6 +274,31 @@ export interface SidebarSettingsService {
   update(ns: string, patch: object, expectedRevision?: number): Promise<void>
 }
 
+/**
+ * The tools service face (mirror of @deepseek-ai/dsh-tools' ToolRegistry).
+ * The host half registers model-facing tools here; the registry attaches the
+ * returned disposer to the contributing fiber so unloading unregisters them.
+ */
+export interface SidebarToolsService {
+  /** Register one tool definition (raw JSON-Schema or defineTool-sugar form). */
+  register(tool: unknown): () => void
+}
+
+/**
+ * The agent face a tool sees on `exec.agent` (mirror of @deepseek-ai/dsh-agent's
+ * Agent). Only the slices the terminal tools touch are restated: the live
+ * session identity and its header cwd, both readonly.
+ */
+export interface SidebarAgent {
+  /** The live session identity shared with the session log. */
+  readonly id: string
+  /** The live session this agent drives. */
+  readonly session: {
+    /** The session's header (validated cwd, lineage metadata). */
+    readonly header: { readonly cwd?: string }
+  }
+}
+
 declare module 'cordis' {
   interface Context {
     httpServer: SidebarHttpServer
@@ -283,6 +308,7 @@ declare module 'cordis' {
     slots: SidebarSlotsService
     settings: SidebarSettingsService
     invariants: SidebarInvariantsService
+    tools: SidebarToolsService
     /**
      * Register a lifecycle callback (DSH-vendored cordis): runs at plugin
      * activation; its returned cleanup runs at disposal.

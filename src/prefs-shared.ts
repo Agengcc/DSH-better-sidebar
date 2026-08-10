@@ -20,6 +20,13 @@ export interface SidebarPrefs {
    * Subagent page when the current conversation spawns a new subagent.
    */
   autoOpenSubagent: boolean
+  /**
+   * Whether the model-facing agent terminal tools (terminal_create / list /
+   * send / read / wait_for / resize / signal / close) are injected into the
+   * model's toolset. Off by default: the feature stays dormant until the
+   * user explicitly enables it in the side card settings.
+   */
+  agentTerminalTools: boolean
 }
 
 /** Range contract of {@link SidebarPrefs.defaultWidthPercent}. */
@@ -32,6 +39,7 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   openByDefault: true,
   defaultWidthPercent: WIDTH_PERCENT_DEFAULT,
   autoOpenSubagent: true,
+  agentTerminalTools: false,
 }
 
 /** Clamp one width percent into the contract range (shared by schema and client reads). */

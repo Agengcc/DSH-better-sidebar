@@ -104,9 +104,10 @@ dsh registry enable dsh-external/dsh-better-sidebar
 
 ### 💻 终端
 
-- xterm.js + node-pty **真实 shell**，每会话最多 3 个
+- xterm.js + node-pty **真实 shell**，每会话最多 3 个（仅 UI 手动新建的 tab 计入上限）
 - **Tab 打开期间一直保活**：切换 Tab/分栏、切换会话（30 秒内返回）、刷新页面都重连到同一个 shell 进程并回放转录
 - 真正关闭 Tab 立即释放配额；连续失败停止重连并显示原因与重试按钮
+- **Agent 终端（默认关闭）**：设置页开启「为模型注入终端工具」后，模型可通过 `terminal_create` / `list` / `send` / `read` / `wait_for` / `resize` / `signal` / `close` 8 个工具创建持久终端，自动同步为侧边栏 tab（id `agent:<uuid>`，不占用 3 个 UI 上限）。终端由 agent 拥有——`terminal_close` 或用户关闭 tab 才销毁，WS 断开（刷新/切会话）不杀进程；`terminal_signal(SIGINT)` 通过写入 `\x03` 控制字符实现，Windows ConPTY 与 POSIX 通用
 
 ### 🌿 Git 面板
 
@@ -148,6 +149,7 @@ dsh registry enable dsh-external/dsh-better-sidebar
   - **新会话默认打开**：新建会话是否自动展开侧边卡片（已存在的会话保持各自布局）
   - **默认宽度占比**：新建会话时侧边卡片占窗口宽度的百分比（20–60，默认 30）
   - **检测到子代理时自动展开子代理页面**（默认开启）：当前会话产生新的子代理时，自动展开侧边栏并打开 Subagent 页面
+  - **为模型注入终端工具**（默认关闭）：开启后模型可通过 8 个 `terminal_*` 工具创建并操作侧边栏终端；关闭会注销工具并释放已创建的 agent 终端
 
 ## ⌨️ 快捷键速查
 

@@ -3,7 +3,7 @@ import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import {
   activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openTab, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  moveTab, moveTabToEdge, openTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -250,6 +250,62 @@ describe('sidebar state', () => {
     // A terminal tab added later is open too.
     s = openTab(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
     expect(tabOpenIn(s, 'terminal:9')).toBe(true)
+  })
+})
+
+describe('agent terminal reconciliation', () => {
+  it('adds tabs for new agent terminals', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'dev server' },
+      { uuid: 'bbb-222', title: 'python repl' },
+    ])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(true)
+    // The titles are preserved.
+    const tabs = allLeaves(s.splits).flatMap(leaf => leaf.tabs)
+    const agentTab = tabs.find(t => t.id === 'agent:aaa-111')
+    expect(agentTab?.title).toBe('dev server')
+    expect(agentTab?.type).toBe('terminal')
+  })
+
+  it('removes tabs for agent terminals that vanished from the server list', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'keep' },
+      { uuid: 'bbb-222', title: 'remove' },
+    ])
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(true)
+    // Next push drops bbb-222.
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'keep' }])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(false)
+  })
+
+  it('is a no-op (same reference) when the lists already match', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'stable' }])
+    const next = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'stable' }])
+    expect(next).toBe(s)
+  })
+
+  it('does not touch non-agent terminal tabs', () => {
+    let s = makeDefaultState(400, true)
+    s = openTab(s, { id: 'terminal:1', type: 'terminal', title: 'UI Tab' })
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'agent' }])
+    expect(tabOpenIn(s, 'terminal:1')).toBe(true)
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+  })
+
+  it('handles an empty server list (removes all agent tabs)', () => {
+    let s = makeDefaultState(400, true)
+    s = reconcileAgentTerminals(s, [
+      { uuid: 'aaa-111', title: 'a' },
+      { uuid: 'bbb-222', title: 'b' },
+    ])
+    s = reconcileAgentTerminals(s, [])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(false)
+    expect(tabOpenIn(s, 'agent:bbb-222')).toBe(false)
   })
 })
 
@@ -546,19 +602,26 @@ describe('side card preferences', () => {
   })
 
   it('parses a valid value and clamps the percent into the contract range', async () => {
-    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false })
+    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false, agentTerminalTools: true })))
+      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false, agentTerminalTools: true })
   })
 
   it('falls back per-field when a stored field is malformed', async () => {
-    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no' })))
-      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true })
+    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no', agentTerminalTools: 'yes' })))
+      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true, agentTerminalTools: false })
   })
 
-  it('defaults autoOpenSubagent to true when the stored value is absent or malformed', async () => {
+  it('defaults autoOpenSubagent to true and agentTerminalTools to false when the stored value is absent or malformed', async () => {
     expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 40 })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true })
+      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true, agentTerminalTools: false })
     expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, autoOpenSubagent: 1 }))).autoOpenSubagent)
+      .toBe(true)
+    // The terminal-tools feature is OFF by default; only an explicit true turns it on.
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40 }))).agentTerminalTools)
+      .toBe(false)
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, agentTerminalTools: 1 }))).agentTerminalTools)
+      .toBe(false)
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, agentTerminalTools: true }))).agentTerminalTools)
       .toBe(true)
   })
 
@@ -566,9 +629,9 @@ describe('side card preferences', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)

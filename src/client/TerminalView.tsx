@@ -7,6 +7,17 @@
  * a failed pty spawn) stops the loop and shows the reason with a manual
  * retry, and repeated unreasoned failures surface the close code after three
  * attempts, so the banner never spins forever.
+ *
+ * Two attach modes share one upgrade endpoint:
+ * - `tabId` starting with `agent:` is an agent-owned terminal (created by
+ *   the `terminal_create` tool). The uuid is the suffix after `agent:`; the
+ *   view connects with `?uuid=...`. A close frame kills the pty (the agent's
+ *   terminal closes when the user closes the tab); a bare socket drop
+ *   leaves the pty alive (the agent owns the lifetime).
+ * - Any other `tabId` is a UI-tab terminal (the user created it from the +
+ *   menu). The view connects with `?tab=...&sessionId=...&cwd=...`. A close
+ *   frame schedules a 0-ms close; a bare socket drop gets the host's
+ *   reconnect grace.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Terminal, type ITheme } from 'xterm'
@@ -14,7 +25,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
-import type { SidebarStore } from './state.ts'
+import { agentUuidOf, isAgentTabId, type SidebarStore } from './state.ts'
 import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
 import css from './sidebar.module.css'
 
@@ -97,14 +108,21 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
     let failures = 0
 
     const wsUrl = (): string => {
-      const params = new URLSearchParams({ sessionId: scope.sessionId, tab: tabId })
-      if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
+      const url = new URL('/sidebar/ws/terminal', location.origin)
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+      // Agent terminals attach by uuid (the host looks them up in the agent
+      // pty registry); UI-tab terminals attach by sessionId+tab (the host
+      // uses the UI-tab pty manager). Same upgrade endpoint, different query.
+      if (isAgentTabId(tabId)) {
+        url.search = new URLSearchParams({ uuid: agentUuidOf(tabId) }).toString()
+      } else {
+        const params = new URLSearchParams({ sessionId: scope.sessionId, tab: tabId })
+        if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
+        url.search = params.toString()
+      }
       // Same construction the app's own downlink WebSockets use (new URL
       // over location.origin + protocol swap): whatever the environment
       // does to the app's websockets applies identically here.
-      const url = new URL('/sidebar/ws/terminal', location.origin)
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-      url.search = params.toString()
       return url.toString()
     }
 
@@ -175,11 +193,14 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
       schemeSub()
       inputSub.dispose()
       // The close frame tells the host the owning tab is GONE (immediate
-      // quota release). A bare unmount — conversation switch, re-render,
+      // pty release). A bare unmount — conversation switch, re-render,
       // page unload — leaves the tab open, so the socket drop alone hands
       // the process to the host's reconnect grace: switching back or
       // refreshing reattaches the SAME shell instead of respawning one.
       // (The host respawns on its own when the authoritative cwd changed.)
+      // Agent terminals follow the same rule: a close frame kills the pty
+      // (the user closed the sidebar tab); a bare socket drop leaves it
+      // alive (the agent owns the lifetime).
       if (!store.tabOpen(scope.sessionId, tabId)
         && socket !== null && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }))
