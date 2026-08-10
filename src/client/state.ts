@@ -309,15 +309,13 @@ export function activateTab(state: SidebarState, paneId: string, tabId: string):
   }
 }
 
-/** Whether a tab type is single-instance per session (explorer/git/subagent). */
-function isSingle(type: TabType): boolean {
-  return type === 'explorer' || type === 'git' || type === 'subagent'
-}
-
 /**
- * Open a tab (or focus its existing instance). Single-instance types focus
- * the existing tab wherever it lives; editors dedupe by path. The tab lands
- * in the active pane (or the first pane when the active one is gone).
+ * Open a tab (or focus its existing instance by id). Dedup strategies
+ * (single-instance, per-path, per-change) are owned by the tab descriptor
+ * through {@link BetterSidebarService.openTab} / `dedupeKey`; this reducer
+ * only handles the id-based safety net (reconcile/openDiffTab already
+ * check existence before calling) and lands the tab in the active pane
+ * (or the first pane when the active one is gone).
  */
 export function openTab(state: SidebarState, tab: SidebarTab): SidebarState {
   let targetId = state.activePane ?? firstLeaf(state.splits).id
@@ -326,24 +324,10 @@ export function openTab(state: SidebarState, tab: SidebarTab): SidebarState {
   if (!allLeaves(state.splits).some(leaf => leaf.id === targetId)) {
     targetId = firstLeaf(state.splits).id
   }
-  if (isSingle(tab.type)) {
-    for (const leaf of allLeaves(state.splits)) {
-      const existing = leaf.tabs.find(candidate => candidate.type === tab.type)
-      if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
-    }
-  }
-  if (tab.type === 'editor' && tab.path !== undefined) {
-    for (const leaf of allLeaves(state.splits)) {
-      const existing = leaf.tabs.find(candidate => candidate.type === 'editor' && candidate.path === tab.path)
-      if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
-    }
-  }
-  if (tab.type === 'diff') {
-    // One tab per change: the same path+side (or commit) focuses its instance.
-    for (const leaf of allLeaves(state.splits)) {
-      const existing = leaf.tabs.find(candidate => candidate.type === 'diff' && candidate.id === tab.id)
-      if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
-    }
+  // Id-based safety net: if a tab with the same id exists, focus it.
+  for (const leaf of allLeaves(state.splits)) {
+    const existing = leaf.tabs.find(candidate => candidate.id === tab.id)
+    if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
   }
   return {
     ...state,

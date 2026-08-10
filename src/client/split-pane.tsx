@@ -15,7 +15,6 @@ import clsx from 'clsx'
 import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
 import type { DropZone } from './state.ts'
 import { TabBar, type NewTabOption, parseDrag, type TabDragPayload } from './TabBar.tsx'
-import { tabTypeIcon } from './icons.tsx'
 import css from './sidebar.module.css'
 
 /** Actions the workbench needs (bound to the store by the sidebar shell). */
@@ -108,7 +107,7 @@ function PaneEmptyCards(props: {
           title={option.label}
           onClick={() => { onNewTab(option.id) }}
         >
-          {option.icon ?? tabTypeIcon(option.id as SidebarTab['type'], 16)}
+          {option.icon ?? null}
           <span>{option.label}</span>
         </button>
       ))}
@@ -123,8 +122,9 @@ function LeafView(props: {
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
   renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
+  getTabIcon?: (tab: SidebarTab) => ReactNode
 }) {
-  const { leaf, newTabOptions, actions, onNewTab, renderTab } = props
+  const { leaf, newTabOptions, actions, onNewTab, renderTab, getTabIcon } = props
   const [dropZone, setDropZone] = useState<DropZone | null>(null)
   const activeTab = leaf.tabs.find(tab => tab.id === leaf.active) ?? leaf.tabs[leaf.tabs.length - 1]
 
@@ -177,6 +177,7 @@ function LeafView(props: {
         onClose={(tabId) => { actions.closeTab(leaf.id, tabId) }}
         onNewTab={onNewTab}
         newTabOptions={newTabOptions}
+        getTabIcon={getTabIcon}
         onDropTab={(payload, before) => {
           if (before === null) actions.moveTabToEdge(payload, leaf.id, 'center')
           else actions.moveTabBefore(payload, leaf.id, before)
@@ -215,8 +216,9 @@ function NodeView(props: {
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
   renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
+  getTabIcon?: (tab: SidebarTab) => ReactNode
 }) {
-  const { node, state, newTabOptions, actions, onNewTab, renderTab } = props
+  const { node, state, newTabOptions, actions, onNewTab, renderTab, getTabIcon } = props
   if (node.kind === 'leaf') {
     return (
       <LeafView
@@ -225,6 +227,7 @@ function NodeView(props: {
         actions={actions}
         onNewTab={onNewTab}
         renderTab={renderTab}
+        getTabIcon={getTabIcon}
       />
     )
   }
@@ -250,6 +253,7 @@ function NodeView(props: {
               actions={actions}
               onNewTab={onNewTab}
               renderTab={renderTab}
+              getTabIcon={getTabIcon}
             />
           </div>
         </Fragment>
@@ -265,8 +269,9 @@ export function Workbench(props: {
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
   renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
+  getTabIcon?: (tab: SidebarTab) => ReactNode
 }) {
-  const { state, newTabOptions, actions, onNewTab, renderTab } = props
+  const { state, newTabOptions, actions, onNewTab, renderTab, getTabIcon } = props
   return (
     <div className={css.workbench}>
       <NodeView
@@ -276,6 +281,7 @@ export function Workbench(props: {
         actions={actions}
         onNewTab={onNewTab}
         renderTab={renderTab}
+        getTabIcon={getTabIcon}
       />
     </div>
   )

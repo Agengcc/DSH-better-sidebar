@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab, openTab,
+  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab,
   reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
   TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
@@ -185,12 +185,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     if (sessionId === undefined || prev === undefined) return
     if (!detectNewDirectSubagent(prev, sessionList, sessionId)) return
     if (!store.getPrefs().autoOpenSubagent) return
-    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
-      id: 'subagent',
-      type: 'subagent',
-      title: t('subagent'),
-    }))
-  }, [sessionList, sessionId, store])
+    store.reduce(s => s.panelOpen ? s : togglePanel(s))
+    ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
+  }, [sessionList, sessionId, store, ctx])
 
   /**
    * Topology jump-back: clicking a subagent node on the Subagent page calls
@@ -208,12 +205,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     const pending = subagentJumpRef.current
     if (pending === undefined || sessionId !== pending) return
     subagentJumpRef.current = undefined
-    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
-      id: 'subagent',
-      type: 'subagent',
-      title: t('subagent'),
-    }))
-  }, [sessionId, store])
+    store.reduce(s => s.panelOpen ? s : togglePanel(s))
+    ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
+  }, [sessionId, store, ctx])
 
   // Panel width drag (left edge strip).
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
@@ -443,6 +437,11 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
             actions={actions}
             onNewTab={onNewTab}
             renderTab={renderTab}
+            getTabIcon={(tab) => {
+              const descriptor = ctx.betterSidebar?.getTab(tab.type)
+              if (descriptor === undefined) return null
+              return typeof descriptor.icon === 'function' ? descriptor.icon(14) : descriptor.icon
+            }}
           />
         </div>
       </div>

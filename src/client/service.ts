@@ -126,7 +126,7 @@ export interface BetterSidebarService {
   /** Find a file viewer for a path (priority desc → detect → exts). */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
   /** Open a tab (used by external tabs and the + menu). */
-  openTab(seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff'] }): void
+  openTab(seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
   /** Close a tab by id. */
   closeTab(tabId: string): void
   /** Subscribe to registry changes (register/dispose). */
@@ -216,7 +216,7 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     return undefined
   }
 
-  const openTab = (seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff'] }): void => {
+  const openTab = (seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void => {
     store.reduce((state) => {
       const descriptor = tabs.get(seed.type)
       if (descriptor === undefined) return state
@@ -228,7 +228,7 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
         return result.patch !== undefined ? { ...next, ...result.patch } : next
       }
       const tab: SidebarTab = {
-        id: seed.type,
+        id: seed.id ?? seed.type,
         type: seed.type,
         title: typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title,
         ...(seed.path !== undefined ? { path: seed.path } : {}),

@@ -11,7 +11,6 @@ import {
   IconCloseFill14, IconPlusOutline16, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SidebarTab } from './state.ts'
-import { tabTypeIcon } from './icons.tsx'
 import { t } from './locales.ts'
 import css from './sidebar.module.css'
 
@@ -62,9 +61,11 @@ export function TabBar(props: {
   newTabOptions: NewTabOption[]
   /** Drop of a tab from any pane: (payload, insertBeforeTabId | null). */
   onDropTab: (payload: TabDragPayload, before: string | null) => void
+  /** Icon resolver for tab labels (reads from the tab descriptor registry). */
+  getTabIcon?: (tab: SidebarTab) => ReactNode
 }) {
   const {
-    paneId, tabs, active, onActivate, onClose, onNewTab, newTabOptions, onDropTab,
+    paneId, tabs, active, onActivate, onClose, onNewTab, newTabOptions, onDropTab, getTabIcon,
   } = props
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -134,7 +135,7 @@ export function TabBar(props: {
               }
             }}
           >
-            {tabTypeIcon(tab.type, 14)}
+            {getTabIcon?.(tab) ?? null}
             <span className={css.tabTitle}>{tab.title}</span>
             <button
               type="button"
