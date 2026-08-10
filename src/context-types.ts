@@ -90,14 +90,92 @@ export interface SidebarSlotsService {
 
 /** The client session list row the sidebar reads (cwd for the explorer). */
 export interface SidebarSessionSummary {
+  id: string
   cwd?: string
   displayTitle: string
+  /** Coarse durable origin for navigation filtering (subagent children). */
+  origin?: 'subagent'
+  /** Durable direct parent session id (present on subagent children). */
+  parentId?: string
+  /** Whether the session's agent is currently running. */
+  running?: boolean
+}
+
+/** One healthy subagent catalog child row (structural mirror of the runtime). */
+export interface SidebarSubagentChildEntry {
+  kind: 'child'
+  id: string
+  /** Whether the child Agent driver is running at the Host sampling boundary. */
+  activity: 'running' | 'inactive'
+  /** Whether a direct descendant has durable `origin: 'subagent'`. */
+  hasChildren: boolean
+  mode: 'one-shot' | 'continuable'
+  label?: string
+}
+
+/** One unreadable catalog row (corrupt / unsupported / unavailable). */
+export interface SidebarSubagentDiagnosticEntry {
+  kind: 'diagnostic'
+  id: string
+  reason: 'corrupt' | 'unsupported' | 'unavailable'
+}
+
+/** The per-parent lazy catalog delivered through the sessions list feed. */
+export interface SidebarSubagentCatalog {
+  entries: Array<SidebarSubagentChildEntry | SidebarSubagentDiagnosticEntry>
+  parentAvailable: boolean
+  state: 'loading' | 'ready' | 'error'
+  error: { code?: string; message?: string } | null
+}
+
+/** Durable parent/child address that selects subagent transport in the client. */
+export interface SidebarSubagentAddress {
+  parentSessionId: string
+  childSessionId: string
+  mode: 'one-shot' | 'continuable'
+}
+
+/** Minimal structural mirror of one session event (the subagent history tail). */
+export interface SidebarSessionEvent {
+  type: string
+  seq: number
+  time: number
+  data: Record<string, unknown>
+}
+
+/** One history row: the durable event plus an optional tool presentation view. */
+export interface SidebarHistoryEntry {
+  event: SidebarSessionEvent
+  view?: unknown
+}
+
+/** RPC result slot mirror (`RpcResult<T>` on the wire). */
+export type SidebarRpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
+
+/** Unary response mirror (`RpcResponse<T>` on the wire). */
+export interface SidebarRpcResponse<T> {
+  rpcId: unknown
+  result: SidebarRpcResult<T>
+}
+
+/** The wire face the Subagent activity summary needs (subset of `ctx.connection`). */
+export interface SidebarConnectionHandle {
+  api: {
+    subagents: {
+      history(
+        payload: SidebarSubagentAddress & { beforeSeq?: number; maxMessages?: number },
+        signal?: AbortSignal,
+      ): Promise<SidebarRpcResponse<{ events: SidebarHistoryEntry[]; hasMore: boolean }>>
+    }
+  }
 }
 
 /** The client session list snapshot the sidebar subscribes to. */
 export interface SidebarSessionList {
   current: string | undefined
   byId: Record<string, SidebarSessionSummary>
+  /** Direct durable catalogs keyed by their selected parent address. */
+  subagentsByParent?: Readonly<Record<string, SidebarSubagentCatalog>>
 }
 
 /** The client sessions service face (only the list feed is needed). */
@@ -107,11 +185,33 @@ export interface SidebarSessionsService {
     subscribe(fn: () => void): () => void
   }
   /**
+   * Select a listed session as current (mirror of the runtime ISessions.open)
+   * — used to jump back to the main agent from the topology root node.
+   */
+  open?(id: string): void
+  /**
    * Resolve an Agent-scoped context view for one session (mirror of the
    * runtime ISessions.scope) — the ticket `ctx.conversation.input.for`
    * requires to reach that session's composer.
    */
   scope(id: string): Context | undefined
+  /**
+   * Open a healthy catalog child through its exact direct-parent address
+   * (mirror of the runtime ISessions.openSubagent).
+   */
+  openSubagent?(address: SidebarSubagentAddress): void
+  /**
+   * Resolve an already discovered direct-parent address without opening it.
+   */
+  subagentAddress?(id: string): SidebarSubagentAddress | undefined
+  /**
+   * Mark whether a catalog surface is consuming live membership updates.
+   */
+  setSubagentCatalogOpen?(parentSessionId: string, open: boolean): void
+  /**
+   * Refresh one direct-child catalog.
+   */
+  refreshSubagents?(parentSessionId: string): Promise<void>
 }
 
 /** The composer draft face the sidebar reaches through `ctx.conversation.input`. */
@@ -178,6 +278,7 @@ declare module 'cordis' {
   interface Context {
     httpServer: SidebarHttpServer
     sessions: SidebarSessionStore & SidebarSessionsService
+    connection: SidebarConnectionHandle
     loader: SidebarLoader
     slots: SidebarSlotsService
     settings: SidebarSettingsService

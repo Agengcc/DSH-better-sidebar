@@ -22,7 +22,7 @@ import css from './sidebar.module.css'
 import './layout.css'
 
 /** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'sessions']
+export const inject = ['slots', 'sessions', 'connection']
 
 /**
  * Error boundary over the sidebar tree: a render error must never blank the

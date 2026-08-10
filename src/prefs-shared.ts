@@ -15,6 +15,11 @@ export interface SidebarPrefs {
   openByDefault: boolean
   /** Default panel width as a percent of the window width (20–60). */
   defaultWidthPercent: number
+  /**
+   * Whether the sidebar auto-activates (opens the panel) and expands the
+   * Subagent page when the current conversation spawns a new subagent.
+   */
+  autoOpenSubagent: boolean
 }
 
 /** Range contract of {@link SidebarPrefs.defaultWidthPercent}. */
@@ -26,6 +31,7 @@ export const WIDTH_PERCENT_DEFAULT = 30
 export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   openByDefault: true,
   defaultWidthPercent: WIDTH_PERCENT_DEFAULT,
+  autoOpenSubagent: true,
 }
 
 /** Clamp one width percent into the contract range (shared by schema and client reads). */

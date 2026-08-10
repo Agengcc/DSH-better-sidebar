@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react'
 import {
-  IconBranchOutline16, IconCodeOutline16, IconFolderOpen16,
+  IconBranchOutline16, IconCodeOutline16, IconFolderOpen16, IconThinkOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TabType } from './state.ts'
@@ -28,6 +28,7 @@ export function tabTypeIcon(type: TabType, size = 16): ReactNode {
     case 'explorer': return <IconFolderOpen16 size={size} />
     case 'git': return <IconBranchOutline16 size={size} />
     case 'terminal': return <IconTerminalOutline16 size={size} />
+    case 'subagent': return <IconThinkOutline16 size={size} />
     case 'editor': return <IconCodeOutline16 size={size} />
   }
 }

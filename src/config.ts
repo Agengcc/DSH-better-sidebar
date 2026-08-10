@@ -78,4 +78,5 @@ export function resolveSidebarConfig(config: SidebarConfig | undefined): Resolve
 export const PrefsSchema: z<SidebarPrefs> = z.object({
   openByDefault: z.boolean().default(true),
   defaultWidthPercent: z.number().step(1).min(WIDTH_PERCENT_MIN).max(WIDTH_PERCENT_MAX).default(WIDTH_PERCENT_DEFAULT),
+  autoOpenSubagent: z.boolean().default(true),
 })

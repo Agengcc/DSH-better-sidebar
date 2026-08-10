@@ -11,7 +11,7 @@
  */
 import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
 
-export type TabType = 'explorer' | 'git' | 'editor' | 'terminal'
+export type TabType = 'explorer' | 'git' | 'editor' | 'terminal' | 'subagent'
 
 /** One open tab. `path` carries the file (editor) or is absent (explorer/git). */
 export interface SidebarTab {
@@ -291,9 +291,9 @@ export function activateTab(state: SidebarState, paneId: string, tabId: string):
   }
 }
 
-/** Whether a tab type is single-instance per session (explorer/git). */
+/** Whether a tab type is single-instance per session (explorer/git/subagent). */
 function isSingle(type: TabType): boolean {
-  return type === 'explorer' || type === 'git'
+  return type === 'explorer' || type === 'git' || type === 'subagent'
 }
 
 /**
@@ -506,6 +506,7 @@ function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string
       if (
         candidate.type !== 'explorer' && candidate.type !== 'git'
         && candidate.type !== 'editor' && candidate.type !== 'terminal'
+        && candidate.type !== 'subagent'
       ) {
         return undefined
       }

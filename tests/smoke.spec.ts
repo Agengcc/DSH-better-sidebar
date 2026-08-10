@@ -338,7 +338,10 @@ describe('side card settings routes', () => {
     const route = mountWithSettings(createFakeSettings())
     const read = await invoke(route, 'settings.get', {})
     expect(read.ok).toBe(true)
-    expect(read.value).toEqual({ value: { openByDefault: true, defaultWidthPercent: 30 }, revision: 0 })
+    expect(read.value).toEqual({
+      value: { openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true },
+      revision: 0,
+    })
 
     const written = await invoke(route, 'settings.update', { patch: { openByDefault: false } })
     expect(written.ok).toBe(true)

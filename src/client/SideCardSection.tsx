@@ -1,9 +1,11 @@
 /**
  * "Side card" settings section: the user-facing preferences for the sidebar
  * panel, rendered natively in the DSH Settings shell (nav label "Side card").
- * Two rows:
- *  - new conversations open the panel by default (native checkbox), and
- *  - the default panel width as a percent of the window (number input + %).
+ * Three rows:
+ *  - new conversations open the panel by default (native checkbox),
+ *  - the default panel width as a percent of the window (number input + %),
+ *  - auto-open the Subagent page when a new subagent appears (native checkbox,
+ *    on by default).
  *
  * Writes ride the plugin's own fenced settings route (the host calls the
  * settings seam in-process — the DSH settings RPC domain does not serve
@@ -119,6 +121,13 @@ export function SideCardSection({ store }: SideCardSectionProps) {
     void commit({ openByDefault: next }).then(outcome => applyOutcome(previous, outcome))
   }
 
+  const onToggleSubagent = (next: boolean): void => {
+    const previous = prefs
+    setPrefs({ ...previous, autoOpenSubagent: next })
+    setError(null)
+    void commit({ autoOpenSubagent: next }).then(outcome => applyOutcome(previous, outcome))
+  }
+
   const commitWidth = (): void => {
     const parsed = Number(widthDraft)
     if (!Number.isFinite(parsed)) {
@@ -171,6 +180,19 @@ export function SideCardSection({ store }: SideCardSectionProps) {
           <span className={css.suffix}>{t('settingsWidthSuffix')}</span>
         </span>
       </div>
+      <label className={css.row}>
+        <span className={css.rowText}>
+          <span className={css.title}>{t('settingsSubagentTitle')}</span>
+          <span className={css.desc}>{t('settingsSubagentDesc')}</span>
+        </span>
+        <input
+          type="checkbox"
+          className={css.toggle}
+          checked={prefs.autoOpenSubagent}
+          aria-label={t('settingsSubagentTitle')}
+          onChange={event => { onToggleSubagent(event.currentTarget.checked) }}
+        />
+      </label>
       {error !== null && (
         <div className={css.error} role="alert">
           {error}

@@ -15,6 +15,11 @@ import { isImageExt } from '../src/client/image-types.ts'
 import { relativeTo } from '../src/client/paths.ts'
 import { producedForClosing, resolveSidebarPath, selectProducedFiles } from '../src/client/produced-files.ts'
 import { defaultShell, ensureSpawnHelper } from '../src/pty-manager.ts'
+import {
+  collectBranchIds, countSubagentDescendants, detectNewDirectSubagent, directSubagentCount, rootAncestor,
+} from '../src/client/subagent-detect.ts'
+import { contentText, lastActivity } from '../src/client/subagent-activity.ts'
+import type { SidebarHistoryEntry, SidebarSessionList, SidebarSubagentCatalog } from '../src/context-types.ts'
 
 describe('fs-tree', () => {
   it('sorts directories first, then names case-insensitively', () => {
@@ -112,6 +117,17 @@ describe('sidebar state', () => {
     s = openTab(s, { id: 'e1', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     const after = openTab(s, { id: 'e2', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     expect((after.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([firstId, 'e1'])
+  })
+
+  it('dedupes the single-instance subagent tab (focuses instead of duplicating)', () => {
+    let s = state()
+    s = openTab(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
+    expect((s.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
+    // Reopening (e.g. the auto-activation effect) focuses the existing tab.
+    const after = openTab(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
+    expect((after.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
+    const tabs = (after.splits as { tabs: { type: string; id: string }[] }).tabs
+    expect(tabs.filter(tab => tab.type === 'subagent')).toHaveLength(1)
   })
 
   it('splits panes and moves tabs between them', () => {
@@ -329,6 +345,16 @@ describe('persisted state sanitization', () => {
     expect(clean).toEqual(state)
   })
 
+  it('accepts a subagent tab as a known type', () => {
+    const raw = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    raw.splits.tabs.push({ id: 'tab:9', type: 'subagent', title: 'Subagents' })
+    raw.splits.active = 'tab:9'
+    const clean = sanitizeState(raw)
+    expect(clean).toBeDefined()
+    const tabs = (clean!.splits as { tabs: { type: string }[] }).tabs
+    expect(tabs.some(tab => tab.type === 'subagent')).toBe(true)
+  })
+
   it('clamps undersized widths to the panel minimum', () => {
     const state = { ...makeDefaultState(400), width: 10 }
     const clean = sanitizeState(JSON.parse(JSON.stringify(state)))
@@ -520,22 +546,29 @@ describe('side card preferences', () => {
   })
 
   it('parses a valid value and clamps the percent into the contract range', async () => {
-    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80 })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 60 })
+    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false })))
+      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false })
   })
 
   it('falls back per-field when a stored field is malformed', async () => {
-    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33 })))
-      .toEqual({ openByDefault: true, defaultWidthPercent: 33 })
+    expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no' })))
+      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true })
+  })
+
+  it('defaults autoOpenSubagent to true when the stored value is absent or malformed', async () => {
+    expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 40 })))
+      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true })
+    expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, autoOpenSubagent: 1 }))).autoOpenSubagent)
+      .toBe(true)
   })
 
   it('seeds new-session defaults from the store prefs (open flag + width)', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45 })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45 })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)
@@ -556,5 +589,175 @@ describe('side card preferences', () => {
     expect(makeDefaultState().panelOpen).toBe(true)
     expect(makeDefaultState(400, false).panelOpen).toBe(false)
     expect(makeDefaultState(400, false).width).toBe(400)
+  })
+})
+
+describe('subagent detection over the sessions list feed', () => {
+  /** A list snapshot carrying the given direct subagent children of `parent`. */
+  const list = (
+    parent: string,
+    childIds: string[],
+    running: string[] = [],
+  ): SidebarSessionList => {
+    const byId: SidebarSessionList['byId'] = { [parent]: { id: parent, displayTitle: 'Parent' } }
+    for (const id of childIds) {
+      byId[id] = {
+        id,
+        displayTitle: `Child ${id}`,
+        origin: 'subagent',
+        parentId: parent,
+        running: running.includes(id),
+      }
+    }
+    return { current: parent, byId }
+  }
+
+  it('counts only the direct subagent children of the given session', () => {
+    const snapshot = list('p1', ['c1', 'c2'])
+    snapshot.byId['other'] = { id: 'other', displayTitle: 'Other', origin: 'subagent', parentId: 'p2' }
+    expect(directSubagentCount(snapshot.byId, 'p1')).toBe(2)
+    expect(directSubagentCount(snapshot.byId, 'p2')).toBe(1)
+    expect(directSubagentCount(snapshot.byId, 'p1-nobody')).toBe(0)
+  })
+
+  it('fires only on the 0 → N transition of the current session', () => {
+    const empty = list('p1', [])
+    const one = list('p1', ['c1'])
+    const two = list('p1', ['c1', 'c2'])
+    expect(detectNewDirectSubagent(empty, empty, 'p1')).toBe(false)
+    expect(detectNewDirectSubagent(empty, one, 'p1')).toBe(true)
+    // Already-present children never re-trigger (session switch, reload).
+    expect(detectNewDirectSubagent(one, two, 'p1')).toBe(false)
+    expect(detectNewDirectSubagent(two, one, 'p1')).toBe(false)
+    // A child arriving under ANOTHER session does not trigger this one.
+    expect(detectNewDirectSubagent(empty, list('p2', ['x']), 'p1')).toBe(false)
+  })
+
+  it('indexes descendants through uninterrupted subagent lineage', () => {
+    // p1 → c1 (subagent) → g1 (subagent child of c1).
+    const byId: SidebarSessionList['byId'] = {
+      p1: { id: 'p1', displayTitle: 'P1' },
+      c1: { id: 'c1', displayTitle: 'C1', origin: 'subagent', parentId: 'p1', running: true },
+      g1: { id: 'g1', displayTitle: 'G1', origin: 'subagent', parentId: 'c1' },
+    }
+    expect(countSubagentDescendants(byId, 'p1')).toEqual({ count: 2, runningCount: 1 })
+    expect(countSubagentDescendants(byId, 'c1')).toEqual({ count: 1, runningCount: 0 })
+    expect(countSubagentDescendants(byId, 'g1')).toEqual({ count: 0, runningCount: 0 })
+    // An ordinary fork between the parent and the subagent cuts that lineage:
+    // c2 is c1's sibling in origin but its parent `fork` is not a subagent,
+    // so it never reaches p1 (only c1 and g1 count under p1).
+    const forked: SidebarSessionList['byId'] = {
+      ...byId,
+      fork: { id: 'fork', displayTitle: 'Fork', parentId: 'p1' },
+      c2: { id: 'c2', displayTitle: 'C2', origin: 'subagent', parentId: 'fork' },
+    }
+    expect(countSubagentDescendants(forked, 'p1')).toEqual({ count: 2, runningCount: 1 })
+    expect(countSubagentDescendants(forked, 'fork')).toEqual({ count: 1, runningCount: 0 })
+    // Cycles terminate (fail soft, never hang); both rows in a 2-cycle reach
+    // the queried node once each.
+    const cyclic: SidebarSessionList['byId'] = {
+      a: { id: 'a', displayTitle: 'A', origin: 'subagent', parentId: 'b' },
+      b: { id: 'b', displayTitle: 'B', origin: 'subagent', parentId: 'a' },
+    }
+    expect(countSubagentDescendants(cyclic, 'a')).toEqual({ count: 2, runningCount: 0 })
+  })
+
+  it('resolves the main-agent root of the current session tree', () => {
+    const byId: SidebarSessionList['byId'] = {
+      main: { id: 'main', displayTitle: 'Main' },
+      child: { id: 'child', displayTitle: 'Child', origin: 'subagent', parentId: 'main' },
+      grand: { id: 'grand', displayTitle: 'Grand', origin: 'subagent', parentId: 'child' },
+    }
+    // An ordinary session is its own root; a deep subagent walks up to the main agent.
+    expect(rootAncestor(byId, 'main')).toBe('main')
+    expect(rootAncestor(byId, 'child')).toBe('main')
+    expect(rootAncestor(byId, 'grand')).toBe('main')
+    // A broken chain (parent not in the mirror) degrades to the session itself.
+    expect(rootAncestor(byId, 'orphan')).toBe('orphan')
+    // A hydrating session row degrades to the session itself.
+    expect(rootAncestor(byId, 'not-listed')).toBe('not-listed')
+    expect(rootAncestor(byId, undefined)).toBeUndefined()
+  })
+
+  it('collects every catalog branch of the topology, cycle-safe', () => {
+    const child = (id: string, hasChildren: boolean): SidebarSubagentCatalog['entries'][number] => ({
+      kind: 'child', id, activity: 'inactive', hasChildren, mode: 'one-shot',
+    })
+    const catalogs: Record<string, SidebarSubagentCatalog> = {
+      root: { entries: [child('a', true), child('b', false)], parentAvailable: true, state: 'ready', error: null },
+      a: { entries: [child('c', false)], parentAvailable: true, state: 'ready', error: null },
+    }
+    expect(collectBranchIds(catalogs, 'root')).toEqual(['a'])
+    expect(collectBranchIds(catalogs, undefined)).toEqual([])
+    // A cycle terminates (each branch id collected at most once, no hang).
+    const cyclic: Record<string, SidebarSubagentCatalog> = {
+      root: { entries: [child('a', true)], parentAvailable: true, state: 'ready', error: null },
+      a: { entries: [child('root', true)], parentAvailable: true, state: 'ready', error: null },
+    }
+    expect(collectBranchIds(cyclic, 'root')).toEqual(['a', 'root'])
+  })
+})
+
+describe('subagent activity summary parser', () => {
+  /** One history entry from raw event fields. */
+  const entry = (type: string, data: Record<string, unknown>): SidebarHistoryEntry => ({
+    event: { type, seq: 0, time: 0, data },
+  })
+
+  it('extracts text blocks and skips non-text content', () => {
+    // Text blocks join as paragraphs (newline-separated).
+    expect(contentText([{ type: 'text', text: 'hello' }, { type: 'text', text: ' world' }])).toBe('hello\n world')
+    expect(contentText([{ type: 'tool_use', name: 'bash' }])).toBeUndefined()
+    expect(contentText(undefined)).toBeUndefined()
+    expect(contentText('nope')).toBeUndefined()
+  })
+
+  it('lastActivity returns the LAST text output and the LAST tool call', () => {
+    const live = lastActivity([
+      entry('turn/start', { turn: 1 }),
+      entry('user/message', { content: [{ type: 'text', text: '请检查代码' }] }),
+      entry('tool/call', { callId: 'c1', name: 'bash', arguments: '{"command":"ls -la"}' }),
+      entry('assistant/message', {
+        turn: 1, step: 1,
+        message: { content: [{ type: 'text', text: '检查完毕' }] },
+      }),
+      entry('tool/call', { callId: 'c2', name: 'read', arguments: '{"path":"a.ts"}' }),
+      entry('assistant/message', {
+        turn: 1, step: 2,
+        message: { content: [{ type: 'text', text: '再看一眼' }] },
+      }),
+    ])
+    expect(live).toEqual({
+      text: '再看一眼',
+      tool: { name: 'read', args: '{"path":"a.ts"}' },
+    })
+  })
+
+  it('lastActivity keeps only the fields the tail actually has', () => {
+    expect(lastActivity([
+      entry('tool/call', { callId: 'c1', name: 'bash', arguments: '{"command":"ls"}' }),
+    ])).toEqual({ tool: { name: 'bash', args: '{"command":"ls"}' } })
+    expect(lastActivity([
+      entry('assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'ok' }] } }),
+    ])).toEqual({ text: 'ok' })
+  })
+
+  it('lastActivity ignores lifecycle events, chunks, and text-less messages', () => {
+    const live = lastActivity([
+      entry('turn/end', { turn: 1, reason: 'success' }),
+      entry('step/start', { turn: 1, step: 1 }),
+      entry('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text', delta: 'x' } }),
+      entry('assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'tool_use', name: 'bash' }] } }),
+    ])
+    expect(live).toEqual({})
+    expect(lastActivity([])).toEqual({})
+  })
+
+  it('lastActivity defaults a missing tool name and tolerates non-string arguments', () => {
+    const live = lastActivity([
+      entry('tool/call', { callId: 'c1' }),
+      entry('tool/call', { callId: 'c2', name: 'web', arguments: { url: 'x' } }),
+    ])
+    expect(live.tool).toEqual({ name: 'web', args: '' })
   })
 })

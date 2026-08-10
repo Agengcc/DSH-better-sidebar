@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { Context, SidebarConversation } from '../context-types.ts'
+import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
   allLeaves, closeTab, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openTab,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
@@ -28,6 +28,8 @@ import { ExplorerView } from './ExplorerView.tsx'
 import { EditorView } from './EditorView.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { GitView } from './GitView.tsx'
+import { SubagentView } from './SubagentView.tsx'
+import { detectNewDirectSubagent } from './subagent-detect.ts'
 import { t } from './locales.ts'
 import { api } from './api.ts'
 import { openSidebarFile } from './intercept.tsx'
@@ -43,8 +45,12 @@ function TabContent(props: {
   onReferenceFile: (path: string) => void
   ctx: Context
   store: SidebarStore
+  /** Whether this tab is the active one AND the panel is open (live views pause otherwise). */
+  visible: boolean
+  /** Fired before a topology node jumps to its child session (see Sidebar). */
+  onSubagentJump: (childSessionId: string) => void
 }) {
-  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store } = props
+  const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store, visible, onSubagentJump } = props
   const scope = { sessionId, cwd }
   switch (tab.type) {
     case 'explorer':
@@ -64,6 +70,15 @@ function TabContent(props: {
       return <TerminalView scope={scope} tabId={tab.id} store={store} />
     case 'editor':
       return <EditorView scope={scope} path={tab.path ?? ''} title={tab.title} />
+    case 'subagent':
+      return (
+        <SubagentView
+          sessionId={sessionId}
+          ctx={ctx}
+          active={visible}
+          onOpenChild={(address) => { onSubagentJump(address.childSessionId) }}
+        />
+      )
   }
 }
 
@@ -75,6 +90,7 @@ function buildNewTabOptions(state: SidebarState): NewTabOption[] {
   return [
     { id: 'explorer', label: t('openExplorer'), icon: tabTypeIcon('explorer', 16) },
     { id: 'git', label: t('openGit'), icon: tabTypeIcon('git', 16) },
+    { id: 'subagent', label: t('openSubagent'), icon: tabTypeIcon('subagent', 16) },
     {
       id: 'terminal',
       label: terminalCount >= TERMINAL_LIMIT ? `${t('newTerminal')} (${t('terminalLimit')})` : t('newTerminal'),
@@ -120,6 +136,52 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     return () => { cancelled = true }
   }, [sessionId, summaryCwd])
   const cwd = summaryCwd ?? fetchedCwd
+
+  /**
+   * Subagent auto-activation: the moment the current conversation spawns its
+   * FIRST direct subagent (a 0 → N transition on the list feed) and the
+   * "auto open" pref is on, open the panel (if collapsed) and focus the
+   * Subagent page (single-instance: an existing tab is focused, never
+   * duplicated). Switching to a session that already has subagents never
+   * triggers — its baseline starts at the current count — so a deliberate
+   * layout is never fought.
+   */
+  const listBaselineRef = useRef<SidebarSessionList | undefined>(undefined)
+  useEffect(() => {
+    const prev = listBaselineRef.current
+    listBaselineRef.current = sessionList
+    if (sessionId === undefined || prev === undefined) return
+    if (!detectNewDirectSubagent(prev, sessionList, sessionId)) return
+    if (!store.getPrefs().autoOpenSubagent) return
+    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
+      id: 'subagent',
+      type: 'subagent',
+      title: t('subagent'),
+    }))
+  }, [sessionList, sessionId, store])
+
+  /**
+   * Topology jump-back: clicking a subagent node on the Subagent page calls
+   * the official `openSubagent`, which switches the sidebar to that child
+   * session's OWN layout (a fresh child session defaults to the explorer).
+   * The README contract says the Subagent page must stay open with the jumped
+   * node highlighted — so once the current session becomes the recorded jump
+   * target, re-open the Subagent page on top of the child's layout (expanding
+   * the panel first if it is collapsed). Only this explicit node click arms
+   * the flag, so switching to a subagent session by any other means keeps
+   * that session's own layout untouched.
+   */
+  const subagentJumpRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const pending = subagentJumpRef.current
+    if (pending === undefined || sessionId !== pending) return
+    subagentJumpRef.current = undefined
+    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
+      id: 'subagent',
+      type: 'subagent',
+      title: t('subagent'),
+    }))
+  }, [sessionId, store])
 
   // Panel width drag (left edge strip).
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
@@ -231,6 +293,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       if (optionId === 'git') {
         return openTab(s, { id: 'git', type: 'git', title: t('git') })
       }
+      if (optionId === 'subagent') {
+        return openTab(s, { id: 'subagent', type: 'subagent', title: t('subagent') })
+      }
       if (optionId === 'terminal') {
         const count = allLeaves(s.splits).flatMap(leaf => leaf.tabs).filter(tab => tab.type === 'terminal').length
         if (count >= TERMINAL_LIMIT) return s
@@ -251,7 +316,13 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
    * ctx and the conversation input service at click time; a missing service
    * or scope degrades to a logged no-op, never a crash.
    */
-  const renderTab = (tab: SidebarTab) => (
+  /**
+   * Render one tab's content. `active` (from the workbench) tells whether
+   * this tab is the active one in its pane; combined with the panel's
+   * open/closed state it gates live views (the Subagent topology pauses its
+   * polling while the page is not actually visible).
+   */
+  const renderTab = (tab: SidebarTab, active: boolean) => (
     <TabContent
       tab={tab}
       sessionId={sessionId}
@@ -261,6 +332,8 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       onReferenceFile={referenceInChat}
       ctx={ctx}
       store={store}
+      visible={state.panelOpen && active}
+      onSubagentJump={(childSessionId) => { subagentJumpRef.current = childSessionId }}
     />
   )
 

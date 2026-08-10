@@ -1,6 +1,6 @@
 # dsh-better-sidebar
 
-> DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件 —— 文件管理、编辑预览、真实终端、Git 面板，一个面板全部搞定。
+> DeepSeek Harness Web GUI 的 **VSCode 风格右侧侧边栏**插件 —— 文件管理、编辑预览、真实终端、Git 面板、Subagent 页面，一个面板全部搞定。
 
 <img width="4632" height="2720" alt="image" src="https://github.com/user-attachments/assets/39d86636-7654-412f-86ea-c60a2d5f20f0" />
 <img width="1000" height="1186" alt="image" src="https://github.com/user-attachments/assets/9dadffe0-0738-4b6d-b929-f452f51768a2" />
@@ -112,6 +112,13 @@ dsh registry enable dsh-external/dsh-better-sidebar
 
 - status 暂存/未暂存分组、按文件 diff（HEAD vs 工作区/暂存区）、stage/unstage（单个与全部）、commit、分支切换、提交历史
 
+### 🧩 Subagent 页面
+
+- **主会话 agent 拓扑（分层显示）**：`+` 菜单（或空分栏卡片）打开 Subagent 标签页，显示**主会话（主代理）的完整 agent 拓扑**——主代理作为根节点卡片置顶（**点击它直接回到主代理会话**），其**所有层级的子代理**（含子代理再派生的后代）从它下面按层级展开，树连接线 + 逐级缩进区分层级；无论当前选中/跳转到多深的子代理，所有子代理都共享这一个主会话拓扑视图
+- **点击直达执行记录**：点击子代理节点直接跳转到该子代理执行记录（官方 `openSubagent`）；**跳转后 Subagent 页面保持打开**，主会话拓扑不变，当前所在节点**高亮**（`interactive-bg-active` 选中填充，同官方会话行）
+- **运行中实时状态**：**仅运行中的节点**显示最后 Text 输出 + 最后工具调用（工具名 + 参数摘要，等宽字体），页面可见时每 3 秒自动刷新；暂无输出时显示「思考中…」；空闲节点保持安静；页面不可见（切标签/折叠面板）时暂停轮询
+- **自动激活**：设置项「检测到子代理时自动展开子代理页面」默认开启——当前会话**新增**第一个子代理时，侧边栏自动展开并聚焦 Subagent 页面；关闭后需手动打开（切换会话/刷新已有子代理不会打扰）
+
 ### 🧩 VSCode 式分栏工作台
 
 - **拖 Tab 到分栏边缘**（左/右/上/下）即拆分新分栏，拖到中间合并，拖到另一个 Tab 上插入其前
@@ -120,7 +127,7 @@ dsh registry enable dsh-external/dsh-better-sidebar
 ### 📑 Tab 栏
 
 - **Tab 与 `+` 菜单均带类型图标**（文件夹 / 分支 / 终端 / 代码文件）
-- `+` 菜单新建 Explorer / Git / 终端（终端受 3 个上限约束）；**中键点击关闭 Tab**
+- `+` 菜单新建 Explorer / Git / Subagent / 终端（终端受 3 个上限约束）；**中键点击关闭 Tab**
 - 空分栏显示可打开类型卡片，点击即开
 
 ### 🔁 会话隔离与状态自愈
@@ -140,6 +147,7 @@ dsh registry enable dsh-external/dsh-better-sidebar
 - 设置页新增 **Side card（侧边卡片）** 分区，持久化到 DSH 用户设置文档：
   - **新会话默认打开**：新建会话是否自动展开侧边卡片（已存在的会话保持各自布局）
   - **默认宽度占比**：新建会话时侧边卡片占窗口宽度的百分比（20–60，默认 30）
+  - **检测到子代理时自动展开子代理页面**（默认开启）：当前会话产生新的子代理时，自动展开侧边栏并打开 Subagent 页面
 
 ## ⌨️ 快捷键速查
 

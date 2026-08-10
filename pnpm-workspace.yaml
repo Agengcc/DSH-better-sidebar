@@ -6,3 +6,4 @@ packages:
 # build scripts unless approved.
 allowBuilds:
   node-pty: true
+  protobufjs: true

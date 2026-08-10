@@ -38,6 +38,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     defaultWidthPercent: typeof record.defaultWidthPercent === 'number' && Number.isFinite(record.defaultWidthPercent)
       ? clampWidthPercent(record.defaultWidthPercent)
       : SIDEBAR_PREFS_DEFAULTS.defaultWidthPercent,
+    autoOpenSubagent: typeof record.autoOpenSubagent === 'boolean'
+      ? record.autoOpenSubagent
+      : SIDEBAR_PREFS_DEFAULTS.autoOpenSubagent,
   }
 }
 

@@ -88,6 +88,23 @@ const zh = {
   nextSlide: '下一页',
   zoom: '缩放',
   zoomHint: 'Alt + 滚轮',
+  settingsSubagentTitle: '检测到子代理时自动展开子代理页面',
+  settingsSubagentDesc: '当前会话产生新的子代理时，自动展开侧边栏并打开子代理页面；关闭后需手动打开',
+  subagent: '子代理',
+  openSubagent: '子代理',
+  subagentMainAgent: '主代理',
+  subagentEmpty: '暂无子代理',
+  subagentEmptyDesc: '当前主代理派生的子代理将显示在这里',
+  subagentRunning: '运行中',
+  subagentInactive: '空闲',
+  subagentModeOneShot: '一次性',
+  subagentModeContinuable: '可续接',
+  subagentCount: '{count} 个子代理',
+  subagentCountRunning: '{count} 个子代理 · {running} 运行中',
+  subagentDiagCorrupt: '目录损坏',
+  subagentDiagUnsupported: '不支持的条目',
+  subagentDiagUnavailable: '不可用',
+  subagentThinking: '思考中…',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -173,15 +190,39 @@ const en: Record<keyof typeof zh, string> = {
   nextSlide: 'Next',
   zoom: 'Zoom',
   zoomHint: 'Alt + wheel',
+  settingsSubagentTitle: 'Auto-open the Subagent page when a subagent appears',
+  settingsSubagentDesc: 'Expand the side card and open the Subagent page when the current conversation spawns a new subagent; turn off to open it manually',
+  subagent: 'Subagents',
+  openSubagent: 'Subagents',
+  subagentMainAgent: 'Main agent',
+  subagentEmpty: 'No subagents',
+  subagentEmptyDesc: 'Subagents spawned under the main agent will appear here',
+  subagentRunning: 'Running',
+  subagentInactive: 'Inactive',
+  subagentModeOneShot: 'One-shot',
+  subagentModeContinuable: 'Continuable',
+  subagentCount: '{count} subagents',
+  subagentCountRunning: '{count} subagents · {running} running',
+  subagentDiagCorrupt: 'Corrupt',
+  subagentDiagUnsupported: 'Unsupported',
+  subagentDiagUnavailable: 'Unavailable',
+  subagentThinking: 'Thinking…',
 }
 
 /** Translate a copy key in the browser's language (zh → zh, else en). */
 export type CopyKey = keyof typeof zh
 
-export function t(key: CopyKey): string {
+/** Translate a copy key; `{name}` placeholders interpolate from `params`. */
+export function t(key: CopyKey, params?: Record<string, string | number>): string {
   const lang = typeof navigator !== 'undefined' ? navigator.language : 'en'
   const dict = lang.toLowerCase().startsWith('zh') ? zh : en
-  return dict[key]
+  let text = dict[key]
+  if (params !== undefined) {
+    for (const [name, value] of Object.entries(params)) {
+      text = text.replaceAll(`{${name}}`, String(value))
+    }
+  }
+  return text
 }
 
 /** Whether the browser language is Chinese (used for selectors). */

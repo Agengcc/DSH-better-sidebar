@@ -44,11 +44,13 @@ describe('dsh-better-sidebar plugin export shape', () => {
     })(undefined)
     expect(resolved.openByDefault).toBe(true)
     expect(resolved.defaultWidthPercent).toBe(30)
+    expect(resolved.autoOpenSubagent).toBe(true)
     // A stored overridden value resolves through (the range contract is
-    // enforced by the settings service on write).
+    // enforced by the settings service on write); the new pref keeps its
+    // default when the stored document predates it.
     const overridden = (PrefsSchema as unknown as {
       (input: Record<string, unknown> | undefined): Record<string, unknown>
     })({ openByDefault: false, defaultWidthPercent: 45 })
-    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45 })
+    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true })
   })
 })
