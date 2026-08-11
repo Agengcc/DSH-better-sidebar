@@ -123,8 +123,19 @@ async function resolveGitPath(cwd: string, raw: string): Promise<string> {
   return requireAbsolute(join(root, raw))
 }
 
-/** Text read of a file with the size cap; binary detection via NUL probe. */
-async function readText(path: string, readLimit: number): Promise<{ content: string; truncated: boolean; binary: boolean; size: number }> {
+/** How many leading bytes a binary read returns for client-side detect sniffing. */
+const READ_HEAD_LIMIT = 4096
+
+/** Text read of a file with the size cap; binary detection via NUL probe.
+ *  Binary reads also return the first {@link READ_HEAD_LIMIT} bytes (base64)
+ *  so the client can re-match viewers by content (`detect`). */
+async function readText(path: string, readLimit: number): Promise<{
+  content: string
+  truncated: boolean
+  binary: boolean
+  size: number
+  head?: string
+}> {
   const info = await stat(path).catch((error: unknown) => {
     throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
   })
@@ -141,7 +152,10 @@ async function readText(path: string, readLimit: number): Promise<{ content: str
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
     const slice = buffer.subarray(0, bytesRead)
     const binary = slice.includes(0)
-    return { content: binary ? '' : slice.toString('utf8'), truncated, binary, size }
+    const head = binary
+      ? slice.subarray(0, Math.min(slice.length, READ_HEAD_LIMIT)).toString('base64')
+      : undefined
+    return { content: binary ? '' : slice.toString('utf8'), truncated, binary, size, head }
   } finally {
     await handle.close()
   }
@@ -194,8 +208,8 @@ function buildApi(
       // Relative paths are git-derived (status/diff report repo-root-relative
       // names; the untracked diff view reads the file through this route).
       const path = await resolveGitPath(cwd, requireString(payload, 'path'))
-      const { content, truncated, binary, size } = await readText(path, resolved.readLimit)
-      if (binary) return { kind: 'binary', size, truncated }
+      const { content, truncated, binary, size, head } = await readText(path, resolved.readLimit)
+      if (binary) return { kind: 'binary', size, truncated, head }
       return { kind: 'text', content, truncated }
     },
     'fs.write': async (payload) => {

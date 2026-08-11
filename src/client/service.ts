@@ -2,7 +2,7 @@
  * The BetterSidebar client service: a registry that external plugins use
  * to contribute sidebar tab types and file previewers. The service is
  * published to the cordis context as `ctx.betterSidebar` (see
- * {@link ../types.ts}); consumers declare it in `inject` and call
+ * {@link ../context-types.ts}); consumers declare it in `inject` and call
  * `registerTab` / `registerFileViewer`, both returning a disposer that
  * cordis auto-invokes on fiber disposal (HMR-safe).
  *
@@ -12,15 +12,17 @@
  * - `dedupeKey` unifies the three open-tab strategies the builtins used to
  *   hardcode: single-instance (`() => type`), per-path (`tab => tab.path`),
  *   and per-id (`tab => tab.id` for diff tabs whose id is change-derived).
+ *   `single: true` is sugar for `dedupeKey: () => id`.
  * - `createTab` lets a descriptor own tab instantiation (the terminal
  *   builtin uses it to mint `terminal:<n>` ids and bump `nextTerminal`).
- * - `matchFileViewer` resolves viewers by priority (desc), then `detect`
- *   (content sniff), then `exts` (lowercase, no dot).
+ * - `matchFileViewer` walks descriptors in priority order (desc, stable):
+ *   per descriptor it tries `detect` first (when `head` bytes are given),
+ *   then `exts`; `exts: []` is a catch-all that matches any path.
  */
 import type { ReactNode } from 'react'
 import type { Context } from '../context-types.ts'
 import {
-  activateTab, allLeaves, closeTab as closeTabReducer, firstLeaf, mapLeaf,
+  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane,
   type SidebarState, type SidebarStore, type SidebarTab,
 } from './state.ts'
 import type { SessionScope } from './api.ts'
@@ -52,14 +54,24 @@ export interface TabDescriptor {
   order?: number
   /** Hide from the + menu (the editor tab is opened by file-open, not by the menu). */
   hidden?: boolean
-  /** + menu disabled predicate (e.g. terminal at capacity). */
-  available?: (state: SidebarState) => boolean
+  /**
+   * + menu disabled predicate (e.g. terminal at capacity). Receives the
+   * session scope and the live sidebar state (counts, expansions).
+   */
+  available?: (ctx: Context, scope: SessionScope, state: SidebarState) => boolean
+  /**
+   * Single-instance sugar: `true` is shorthand for `dedupeKey: () => id`
+   * (opening the tab focuses an existing one of the same type instead of
+   * creating a duplicate). An explicit `dedupeKey` always wins when both
+   * are given. Builtins: explorer/git/subagent use `single: true`.
+   */
+  single?: boolean
   /**
    * If provided, opening a tab whose `dedupeKey(tab)` matches an existing
    * tab's key focuses the existing one instead of creating a new one.
    * Returning `undefined` means "no dedup — always open a new tab".
-   * Builtins: explorer/git/subagent use `() => id`; editor uses `tab => tab.path`;
-   * diff uses `tab => tab.id` (openDiffTab mints change-derived ids).
+   * Builtins: editor uses `tab => tab.path`; diff uses `tab => tab.id`
+   * (openDiffTab mints change-derived ids).
    */
   dedupeKey?: (tab: SidebarTab) => string | undefined
   /**
@@ -87,6 +99,8 @@ export interface FileViewerProps {
   scope: SessionScope
   path: string
   title: string
+  /** The matching descriptor's id (`'code'`, `'my-plugin:csv'`). */
+  viewerId: string
   /** fsRead text content (fetchStrategy='fsRead'). */
   content?: string
   truncated?: boolean
@@ -106,8 +120,8 @@ export interface FileViewerDescriptor {
   priority?: number
   fetchStrategy: FileFetchStrategy
   /**
-   * Content sniff (overrides exts when `head` bytes are available).
-   * The first descriptor (priority desc) whose `detect` returns true wins.
+   * Content sniff: when `head` bytes are available the descriptor's `detect`
+   * is consulted before its `exts` (per-descriptor, in priority order).
    */
   detect?: (path: string, head: Uint8Array) => boolean
   /** fetchStrategy='custom' loader. */
@@ -123,10 +137,15 @@ export interface BetterSidebarService {
   getFileViewers(): readonly FileViewerDescriptor[]
   /** Find a tab descriptor by id (undefined if not registered). */
   getTab(id: string): TabDescriptor | undefined
-  /** Find a file viewer for a path (priority desc → detect → exts). */
+  /** Find a file viewer for a path (priority desc; detect first, then exts). */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
-  /** Open a tab (used by external tabs and the + menu). */
-  openTab(seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
+  /**
+   * Open a tab (used by external tabs and the + menu). `title` overrides
+   * the descriptor's title when given (the editor tab shows the file name);
+   * when the descriptor provides `createTab` it mints the tab itself and
+   * `title`/`path`/`id` are ignored.
+   */
+  openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
   /** Close a tab by id. */
   closeTab(tabId: string): void
   /** Subscribe to registry changes (register/dispose). */
@@ -194,29 +213,34 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
 
   const matchFileViewer = (path: string, head?: Uint8Array): FileViewerDescriptor | undefined => {
     const ext = extOfPath(path)
-    // Priority descending; stable order for equal priorities (insertion order).
-    const sorted = Array.from(viewers.values()).sort(
+    // Single pass in priority order (descending; stable for equal
+    // priorities — insertion order). Each descriptor gets first refusal in
+    // its own turn: `detect` (when head bytes are available) beats its own
+    // `exts`, and `exts: []` is a catch-all matching any path — so the
+    // catch-all `code` viewer (-100) only sees paths no higher-priority
+    // descriptor claimed.
+    for (const v of Array.from(viewers.values()).sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
-    )
-    // Pass 1: content sniff (detect overrides exts when head bytes are available).
-    if (head !== undefined) {
-      for (const v of sorted) {
-        if (v.detect !== undefined && v.detect(path, head)) return v
+    )) {
+      // Content sniff first (only when head bytes are available).
+      if (head !== undefined && v.detect !== undefined) {
+        if (v.detect(path, head)) return v
+        // A catch-all with detect is SNIFF-ONLY: it must not blind-claim
+        // paths it never sniffed (a magic-number viewer must not swallow
+        // every file before the real viewers get their turn).
+        if (v.exts.length === 0) continue
+      } else if (v.exts.length === 0) {
+        // Blind catch-all (no detect) claims anything; a sniff-only
+        // catch-all (detect defined, no head yet) yields this round.
+        if (v.detect === undefined) return v
+        continue
       }
-    }
-    // Pass 2: extension match ([] is catch-all, skipped here).
-    for (const v of sorted) {
-      if (v.exts.length === 0) continue
       if (v.exts.includes(ext)) return v
-    }
-    // Pass 3: catch-all (exts === []).
-    for (const v of sorted) {
-      if (v.exts.length === 0) return v
     }
     return undefined
   }
 
-  const openTab = (seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void => {
+  const openTab = (seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void => {
     store.reduce((state) => {
       const descriptor = tabs.get(seed.type)
       if (descriptor === undefined) return state
@@ -230,7 +254,9 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       const tab: SidebarTab = {
         id: seed.id ?? seed.type,
         type: seed.type,
-        title: typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title,
+        // A caller-provided title wins (the editor shows the file name);
+        // otherwise the descriptor's (possibly i18n) title is the default.
+        title: seed.title ?? (typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title),
         ...(seed.path !== undefined ? { path: seed.path } : {}),
         ...(seed.diff !== undefined ? { diff: seed.diff } : {}),
       }
@@ -260,29 +286,22 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
 }
 
 /**
- * Apply dedup: if a tab with the same dedupeKey exists, focus it instead.
- * Mirrors the three branches the old `openTab` hardcoded (single/editor/diff).
+ * Apply dedup: if a tab whose `dedupeKey` matches an existing tab of the
+ * same type exists, focus it; otherwise land the tab through
+ * `openTabInActivePane` (the id safety net + active-pane landing are that
+ * reducer's job — not re-implemented here).
+ * `single: true` resolves to the id-key sugar when no explicit key is given.
  */
 function applyDedupe(state: SidebarState, tab: SidebarTab, descriptor: TabDescriptor): SidebarState {
-  const key = descriptor.dedupeKey?.(tab)
+  const dedupeKey = descriptor.dedupeKey ?? (descriptor.single === true ? () => descriptor.id : undefined)
+  const key = dedupeKey?.(tab)
   if (key !== undefined) {
     for (const leaf of allLeaves(state.splits)) {
-      const existing = leaf.tabs.find(t => t.type === tab.type && descriptor.dedupeKey!(t) === key)
+      const existing = leaf.tabs.find(t => t.type === tab.type && dedupeKey!(t) === key)
       if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
     }
   }
-  let targetId = state.activePane ?? firstLeaf(state.splits).id
-  if (!allLeaves(state.splits).some(leaf => leaf.id === targetId)) {
-    targetId = firstLeaf(state.splits).id
-  }
-  return {
-    ...state,
-    activePane: targetId,
-    splits: mapLeaf(state.splits, targetId, (leaf) => {
-      leaf.tabs = [...leaf.tabs, tab]
-      leaf.active = tab.id
-    }),
-  }
+  return openTabInActivePane(state, tab)
 }
 
 /** Find which pane hosts a tab id ('' if none). */

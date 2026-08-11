@@ -4,7 +4,7 @@ import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
 import {
   activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openDiffTab, openTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SidebarTab, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -217,22 +217,22 @@ describe('sidebar state', () => {
   it('opens tabs into the active pane and dedupes by id (safety net)', () => {
     let s = state()
     const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
-    s = openTab(s, gitTab)
+    s = openTabInActivePane(s, gitTab)
     expect(s.splits.kind).toBe('leaf')
     expect((s.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
     // Reopening with the SAME id focuses the existing tab instead of duplicating.
-    const after = openTab(s, { id: 'git', type: 'git' as const, title: 'Git' })
+    const after = openTabInActivePane(s, { id: 'git', type: 'git' as const, title: 'Git' })
     expect((after.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
     // A different id opens a new tab (type-level dedupe is the service's job).
-    const after2 = openTab(s, { id: 'git2', type: 'git' as const, title: 'Git' })
+    const after2 = openTabInActivePane(s, { id: 'git2', type: 'git' as const, title: 'Git' })
     expect((after2.splits as { tabs: unknown[] }).tabs).toHaveLength(3)
   })
 
   it('opens multiple editors with distinct ids (path-level dedupe is the service descriptor\'s job)', () => {
     let s = state()
     const firstId = (s.splits as { tabs: { id: string }[] }).tabs[0]!.id
-    s = openTab(s, { id: 'e1', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
-    const after = openTab(s, { id: 'e2', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
+    s = openTabInActivePane(s, { id: 'e1', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
+    const after = openTabInActivePane(s, { id: 'e2', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     expect((after.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([firstId, 'e1', 'e2'])
   })
 
@@ -246,7 +246,7 @@ describe('sidebar state', () => {
   it('first diff splits the source pane vertically (diff below)', () => {
     const s = state()
     const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
-    const withGit = openTab(s, gitTab)
+    const withGit = openTabInActivePane(s, gitTab)
     const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
     const after = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
     expect(after.splits.kind).toBe('split')
@@ -262,7 +262,7 @@ describe('sidebar state', () => {
   it('reopening the same diff focuses its existing tab', () => {
     const s = state()
     const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
-    const withGit = openTab(s, gitTab)
+    const withGit = openTabInActivePane(s, gitTab)
     const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
     const first = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
     const second = openDiffTab(first, sourcePane, diffTab('diff:w:u:src/a.ts'))
@@ -276,7 +276,7 @@ describe('sidebar state', () => {
   it('subsequent diffs stack into the existing diff pane', () => {
     const s = state()
     const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
-    const withGit = openTab(s, gitTab)
+    const withGit = openTabInActivePane(s, gitTab)
     const sourcePane = (withGit.splits as { kind: 'leaf'; id: string }).id
     const first = openDiffTab(withGit, sourcePane, diffTab('diff:w:u:src/a.ts'))
     const second = openDiffTab(first, sourcePane, diffTab('diff:c:abc1234def5678abc1234def5678abc1234def5678'))
@@ -341,10 +341,10 @@ describe('sidebar state', () => {
 
   it('dedupes the single-instance subagent tab (focuses instead of duplicating)', () => {
     let s = state()
-    s = openTab(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
+    s = openTabInActivePane(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
     expect((s.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
     // Reopening (e.g. the auto-activation effect) focuses the existing tab.
-    const after = openTab(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
+    const after = openTabInActivePane(s, { id: 'subagent', type: 'subagent', title: 'Subagents' })
     expect((after.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
     const tabs = (after.splits as { tabs: { type: string; id: string }[] }).tabs
     expect(tabs.filter(tab => tab.type === 'subagent')).toHaveLength(1)
@@ -375,7 +375,7 @@ describe('sidebar state', () => {
     const paneB = split.children[1] as { id: string; tabs: { id: string }[] }
     const tabId = paneA.tabs[0]!.id
     // 先给 paneB 一个 tab，然后拖 paneA 的 tab 到 paneB 的 right 边缘。
-    s = openTab(s, { id: 't2', type: 'terminal', title: 'T2' })
+    s = openTabInActivePane(s, { id: 't2', type: 'terminal', title: 'T2' })
     s = moveTabToEdge(s, paneA.id, tabId, paneB.id, 'right')
     const after = s.splits as Extract<SplitNode, { kind: 'split' }>
     // paneB 现在是 split(row) [旧leaf, 新leaf(tabId)]；其父 split 仍存在。
@@ -401,7 +401,7 @@ describe('sidebar state', () => {
 
   it('dragging a tab back onto its own pane center reorders it', () => {
     let s = state()
-    s = openTab(s, { id: 't2', type: 'terminal', title: 'T2' })
+    s = openTabInActivePane(s, { id: 't2', type: 'terminal', title: 'T2' })
     const leaf = s.splits as { id: string; tabs: { id: string }[] }
     const first = leaf.tabs[0]!.id
     s = moveTabToEdge(s, leaf.id, first, leaf.id, 'center')
@@ -419,7 +419,7 @@ describe('sidebar state', () => {
     const explorerId = paneA.tabs[0]!.id
     // paneA gets a terminal; the explorer moves to paneB; closing the
     // terminal empties paneA, which is removed, promoting paneB.
-    s = openTab(s, { id: 't', type: 'terminal', title: 'Terminal 1' })
+    s = openTabInActivePane(s, { id: 't', type: 'terminal', title: 'Terminal 1' })
     s = moveTab(s, paneA.id, explorerId, paneB.id)
     s = activateTab(s, paneA.id, 't')
     s = closeTab(s, paneA.id, 't')
@@ -468,7 +468,7 @@ describe('sidebar state', () => {
     s = closeTab(s, target.id, explorerId)
     expect(tabOpenIn(s, explorerId)).toBe(false)
     // A terminal tab added later is open too.
-    s = openTab(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
+    s = openTabInActivePane(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
     expect(tabOpenIn(s, 'terminal:9')).toBe(true)
   })
 })
@@ -511,7 +511,7 @@ describe('agent terminal reconciliation', () => {
 
   it('does not touch non-agent terminal tabs', () => {
     let s = makeDefaultState(400, true)
-    s = openTab(s, { id: 'terminal:1', type: 'terminal', title: 'UI Tab' })
+    s = openTabInActivePane(s, { id: 'terminal:1', type: 'terminal', title: 'UI Tab' })
     s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'agent' }])
     expect(tabOpenIn(s, 'terminal:1')).toBe(true)
     expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
@@ -688,7 +688,7 @@ describe('persisted state sanitization', () => {
     expect(new Set(leaves.map(leaf => leaf.id)).size).toBe(2)
     expect(clean!.activePane).toBe(leaves[1]!.id)
     // And an open must land in exactly one pane of the healed tree.
-    const opened = openTab(clean!, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
+    const opened = openTabInActivePane(clean!, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
     const owners = allLeaves(opened.splits).filter(leaf => leaf.tabs.some(tab => tab.path === '/a.ts'))
     expect(owners).toHaveLength(1)
   })
@@ -698,13 +698,13 @@ describe('persisted state sanitization', () => {
     const paneA = allLeaves(s.splits)[0]!.id
     const explorerTab = allLeaves(s.splits)[0]!.tabs.find(tab => tab.type === 'explorer')!.id
     s = closeTab(s, paneA, explorerTab)
-    s = openTab(s, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
+    s = openTabInActivePane(s, { id: 'editor:/a.ts', type: 'editor', title: 'a.ts', path: '/a.ts' })
     const split = insertLeafAt(s.splits, paneA, 'col', { id: 'terminal:1', type: 'terminal', title: 'Terminal 1' }, false)
     s = { ...s, splits: split.node, activePane: paneA }
     // Closing the editor empties paneA; the pane is removed but activePane
     // still points at it. The next open must land in the surviving pane.
     s = closeTab(s, paneA, 'editor:/a.ts')
-    s = openTab(s, { id: 'editor:/b.ts', type: 'editor', title: 'b.ts', path: '/b.ts' })
+    s = openTabInActivePane(s, { id: 'editor:/b.ts', type: 'editor', title: 'b.ts', path: '/b.ts' })
     const owners = allLeaves(s.splits).filter(leaf => leaf.tabs.some(tab => tab.path === '/b.ts'))
     expect(owners).toHaveLength(1)
     expect(owners[0]!.tabs.some(tab => tab.type === 'terminal')).toBe(true)

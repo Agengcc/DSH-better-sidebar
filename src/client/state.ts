@@ -12,17 +12,12 @@
 import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
 
 /**
- * Tab type identifier. Builtins use the strings below; external plugins
- * register their own ids (e.g. `'my-plugin:db'`) through the sidebar
- * service. Kept as `string` so the registry is open; {@link SIDEBAR_BUILTIN_TAB_TYPES}
- * lists the builtins for back-compat checks.
+ * Tab type identifier. Builtins register their ids (explorer / git / editor
+ * / terminal / subagent / diff) through the sidebar service; external
+ * plugins register their own (e.g. `'my-plugin:db'`). Kept as `string` so
+ * the registry stays open.
  */
 export type TabType = string
-
-/** The tab type ids the plugin itself registers (see {@link ./builtins.ts}). */
-export const SIDEBAR_BUILTIN_TAB_TYPES = [
-  'explorer', 'git', 'editor', 'terminal', 'subagent', 'diff',
-] as readonly string[]
 
 /** What a diff tab shows: a worktree/index change of one path, or one commit's full patch. */
 export type SidebarDiffRef =
@@ -75,7 +70,6 @@ export const PANEL_MIN = 280
 export const PANEL_MAX = 640
 export const PANEL_DEFAULT = 400
 export const TAB_MAX_WIDTH = 160
-export const TERMINAL_LIMIT = 3
 
 let nextIdCounter = 0
 /** Unique pane/tab id within one state instance. */
@@ -310,14 +304,15 @@ export function activateTab(state: SidebarState, paneId: string, tabId: string):
 }
 
 /**
- * Open a tab (or focus its existing instance by id). Dedup strategies
- * (single-instance, per-path, per-change) are owned by the tab descriptor
- * through {@link BetterSidebarService.openTab} / `dedupeKey`; this reducer
- * only handles the id-based safety net (reconcile/openDiffTab already
- * check existence before calling) and lands the tab in the active pane
- * (or the first pane when the active one is gone).
+ * Land a tab in the active pane (or focus its existing instance by id).
+ * Dedup strategies (single-instance, per-path, per-change) are owned by the
+ * tab descriptor through {@link BetterSidebarService.openTab} / `dedupeKey`;
+ * this reducer only handles the id-based safety net (reconcile and
+ * openDiffTab already check existence before calling) and the landing
+ * itself — the service's dedupe path delegates here after its dedupeKey
+ * check misses.
  */
-export function openTab(state: SidebarState, tab: SidebarTab): SidebarState {
+export function openTabInActivePane(state: SidebarState, tab: SidebarTab): SidebarState {
   let targetId = state.activePane ?? firstLeaf(state.splits).id
   // A stale activePane (its pane was closed since) must not swallow the
   // open: fall back to the first pane instead of dropping the tab.
@@ -373,6 +368,12 @@ export function splitPane(state: SidebarState, dir: 'row' | 'col'): SidebarState
  * already holds diff tabs (diff panes are sticky — repeated clicks stack
  * there); on the FIRST diff of a layout the source pane splits vertically so
  * the diff lands in a fresh pane below it ("默认在下半栏新增一个").
+ *
+ * This is split-tree placement surgery, not registry dispatch: the diff tab
+ * descriptor's `dedupeKey` is `(tab) => tab.id`, and the existing-instance
+ * check below is exactly that rule — the two agree by construction (asserted
+ * in tests). Diff tabs minted by the Git view carry change-derived ids, so
+ * the id check is the per-change dedupe.
  * @returns the new state, with the diff pane active.
  */
 export function openDiffTab(state: SidebarState, sourcePaneId: string, tab: SidebarTab): SidebarState {
@@ -393,7 +394,7 @@ export function openDiffTab(state: SidebarState, sourcePaneId: string, tab: Side
   // (A stale sourcePaneId — its pane closed meanwhile — degrades to the
   // regular open path instead of dropping the tab into an orphaned leaf.)
   if (!allLeaves(state.splits).some(leaf => leaf.id === sourcePaneId)) {
-    return openTab(state, tab)
+    return openTabInActivePane(state, tab)
   }
   const result = insertLeafAt(state.splits, sourcePaneId, 'col', tab, false)
   return { ...state, splits: result.node, activePane: result.leafId }
@@ -488,7 +489,7 @@ export function reconcileAgentTerminals(
     }
   }
   // Add tabs for new uuids (the agent created a terminal). They land in the
-  // active pane via openTab; the next reconcile is a no-op for them.
+  // active pane via openTabInActivePane; the next reconcile is a no-op for them.
   let next: SidebarState = { ...state, splits }
   for (const terminal of toAdd) {
     const tab: SidebarTab = {
@@ -496,7 +497,7 @@ export function reconcileAgentTerminals(
       type: 'terminal',
       title: terminal.title,
     }
-    next = openTab(next, tab)
+    next = openTabInActivePane(next, tab)
   }
   return next
 }

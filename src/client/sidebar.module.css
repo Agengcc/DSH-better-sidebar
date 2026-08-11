@@ -640,6 +640,15 @@
   text-align: center;
 }
 
+/* The unregistered tab type shown by the orphaned-tab placeholder. */
+.orphanedType {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+
 /* Binary / download-only files (pptx, OLE .doc/.xls/.ppt, unknown binaries):
    a centered notice plus a download link — the user always gets the file. */
 .editorBinary {

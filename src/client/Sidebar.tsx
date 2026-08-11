@@ -15,10 +15,10 @@ import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab,
+  agentUuidOf, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab,
   reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
-  TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
+  type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
 } from './state.ts'
 import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import type { NewTabOption } from './TabBar.tsx'
@@ -27,7 +27,7 @@ import { relativeTo } from './paths.ts'
 import { OrphanedTab } from './OrphanedTab.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
 import { t } from './locales.ts'
-import { api } from './api.ts'
+import { api, type SessionScope } from './api.ts'
 import css from './sidebar.module.css'
 
 /** How many consecutive reconnect failures stop the agent-terminals push loop
@@ -66,7 +66,7 @@ function TabContent(props: {
 /** The + menu options for the current state, driven by the tab registry.
  * Hidden tabs (editor/diff) never show; `available` returning false shows
  * a disabled row (e.g. terminal at capacity) instead of hiding the option. */
-function buildNewTabOptions(state: SidebarState, ctx: Context): NewTabOption[] {
+function buildNewTabOptions(state: SidebarState, ctx: Context, scope: SessionScope): NewTabOption[] {
   const service = ctx.betterSidebar
   if (service === undefined) return []
   return service.getTabs()
@@ -75,7 +75,7 @@ function buildNewTabOptions(state: SidebarState, ctx: Context): NewTabOption[] {
     .map(d => ({
       id: d.id,
       label: typeof d.title === 'function' ? d.title() : d.title,
-      disabled: !(d.available?.(state) ?? true),
+      disabled: !(d.available?.(ctx, scope, state) ?? true),
       icon: typeof d.icon === 'function' ? d.icon(16) : d.icon,
     }))
 }
@@ -433,7 +433,7 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         <div className={css.panelBody}>
           <Workbench
             state={state}
-            newTabOptions={buildNewTabOptions(state, ctx)}
+            newTabOptions={buildNewTabOptions(state, ctx, { sessionId, cwd })}
             actions={actions}
             onNewTab={onNewTab}
             renderTab={renderTab}

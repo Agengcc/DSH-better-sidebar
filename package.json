@@ -23,6 +23,10 @@
       "types": "./lib/types/client/service.d.ts",
       "default": "./lib/client.js"
     },
+    "./client/api": {
+      "types": "./lib/types/client/service.d.ts",
+      "default": "./lib/client.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

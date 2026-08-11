@@ -359,3 +359,58 @@ export function apply(ctx: Context): void {
 12. 重建 lib/，提交，推送，更新 profile web
 
 详细实施计划由 writing-plans skill 生成。
+
+---
+
+## 17. 实施偏差记录（2026-08-11，feat/modular-registry）
+
+实现（PR #3 + 本分支）与上文设计有意或被迫不同的点，逐条记录。文档以本节为准。
+
+### 17.1 去重机制：`dedupeKey` 为唯一机制，`single` 是其语法糖
+
+§5.2 的 `single?: boolean` 与实现的 `dedupeKey` 合并为单一机制：
+- `dedupeKey?: (tab) => string | undefined` 是唯一去重规则（单实例 `() => id`、按 path、按 id 三种旧策略统一表达）；
+- `single: true` ≡ `dedupeKey: () => id`（语法糖，显式 dedupeKey 优先）。
+
+### 17.2 `available` 三参签名
+
+§5.2 的 `available?: (ctx, scope) => boolean` 实现为 `(ctx, scope, state) => boolean`（state 用于 terminal 配额等 UI 状态判定，是设计签名的超集）。
+
+### 17.3 匹配算法：单趟 per-descriptor，非三趟全局
+
+§8.2 的算法（priority 降序逐 descriptor，detect 或 exts 二选一）为准；实现确认单趟，并补充一条规则：**`exts: []` + `detect` 是纯嗅探模式**——无 head 时不认领任何文件（避免 magic-sniffer 吞掉图片/PDF 等真实 viewer 的文件），有 head 时只认领 detect 命中的。盲 catch-all（无 detect）行为不变。
+
+### 17.4 编辑器拆分：EditorHost + TextEditor（code/markdown 成为注册 viewer）
+
+§10 的 EditorView 职责一分为二：
+- `EditorHost`（'editor' tab 组件）：标题栏 + `matchFileViewer` → 按 fetchStrategy 分发（纯逻辑在 `editor-load.ts` 的 `planFirstMatch`/`planFsReadOutcome`）→ 渲染 viewer.component；binary 无匹配渲染共享 `BinaryDownload`；
+- `TextEditor`（viewer 组件）：code/markdown 的 CodeMirror 编辑 + md 预览/编辑切换 + 保存/脏点，内容由 host 经 fsRead 传入，按 `viewerId === 'markdown'` 分支。
+- 代码/保存按钮从标题行移到内容区第二行（VSCode 式工具栏，有意 UX 变更）。
+
+### 17.5 `fs.read` 增加 `head` 字段（唯一 host 触碰）
+
+§8.2/§14 的 detect 机制需要 head 字节：host `fs.read` 对二进制响应附加 `head`（base64，前 4KB，常量 `READ_HEAD_LIMIT`）。客户端在 fsRead 结果为二进制时用 head 重匹配一次（无额外 IO），NUL 探测因此成立。向后兼容（新字段）。纯文本文件不触发重匹配（文本嗅探请用 exts 或 custom 策略）。
+
+### 17.6 导出路径：`./client/service` 为主，`./client/api` 为别名
+
+§7 要求 `./client/api`，但 `api.ts` 已被既有的 fetch 助手占用；package.json exports 增加 `"./client/api"` 别名指向 `lib/types/client/service.d.ts`，公共导入路径满足设计，内部文件名不变。
+
+### 17.7 + 菜单：disabled 行而非 filter
+
+§9 的 `filter(!hidden && available)` 实现为"available 返回 false 显示 disabled 行"（与 v0.3.0 旧 UX 一致；终端配额满时用户能看到选项为何不可用）。行为有意保留，文档更新为现状。
+
+### 17.8 保留的 store 级操作（非注册表职责）
+
+- `openDiffTab`（state reducer）：diff 的 split 树放置手术（粘性 diff pane、首次拆分下方），保留；其按 id 去重与 diff descriptor 的 `dedupeKey: (tab) => tab.id` 同规则（测试断言两者一致）。
+- `reconcileAgentTerminals`：agent 终端列表同步（host 推送驱动），直接落 state（`openTabInActivePane`），不经过 service（terminal 的 createTab 语义不适用）。
+- 命名：state.ts 的 `openTab` reducer 改名 `openTabInActivePane`（与 `service.openTab` 区分）。
+
+### 17.9 内置清单
+
+- tab 6 个不变（editor/explorer/git/subagent/terminal/diff），explorer/git/subagent 改用 `single: true`。
+- viewer 8 个：image/pdf/docx/xlsx/pptx（mediaUrl）+ markdown（fsRead）+ code（fsRead，catch-all -100）+ binary-download（-50，exts doc/xls/ppt + NUL detect）。
+- `SIDEBAR_BUILTIN_TAB_TYPES` 常量删除（零引用）；`tabTypeIcon` 删除（图标归 descriptor.icon）。
+
+### 17.10 测试
+
+新增 `tests/builtins.spec.ts`（内置注册清单）、`tests/orphaned-tab.spec.tsx`（sanitize 保留未注册类型 + 占位渲染）、`tests/editor-load.spec.ts`（策略分发纯函数）；`tests/browser-globals.ts` 为拉入 xterm/CodeMirror 的 spec 提供模块求值期浏览器全局 mock。`matchFileViewer` 相关断言按 17.3 语义重写。

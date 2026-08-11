@@ -234,7 +234,7 @@ export function XlsxView(props: OfficeViewProps): JSX.Element {
 /**
  * The shared error / fallback affordance: the failure reason plus a download
  * link, so the user always has a path to the file. Used by both DocxView and
- * XlsxView, and matches the binary placeholder's download link in EditorView.
+ * XlsxView, and matches the binary placeholder download link.
  */
 function BinaryFallback(props: { scope: SessionScope; path: string; message: string }): JSX.Element {
   const { scope, path, message } = props
