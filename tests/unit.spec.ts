@@ -829,17 +829,38 @@ describe('side card preferences', () => {
 
   it('parses a valid value and clamps the percent into the contract range', async () => {
     expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 80, autoOpenSubagent: false, agentTerminalTools: true })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 60, autoOpenSubagent: false, agentTerminalTools: true })
+      .toEqual({
+        openByDefault: false,
+        defaultWidthPercent: 60,
+        autoOpenSubagent: false,
+        agentTerminalTools: true,
+        tabsEnabled: {},
+        viewersEnabled: {},
+      })
   })
 
   it('falls back per-field when a stored field is malformed', async () => {
     expect(await loadPrefs(wire({ openByDefault: 'yes', defaultWidthPercent: 33, autoOpenSubagent: 'no', agentTerminalTools: 'yes' })))
-      .toEqual({ openByDefault: true, defaultWidthPercent: 33, autoOpenSubagent: true, agentTerminalTools: false })
+      .toEqual({
+        openByDefault: true,
+        defaultWidthPercent: 33,
+        autoOpenSubagent: true,
+        agentTerminalTools: false,
+        tabsEnabled: {},
+        viewersEnabled: {},
+      })
   })
 
   it('defaults autoOpenSubagent to true and agentTerminalTools to false when the stored value is absent or malformed', async () => {
     expect(await loadPrefs(wire({ openByDefault: false, defaultWidthPercent: 40 })))
-      .toEqual({ openByDefault: false, defaultWidthPercent: 40, autoOpenSubagent: true, agentTerminalTools: false })
+      .toEqual({
+        openByDefault: false,
+        defaultWidthPercent: 40,
+        autoOpenSubagent: true,
+        agentTerminalTools: false,
+        tabsEnabled: {},
+        viewersEnabled: {},
+      })
     expect((await loadPrefs(wire({ openByDefault: true, defaultWidthPercent: 40, autoOpenSubagent: 1 }))).autoOpenSubagent)
       .toBe(true)
     // The terminal-tools feature is OFF by default; only an explicit true turns it on.
@@ -851,13 +872,26 @@ describe('side card preferences', () => {
       .toBe(true)
   })
 
+  it('validates the per-tab / per-viewer enable maps (absent keys mean enabled)', async () => {
+    // A non-object map falls back to {} (everything enabled).
+    expect((await loadPrefs(wire({ tabsEnabled: 'nope' }))).tabsEnabled).toEqual({})
+    expect((await loadPrefs(wire({ viewersEnabled: [1, 2] }))).viewersEnabled).toEqual({})
+    // Non-boolean entries are dropped; boolean entries survive verbatim.
+    const parsed = await loadPrefs(wire({
+      tabsEnabled: { git: false, explorer: true, bad: 'yes' },
+      viewersEnabled: { image: false, code: 1 },
+    }))
+    expect(parsed.tabsEnabled).toEqual({ git: false, explorer: true })
+    expect(parsed.viewersEnabled).toEqual({ image: false })
+  })
+
   it('seeds new-session defaults from the store prefs (open flag + width)', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, tabsEnabled: {}, viewersEnabled: {} })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, tabsEnabled: {}, viewersEnabled: {} })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)
@@ -866,6 +900,22 @@ describe('side card preferences', () => {
     const openStore = createSidebarStore()
     openStore.setSession('another-fresh')
     expect(openStore.getSnapshot().state?.panelOpen).toBe(true)
+  })
+
+  it('skips the default explorer tab when the explorer type is disabled', () => {
+    const store = createSidebarStore()
+    store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, tabsEnabled: { explorer: false }, viewersEnabled: {} })
+    store.setSession('no-explorer')
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
+    expect(tabs).toHaveLength(0)
+    expect(state.splits.kind).toBe('leaf')
+    // Re-enabling seeds the explorer tab again.
+    const openStore = createSidebarStore()
+    openStore.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, tabsEnabled: {}, viewersEnabled: {} })
+    openStore.setSession('with-explorer')
+    const openTabs = allLeaves(openStore.getSnapshot().state!.splits).flatMap(leaf => leaf.tabs)
+    expect(openTabs.map(tab => tab.type)).toEqual(['explorer'])
   })
 
   it('derives the default width from the window percent with clamps', () => {
@@ -878,6 +928,9 @@ describe('side card preferences', () => {
     expect(makeDefaultState().panelOpen).toBe(true)
     expect(makeDefaultState(400, false).panelOpen).toBe(false)
     expect(makeDefaultState(400, false).width).toBe(400)
+    // The seedExplorer flag controls the default explorer tab.
+    expect(makeDefaultState(400, true, false).splits.kind).toBe('leaf')
+    expect((makeDefaultState(400, true, false).splits as { tabs: unknown[] }).tabs).toHaveLength(0)
   })
 })
 

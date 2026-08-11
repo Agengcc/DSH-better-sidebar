@@ -60,7 +60,13 @@ export function SidebarProducedFiles(props: {
 export function registerTurnTailInterception(ctx: Context, store: SidebarStore): () => void {
   return ctx.slots.register({
     name: 'conversation.chat.turnTail',
-    select: selectProducedFiles,
+    // Decline the takeover while the editor tab type is disabled in the side
+    // card settings: the produced-files row falls back to the default
+    // deliverables behavior instead of offering chips that cannot open.
+    select: (owner) => {
+      if (store.getPrefs().tabsEnabled['editor'] === false) return null
+      return selectProducedFiles(owner)
+    },
     priority: -1,
     registrant: 'dsh-better-sidebar',
     inject: (sessionId: string) => ({

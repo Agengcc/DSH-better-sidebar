@@ -48,12 +48,15 @@ describe('dsh-better-sidebar plugin export shape', () => {
     // The terminal tools default OFF (the feature is dormant until the user
     // enables it in the side card settings).
     expect(resolved.agentTerminalTools).toBe(false)
+    // The enable-switch maps resolve to {} (everything on) for old documents.
+    expect(resolved.tabsEnabled).toEqual({})
+    expect(resolved.viewersEnabled).toEqual({})
     // A stored overridden value resolves through (the range contract is
     // enforced by the settings service on write); the new pref keeps its
     // default when the stored document predates it.
     const overridden = (PrefsSchema as unknown as {
       (input: Record<string, unknown> | undefined): Record<string, unknown>
     })({ openByDefault: false, defaultWidthPercent: 45 })
-    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false })
+    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, tabsEnabled: {}, viewersEnabled: {} })
   })
 })

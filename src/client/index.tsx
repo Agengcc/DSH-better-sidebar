@@ -149,13 +149,14 @@ export function apply(ctx: Context): void {
     // The "Side card" settings section: appears in the DSH Settings shell
     // once the shell's declaration is on the ledger (slots.inject waits for
     // it); the section reads/writes the prefs through the plugin's own
-    // fenced settings route and keeps the shared store in sync.
+    // fenced settings route, keeps the shared store in sync, and renders the
+    // declarative enable/disable inventory from the tab/viewer registry.
     ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section',
       id: 'better-sidebar',
       order: 100,
       label: () => t('settingsNav'),
-      inject: () => ({ store: sidebarStore }),
+      inject: () => ({ store: sidebarStore, service }),
     }, SideCardSection))
   } catch (error) {
     fail('load', error)

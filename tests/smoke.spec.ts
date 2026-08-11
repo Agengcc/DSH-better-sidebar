@@ -502,7 +502,15 @@ describe('side card settings routes', () => {
     const read = await invoke(route, 'settings.get', {})
     expect(read.ok).toBe(true)
     expect(read.value).toEqual({
-      value: { openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false },
+      value: {
+        openByDefault: true,
+        defaultWidthPercent: 30,
+        autoOpenSubagent: true,
+        agentTerminalTools: false,
+        // The enable-switch maps default to {} (everything on).
+        tabsEnabled: {},
+        viewersEnabled: {},
+      },
       revision: 0,
     })
 

@@ -27,6 +27,29 @@ import {
 } from './state.ts'
 import type { SessionScope } from './api.ts'
 
+/** One declarative boolean setting of a tab/viewer, rendered as a nested
+ *  switch row in the Side card settings page (e.g. the Subagent page's
+ *  "auto-open when a subagent appears"). */
+export interface SidebarSettingToggle {
+  /** The SidebarPrefs field this toggle reads and writes ('autoOpenSubagent'). */
+  key: string
+  /** Row title (i18n friendly: string or () => string). */
+  title: string | (() => string)
+  /** Row description (i18n friendly). */
+  desc?: string | (() => string)
+}
+
+/** Declarative settings of one registered tab or file viewer. */
+export interface SidebarSettingsDeclaration {
+  /**
+   * Extra boolean toggles rendered under the feature's own row in the
+   * settings page (only while the feature is enabled). Keys must be fields
+   * of the host's PrefsSchema (built-ins: 'autoOpenSubagent',
+   * 'agentTerminalTools'); unknown keys are dropped by the settings seam.
+   */
+  toggles?: readonly SidebarSettingToggle[]
+}
+
 /** Props every tab component receives (builtins and external alike). */
 export interface TabComponentProps {
   ctx: Context
@@ -81,6 +104,13 @@ export interface TabDescriptor {
    * When omitted, a default `{ id, type, title }` tab is created.
    */
   createTab?: (state: SidebarState) => { tab: SidebarTab; patch?: Partial<SidebarState> } | null
+  /**
+   * Declarative settings shown in the Side card settings page: every
+   * registered tab gets an enable/disable switch (icon + title + id), and
+   * `settings.toggles` adds nested switches tied to SidebarPrefs fields
+   * (e.g. the subagent tab's 'autoOpenSubagent').
+   */
+  settings?: SidebarSettingsDeclaration
   component: (props: TabComponentProps) => ReactNode
 }
 
@@ -114,6 +144,10 @@ export interface FileViewerProps {
 export interface FileViewerDescriptor {
   /** Unique id (`'image'`, `'pdf'`, `'my-plugin:csv'`). */
   id: string
+  /** Display name for the settings inventory (falls back to `id` when absent). */
+  title?: string | (() => string)
+  /** Icon shown in the settings inventory. */
+  icon?: ReactNode | ((size: number) => ReactNode)
   /** Lowercase extensions without leading dot (`['png','jpg']`). `[]` = match any (catch-all). */
   exts: readonly string[]
   /** Higher wins; default 0. Builtins use 0; the catch-all `code` viewer uses -100. */
@@ -126,6 +160,11 @@ export interface FileViewerDescriptor {
   detect?: (path: string, head: Uint8Array) => boolean
   /** fetchStrategy='custom' loader. */
   load?: (path: string, scope: SessionScope) => Promise<unknown>
+  /**
+   * Declarative settings shown in the Side card settings page: every
+   * registered viewer gets an enable/disable switch (icon + title + exts).
+   */
+  settings?: SidebarSettingsDeclaration
   component: (props: FileViewerProps) => ReactNode
 }
 
@@ -137,13 +176,25 @@ export interface BetterSidebarService {
   getFileViewers(): readonly FileViewerDescriptor[]
   /** Find a tab descriptor by id (undefined if not registered). */
   getTab(id: string): TabDescriptor | undefined
-  /** Find a file viewer for a path (priority desc; detect first, then exts). */
+  /**
+   * Whether a tab type is enabled in the side card prefs. An absent
+   * `tabsEnabled[id]` entry means enabled — only an explicit `false`
+   * disables the type (hidden from the + menu, `openTab` refuses, and
+   * derived flows gate on it).
+   */
+  isTabEnabled(id: string): boolean
+  /** Whether a file viewer is enabled (absent `viewersEnabled[id]` = enabled). */
+  isViewerEnabled(id: string): boolean
+  /**
+   * Find a file viewer for a path (priority desc; detect first, then exts).
+   * Disabled viewers are skipped, so files fall through to the next match.
+   */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
   /**
    * Open a tab (used by external tabs and the + menu). `title` overrides
    * the descriptor's title when given (the editor tab shows the file name);
    * when the descriptor provides `createTab` it mints the tab itself and
-   * `title`/`path`/`id` are ignored.
+   * `title`/`path`/`id` are ignored. A disabled tab type is a no-op.
    */
   openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
   /** Close a tab by id. */
@@ -211,6 +262,11 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
   const getFileViewers = (): readonly FileViewerDescriptor[] => Array.from(viewers.values())
   const getTab = (id: string): TabDescriptor | undefined => tabs.get(id)
 
+  // The enable switches come from the user's side card prefs (the shared
+  // store the service is bound to): an absent key means enabled.
+  const isTabEnabled = (id: string): boolean => store.getPrefs().tabsEnabled[id] !== false
+  const isViewerEnabled = (id: string): boolean => store.getPrefs().viewersEnabled[id] !== false
+
   const matchFileViewer = (path: string, head?: Uint8Array): FileViewerDescriptor | undefined => {
     const ext = extOfPath(path)
     // Single pass in priority order (descending; stable for equal
@@ -218,10 +274,11 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     // its own turn: `detect` (when head bytes are available) beats its own
     // `exts`, and `exts: []` is a catch-all matching any path — so the
     // catch-all `code` viewer (-100) only sees paths no higher-priority
-    // descriptor claimed.
+    // descriptor claimed. Disabled viewers are skipped entirely.
     for (const v of Array.from(viewers.values()).sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
     )) {
+      if (!isViewerEnabled(v.id)) continue
       // Content sniff first (only when head bytes are available).
       if (head !== undefined && v.detect !== undefined) {
         if (v.detect(path, head)) return v
@@ -241,6 +298,13 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
   }
 
   const openTab = (seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void => {
+    // A type the user disabled in settings never opens — neither from the
+    // + menu nor from derived flows (file opens, subagent auto-open,
+    // external plugins). Already-open tabs keep rendering.
+    if (!isTabEnabled(seed.type)) {
+      console.warn(`[dsh-better-sidebar] tab type "${seed.type}" is disabled in the side card settings`)
+      return
+    }
     store.reduce((state) => {
       const descriptor = tabs.get(seed.type)
       if (descriptor === undefined) return state
@@ -278,6 +342,8 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     getTabs,
     getFileViewers,
     getTab,
+    isTabEnabled,
+    isViewerEnabled,
     matchFileViewer,
     openTab,
     closeTab,

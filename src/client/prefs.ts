@@ -21,8 +21,7 @@ export type { SidebarPrefs }
 /** The settings wire face the preferences need (a subset of the plugin api). */
 export type SidebarSettingsClient = Pick<typeof api, 'settingsGet' | 'settingsUpdate'>
 
-/**
- * Validate one raw resolved value into {@link SidebarPrefs}. Used for the
+/** Validate one raw resolved value into {@link SidebarPrefs}. Used for the
  * settings.get payload AND the settings.update response (both carry the
  * layered resolved value); any malformed field falls back to its default.
  * @param value - the raw resolved section from the settings wire.
@@ -44,7 +43,23 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     agentTerminalTools: typeof record.agentTerminalTools === 'boolean'
       ? record.agentTerminalTools
       : SIDEBAR_PREFS_DEFAULTS.agentTerminalTools,
+    tabsEnabled: booleanMapOf(record.tabsEnabled),
+    viewersEnabled: booleanMapOf(record.viewersEnabled),
   }
+}
+
+/**
+ * Validate one enable-switch map (per-tab / per-viewer). Only boolean values
+ * survive; a non-object or a non-boolean entry falls back to the empty map /
+ * drops the entry — an absent key means the feature stays enabled.
+ */
+function booleanMapOf(value: unknown): Record<string, boolean> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return {}
+  const out: Record<string, boolean> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof item === 'boolean') out[key] = item
+  }
+  return out
 }
 
 /**

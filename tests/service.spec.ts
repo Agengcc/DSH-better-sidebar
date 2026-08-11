@@ -77,6 +77,57 @@ describe('BetterSidebar service', () => {
   })
 })
 
+describe('enable switches (declarative settings)', () => {
+  /** A fresh store + service with one tab and one viewer registered. */
+  const setup = () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'explorer', title: 'Explorer', component: () => null })
+    service.registerFileViewer({ id: 'image', exts: ['png'], fetchStrategy: 'mediaUrl', component: () => null })
+    return { store, service }
+  }
+
+  it('an absent map key means enabled (default state)', () => {
+    const { service } = setup()
+    expect(service.isTabEnabled('explorer')).toBe(true)
+    expect(service.isViewerEnabled('image')).toBe(true)
+    // Unknown ids are enabled too (nothing registered → the check is open).
+    expect(service.isTabEnabled('whatever')).toBe(true)
+  })
+
+  it('only an explicit false disables a tab type', () => {
+    const { store, service } = setup()
+    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { explorer: false } })
+    expect(service.isTabEnabled('explorer')).toBe(false)
+    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { explorer: true } })
+    expect(service.isTabEnabled('explorer')).toBe(true)
+  })
+
+  it('openTab refuses a disabled tab type (no tab lands, no createTab)', () => {
+    const { store, service } = setup()
+    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { explorer: false } })
+    store.setSession('s1')
+    service.openTab({ type: 'explorer', title: 'Explorer' })
+    const tabs = allLeaves(store.getSnapshot().state!.splits).flatMap(l => l.tabs)
+    expect(tabs).toHaveLength(0)
+  })
+
+  it('matchFileViewer skips a disabled viewer (files fall through)', () => {
+    const { store, service } = setup()
+    service.registerFileViewer({ id: 'code', exts: [], priority: -100, fetchStrategy: 'fsRead', component: () => null })
+    // image claims .png; disabling it lets the catch-all take over.
+    expect(service.matchFileViewer('photo.png')?.id).toBe('image')
+    store.setPrefs({ ...store.getPrefs(), viewersEnabled: { image: false } })
+    expect(service.matchFileViewer('photo.png')?.id).toBe('code')
+    // Disabling the catch-all too → no viewer at all.
+    store.setPrefs({ ...store.getPrefs(), viewersEnabled: { image: false, code: false } })
+    expect(service.matchFileViewer('photo.png')).toBeUndefined()
+    // Re-enabling restores the image viewer.
+    store.setPrefs({ ...store.getPrefs(), viewersEnabled: {} })
+    expect(service.matchFileViewer('photo.png')?.id).toBe('image')
+  })
+})
+
 describe('matchFileViewer', () => {
   it('matches by extension', () => {
     const store = createSidebarStore()

@@ -117,6 +117,19 @@ interface TabDescriptor {
    * 省略时用默认 { id, type, title } + seed 里的 path/diff。
    */
   createTab?: (state: SidebarState) => { tab: SidebarTab; patch?: Partial<SidebarState> } | null
+  /**
+   * 声明式设置（v0.5.0+）：每个注册的 tab 都会在 Side card 设置页获得一行
+   * 开关（图标 + 标题 + 类型 id），`settings.toggles` 在其行下追加嵌套开关，
+   * 绑定 SidebarPrefs 字段。嵌套开关仅父级启用时显示。
+   */
+  settings?: {
+    toggles?: readonly {
+      /** SidebarPrefs 字段名（内置键：'autoOpenSubagent' / 'agentTerminalTools'） */
+      key: string
+      title: string | (() => string)
+      desc?: string | (() => string)
+    }[]
+  }
   /** 渲染函数 */
   component: (props: TabComponentProps) => ReactNode
 }
@@ -211,6 +224,10 @@ ctx.effect(() =>
 interface FileViewerDescriptor {
   /** 唯一 id：'image' / 'pdf' / 'my-plugin:csv' */
   id: string
+  /** 设置清单展示名（v0.5.0+，i18n 友好）；缺省回退到 id */
+  title?: string | (() => string)
+  /** 设置清单图标（v0.5.0+）：ReactNode 或 (size: number) => ReactNode */
+  icon?: ReactNode | ((size: number) => ReactNode)
   /** 小写无点的扩展名数组：['png','jpg']。[] = catch-all（仅最低优先级有效） */
   exts: readonly string[]
   /** 优先级（高优先）；默认 0。内置默认 0；catch-all code 用 -100；binary-download 用 -50 */
@@ -221,6 +238,8 @@ interface FileViewerDescriptor {
   detect?: (path: string, head: Uint8Array) => boolean
   /** fetchStrategy='custom' 时的加载函数 */
   load?: (path: string, scope: SessionScope) => Promise<unknown>
+  /** 声明式设置（v0.5.0+）：形状同 TabDescriptor.settings */
+  settings?: { toggles?: readonly { key: string; title: string | (() => string); desc?: string | (() => string) }[] }
   /** 渲染函数 */
   component: (props: FileViewerProps) => ReactNode
 }
@@ -325,18 +344,23 @@ interface BetterSidebarService {
   registerTab(descriptor: TabDescriptor): () => void
   /** 注册文件预览器；返回 disposer */
   registerFileViewer(descriptor: FileViewerDescriptor): () => void
-  /** 当前已注册的 tab 描述符快照（同步，供 useSyncExternalStore 用） */
+  /** 当前已注册的 tab 描述符快照（同步，供 useSyncExternalStore 用；含被设置页禁用的类型） */
   getTabs(): readonly TabDescriptor[]
-  /** 当前已注册的 file viewer 描述符快照 */
+  /** 当前已注册的 file viewer 描述符快照（含被设置页禁用的 viewer） */
   getFileViewers(): readonly FileViewerDescriptor[]
   /** 按 id 查 tab 描述符 */
   getTab(id: string): TabDescriptor | undefined
-  /** 按 path 匹配 file viewer（priority 降序单趟：detect → exts） */
+  /** 某个 tab 类型是否在 Side card 设置中启用（v0.5.0+；缺省 = 启用） */
+  isTabEnabled(id: string): boolean
+  /** 某个 file viewer 是否在 Side card 设置中启用（v0.5.0+；缺省 = 启用） */
+  isViewerEnabled(id: string): boolean
+  /** 按 path 匹配 file viewer（priority 降序单趟：detect → exts；跳过硬禁用 viewer） */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
   /**
    * 打开一个 tab（+ 菜单和外部触发都用它；走 descriptor.dedupeKey 去重）。
    * title 可选：给出时优先于 descriptor.title（editor 显示文件名）；
    * 有 createTab 的 descriptor（terminal）会忽略 title/path/id。
+   * 被设置禁用的类型是 no-op（console.warn 提示）。
    */
   openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
   /** 关闭一个 tab */
@@ -345,6 +369,8 @@ interface BetterSidebarService {
   subscribe(listener: () => void): () => void
 }
 ```
+
+> **声明式设置（v0.5.0+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里（图标 + 标题 + 类型 id + 开关，viewer 行还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的嵌套开关（如子代理的 `autoOpenSubagent`）仅父级启用时显示；**key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools`），外部插件的自定义键会被 settings seam 丢弃。
 
 ---
 
@@ -452,8 +478,9 @@ better-sidebar 自己的内置 tab 和 viewer 就是参考实现（"吃狗粮"�
 
 - **`src/client/builtins/`**：6 个内置 tab（explorer/git/subagent/terminal/editor/diff）+ 8 个内置 viewer（image/pdf/docx/xlsx/pptx/markdown/code/binary-download）的注册代码（tabs.tsx / viewers.tsx / index.ts）
 - **`src/client/service.ts`**：`BetterSidebarService` 接口 + `createBetterSidebarService` 工厂实现
-- **`tests/service.spec.ts`**：注册表生命周期 / 匹配算法 / dedupe / createTab 测试
-- **`tests/builtins.spec.ts`**：内置注册清单断言（6 tab + 8 viewer）
-- **`docs/plans/2026-08-11-service-registry-design.md`**：设计文档（含实施偏差记录）
+- **`src/client/SideCardSection.tsx`**：声明式设置页（注册表驱动清单 + `settings.toggles` 嵌套开关 + 开关持久化）
+- **`tests/service.spec.ts`**：注册表生命周期 / 匹配算法 / dedupe / createTab / 启用态 gating 测试
+- **`tests/builtins.spec.ts`**：内置注册清单断言（6 tab + 8 viewer + 声明式元数据）
+- **`docs/plans/2026-08-11-service-registry-design.md`** / **`docs/plans/2026-08-11-declarative-sidebar-settings-design.md`**：设计文档（含实施偏差记录）
 
 调试时直接读这些文件即可看到所有 API 的真实用法。

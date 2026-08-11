@@ -39,6 +39,25 @@ describe('built-in tab registrations', () => {
       expect(service.getTab(id)?.single).toBe(true)
     }
   })
+
+  it('the subagent tab declares its auto-open related setting', () => {
+    const { service } = setup()
+    const toggles = service.getTab('subagent')?.settings?.toggles ?? []
+    expect(toggles.map(t => t.key)).toEqual(['autoOpenSubagent'])
+  })
+
+  it('the terminal tab declares the model terminal-tools related setting', () => {
+    const { service } = setup()
+    const toggles = service.getTab('terminal')?.settings?.toggles ?? []
+    expect(toggles.map(t => t.key)).toEqual(['agentTerminalTools'])
+  })
+
+  it('every built-in tab carries the settings-surface icon', () => {
+    const { service } = setup()
+    for (const tab of service.getTabs()) {
+      expect(tab.icon, tab.id).toBeDefined()
+    }
+  })
 })
 
 describe('built-in file viewer registrations', () => {
@@ -87,6 +106,14 @@ describe('built-in file viewer registrations', () => {
     // A .docx is a zip (no NUL in its head): the docx viewer (priority 0)
     // claims it before binary-download (-50) is consulted.
     expect(service.matchFileViewer('book.docx', new Uint8Array([0x50, 0x4b, 0x03, 0x04]))?.id).toBe('docx')
+  })
+
+  it('every built-in viewer carries the declarative settings surface (title + icon)', () => {
+    const { service } = setup()
+    for (const viewer of service.getFileViewers()) {
+      expect(viewer.title, viewer.id).toBeDefined()
+      expect(viewer.icon, viewer.id).toBeDefined()
+    }
   })
 })
 

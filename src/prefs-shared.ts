@@ -27,6 +27,23 @@ export interface SidebarPrefs {
    * user explicitly enables it in the side card settings.
    */
   agentTerminalTools: boolean
+  /**
+   * Per-tab enable switches, keyed by tab descriptor id (`'explorer'`,
+   * `'my-plugin:db'`). An ABSENT key means enabled — only an explicit
+   * `false` disables a tab type (hidden from the + menu, `openTab` refuses,
+   * and derived flows like subagent auto-open / agent-terminal tabs stop).
+   * Already-open tabs of a disabled type keep rendering (closing one
+   * prevents reopening), matching the "existing conversations keep their
+   * own layouts" rule.
+   */
+  tabsEnabled: Record<string, boolean>
+  /**
+   * Per-viewer enable switches, keyed by file viewer descriptor id
+   * (`'image'`, `'my-plugin:csv'`). An ABSENT key means enabled; a disabled
+   * viewer is skipped by `matchFileViewer` so files fall through to the
+   * next matching viewer (or the download button when none match).
+   */
+  viewersEnabled: Record<string, boolean>
 }
 
 /** Range contract of {@link SidebarPrefs.defaultWidthPercent}. */
@@ -40,6 +57,8 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   defaultWidthPercent: WIDTH_PERCENT_DEFAULT,
   autoOpenSubagent: true,
   agentTerminalTools: false,
+  tabsEnabled: {},
+  viewersEnabled: {},
 }
 
 /** Clamp one width percent into the contract range (shared by schema and client reads). */

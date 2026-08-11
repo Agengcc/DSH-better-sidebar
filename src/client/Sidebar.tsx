@@ -65,12 +65,14 @@ function TabContent(props: {
 
 /** The + menu options for the current state, driven by the tab registry.
  * Hidden tabs (editor/diff) never show; `available` returning false shows
- * a disabled row (e.g. terminal at capacity) instead of hiding the option. */
+ * a disabled row (e.g. terminal at capacity) instead of hiding the option.
+ * Tabs the user disabled in the side card settings are filtered out
+ * entirely — re-enabling them is the settings page's job. */
 function buildNewTabOptions(state: SidebarState, ctx: Context, scope: SessionScope): NewTabOption[] {
   const service = ctx.betterSidebar
   if (service === undefined) return []
   return service.getTabs()
-    .filter(d => !d.hidden)
+    .filter(d => !d.hidden && service.isTabEnabled(d.id))
     .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
     .map(d => ({
       id: d.id,
@@ -127,6 +129,8 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
    * the same shell without losing the agent's work — capped like the
    * terminal view's own reconnect loop, so a refused endpoint never spins
    * forever (the next session switch restarts the loop).
+   * While the terminal tab type is disabled in settings, pushes are
+   * ignored (no auto-added tabs); re-enabling makes the next push converge.
    */
   useEffect(() => {
     if (sessionId === undefined) return
@@ -145,7 +149,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         try {
           const list = JSON.parse(event.data) as Array<{ uuid: string; title: string; command: string; exited: boolean }>
           if (!Array.isArray(list)) return
-          store.reduce(s => reconcileAgentTerminals(s, list))
+          store.reduce(s => ctx.betterSidebar?.isTabEnabled('terminal') === false
+            ? s
+            : reconcileAgentTerminals(s, list))
         } catch {
           // Malformed push: ignore (the next push will reconcile).
         }
@@ -171,12 +177,13 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
 
   /**
    * Subagent auto-activation: the moment the current conversation spawns its
-   * FIRST direct subagent (a 0 → N transition on the list feed) and the
-   * "auto open" pref is on, open the panel (if collapsed) and focus the
-   * Subagent page (single-instance: an existing tab is focused, never
-   * duplicated). Switching to a session that already has subagents never
-   * triggers — its baseline starts at the current count — so a deliberate
-   * layout is never fought.
+   * FIRST direct subagent (a 0 → N transition on the list feed), the "auto
+   * open" pref is on, and the Subagent tab type is enabled in settings,
+   * open the panel (if collapsed) and focus the Subagent page
+   * (single-instance: an existing tab is focused, never duplicated).
+   * Switching to a session that already has subagents never triggers — its
+   * baseline starts at the current count — so a deliberate layout is never
+   * fought.
    */
   const listBaselineRef = useRef<SidebarSessionList | undefined>(undefined)
   useEffect(() => {
@@ -185,6 +192,7 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     if (sessionId === undefined || prev === undefined) return
     if (!detectNewDirectSubagent(prev, sessionList, sessionId)) return
     if (!store.getPrefs().autoOpenSubagent) return
+    if (ctx.betterSidebar?.isTabEnabled('subagent') === false) return
     store.reduce(s => s.panelOpen ? s : togglePanel(s))
     ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
   }, [sessionList, sessionId, store, ctx])

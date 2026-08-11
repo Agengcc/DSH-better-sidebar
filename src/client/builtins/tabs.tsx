@@ -80,6 +80,15 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       icon: (size: number) => <IconThinkOutline16 size={size} />,
       order: 30,
       single: true,
+      // Declarative settings: the auto-open switch renders under this row in
+      // the Side card settings page (the Subagent page's own related setting).
+      settings: {
+        toggles: [{
+          key: 'autoOpenSubagent',
+          title: () => t('settingsSubagentTitle'),
+          desc: () => t('settingsSubagentDesc'),
+        }],
+      },
       component: ({ ctx, scope, visible, onSubagentJump }) => (
         <SubagentView
           sessionId={scope.sessionId}
@@ -95,6 +104,16 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       icon: (size: number) => <IconTerminalOutline16 size={size} />,
       order: 40,
       available: (_ctx, _scope, state) => uiTerminalCount(state) < TERMINAL_LIMIT,
+      // Declarative settings: the model-facing terminal tools switch renders
+      // under this row in the Side card settings page (the Terminal page's
+      // own related setting; the host gates the toolset on it independently).
+      settings: {
+        toggles: [{
+          key: 'agentTerminalTools',
+          title: () => t('settingsToolsTitle'),
+          desc: () => t('settingsToolsDesc'),
+        }],
+      },
       createTab: (state) => {
         const count = uiTerminalCount(state)
         if (count >= TERMINAL_LIMIT) return null

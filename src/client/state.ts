@@ -114,11 +114,16 @@ function maxCounterId(parsed: unknown): number {
 /** A fresh default state: one explorer tab in one pane, open per the caller's
  * preference. `width` is the caller's preferred panel width (default
  * PANEL_DEFAULT) and `panelOpen` whether the panel starts expanded (default
- * true); the store seeds new sessions from the user's side card prefs. */
-export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true): SidebarState {
+ * true); the store seeds new sessions from the user's side card prefs.
+ * `seedExplorer` places the default explorer tab — the store passes false
+ * when the user disabled the explorer tab type in settings, so a fresh
+ * session starts with an empty pane instead of a tab they turned off. */
+export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true, seedExplorer = true): SidebarState {
   const leaf: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [], active: null }
-  leaf.tabs = [{ id: uid('tab'), type: 'explorer', title: 'Explorer' }]
-  leaf.active = leaf.tabs[0]!.id
+  if (seedExplorer) {
+    leaf.tabs = [{ id: uid('tab'), type: 'explorer', title: 'Explorer' }]
+    leaf.active = leaf.tabs[0]!.id
+  }
   return {
     panelOpen,
     width,
@@ -510,6 +515,12 @@ const STORAGE_PREFIX = 'dsh-sidebar:v1'
 export interface SidebarSnapshot {
   sessionId: string | undefined
   state: SidebarState | undefined
+  /**
+   * The current side card prefs. Carried IN the snapshot (not a separate
+   * subscription) so prefs changes re-render the consumers that gate on
+   * them — the + menu hides a tab type the moment its switch flips.
+   */
+  prefs: SidebarPrefs
 }
 
 /** Default panel width for one viewport: the prefs percent of the window,
@@ -535,13 +546,14 @@ function loadState(sessionId: string, prefs: SidebarPrefs): SidebarState {
   }
   // New sessions seed from the user's side card prefs: the width is the
   // chosen percent of the window (clamped to the panel floor and the
-  // viewport so a huge percent can never crush the app shell), and the
-  // panel starts open only when the preference says so.
+  // viewport so a huge percent can never crush the app shell), the panel
+  // starts open only when the preference says so, and the default explorer
+  // tab is skipped when the user disabled the explorer tab type.
   const viewport = typeof window !== 'undefined' ? window.innerWidth : undefined
   const width = viewport === undefined
     ? PANEL_DEFAULT
     : defaultWidthFor(viewport, prefs.defaultWidthPercent)
-  return makeDefaultState(width, prefs.openByDefault)
+  return makeDefaultState(width, prefs.openByDefault, prefs.tabsEnabled['explorer'] !== false)
 }
 
 /**
@@ -659,15 +671,26 @@ function sanitizeNode(node: unknown, seen: Set<string>, reid: Map<string, string
 /** The session-scoped store: one state per conversation, localStorage-backed. */
 export class SidebarStore {
   private readonly bySession = new Map<string, SidebarState>()
-  private snapshot: SidebarSnapshot = { sessionId: undefined, state: undefined }
+  private snapshot: SidebarSnapshot = {
+    sessionId: undefined,
+    state: undefined,
+    prefs: { ...SIDEBAR_PREFS_DEFAULTS },
+  }
   private readonly listeners = new Set<() => void>()
   private persistTimer: number | undefined
   /** User-facing side card prefs seeding brand-new session states (defaults until the settings RPC resolves). */
   private prefs: SidebarPrefs = { ...SIDEBAR_PREFS_DEFAULTS }
 
-  /** Replace the side card prefs (the settings RPC result / settings page write). */
+  /**
+   * Replace the side card prefs (the settings RPC result / settings page
+   * write). Notifies like any store change: the snapshot carries the prefs,
+   * so consumers that gate on enable switches (the + menu, derived flows)
+   * re-render with the new values immediately.
+   */
   setPrefs(prefs: SidebarPrefs): void {
     this.prefs = { ...prefs }
+    this.snapshot = { ...this.snapshot, prefs: this.prefs }
+    this.notify()
   }
 
   /** The current side card prefs (seeds new sessions; persisted states win). */
@@ -679,7 +702,7 @@ export class SidebarStore {
   setSession(sessionId: string | undefined): void {
     if (this.snapshot.sessionId === sessionId) return
     if (sessionId === undefined) {
-      this.snapshot = { sessionId: undefined, state: undefined }
+      this.snapshot = { sessionId: undefined, state: undefined, prefs: this.prefs }
     } else {
       let state = this.bySession.get(sessionId)
       if (state === undefined) {
@@ -691,7 +714,7 @@ export class SidebarStore {
         // pane/split ids can never collide with its tree.
         nextIdCounter = maxCounterId(state)
       }
-      this.snapshot = { sessionId, state }
+      this.snapshot = { sessionId, state, prefs: this.prefs }
     }
     this.notify()
   }
@@ -713,7 +736,7 @@ export class SidebarStore {
     const draft = structuredClone(state)
     mutator(draft)
     this.bySession.set(sessionId, draft)
-    this.snapshot = { sessionId, state: draft }
+    this.snapshot = { sessionId, state: draft, prefs: this.prefs }
     this.schedulePersist(sessionId, draft)
     this.notify()
   }
@@ -740,7 +763,7 @@ export class SidebarStore {
     if (sessionId === undefined || state === undefined) return
     const next = reducer(state)
     this.bySession.set(sessionId, next)
-    this.snapshot = { sessionId, state: next }
+    this.snapshot = { sessionId, state: next, prefs: this.prefs }
     this.schedulePersist(sessionId, next)
     this.notify()
   }

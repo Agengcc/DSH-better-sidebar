@@ -25,6 +25,43 @@
   cursor: pointer;
 }
 
+/* Nested declarative toggle (a tab's related setting): indented child row. */
+.subRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0 10px 28px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  cursor: pointer;
+}
+
+/* Inventory section heading (侧边栏内容 / 文件预览). */
+.sectionHeading {
+  padding: 18px 0 6px;
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Icon of one inventory row, inline with the title. */
+.rowIcon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Title with the icon beside it. */
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .rowText {
   display: flex;
   flex-direction: column;
