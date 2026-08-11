@@ -5,32 +5,7 @@
 <img width="4632" height="2720" alt="image" src="https://github.com/user-attachments/assets/39d86636-7654-412f-86ea-c60a2d5f20f0" />
 <img width="1000" height="1186" alt="image" src="https://github.com/user-attachments/assets/9dadffe0-0738-4b6d-b929-f452f51768a2" />
 
-## 🚀 通过 plugin-registry 安装（标准）
-
-前置条件：DSH 已集成 [plugin-registry](https://github.com/dsh-external/plugin-registry)（`dsh registry` 命令可用；集成步骤见其 README）。
-
-```sh
-git clone https://github.com/dsh-external/DSH-better-sidebar.git
-cd DSH-better-sidebar
-pnpm install && pnpm build          # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js + lib/client-registry.js (client) + lib/types
-node scripts/package-registry.mjs   # 组装 registry/ 暂存目录（只含清单 + 构建产物 + README，不入库）
-dsh registry install ./registry     # 安装（默认禁用——信任边界）
-dsh registry enable dsh-external/dsh-better-sidebar   # 启用
-```
-
-> **通道互斥**：registry 安装与下方「不依赖 plugin-registry 的官方 profile 安装」是同一插件的两种安装方式，**每个部署二选一**——同时启用会双挂载（Node 半挂两次、页面渲染两个侧边栏）。已用官方方式装过时，先移除 `~/.dsh/profiles/web/cordis.patch.yml` 里的 better-sidebar 挂载行与 `package.json` 的 `link:` 依赖，再走 registry。
-
-### 更新（registry 通道）
-
-```sh
-cd DSH-better-sidebar && git pull && pnpm install && pnpm build
-node scripts/package-registry.mjs
-dsh registry uninstall dsh-external/dsh-better-sidebar
-dsh registry install ./registry
-dsh registry enable dsh-external/dsh-better-sidebar
-```
-
-## 🚀 一键安装（把提示词发给 DSH）
+## 🚀 官方 profile 安装（推荐，无需 plugin-registry）
 
 把下面提示词**整段**发给 DSH，它会自动完成克隆、构建、注册与安装（前置条件：已安装 DSH 且 `dsh web` 可运行，Node.js ≥ 20、pnpm ≥ 10）：
 
@@ -70,6 +45,31 @@ dsh registry enable dsh-external/dsh-better-sidebar
 3. 完成后告诉我本次改动涉及 client 还是 host：
    - 仅 client（src/client/*）→ 我硬刷新（Cmd/Ctrl+Shift+R）即可
    - 含 host（src/index.ts、src/config.ts 等）→ 我需要重启 DSH 再硬刷新
+```
+
+## 🚀 通过 plugin-registry 安装（可选）
+
+如果已经集成了 [plugin-registry](https://github.com/dsh-external/plugin-registry)（`dsh registry` 命令可用；集成步骤见其 README），也可以通过 registry 通道安装：
+
+```sh
+git clone https://github.com/dsh-external/DSH-better-sidebar.git
+cd DSH-better-sidebar
+pnpm install && pnpm build          # 产物: lib/index.js + lib/invariant.js (host) + lib/client.js + lib/client-registry.js (client) + lib/types
+node scripts/package-registry.mjs   # 组装 registry/ 暂存目录（只含清单 + 构建产物 + README，不入库）
+dsh registry install ./registry     # 安装（默认禁用——信任边界）
+dsh registry enable dsh-external/dsh-better-sidebar   # 启用
+```
+
+> **通道互斥**：registry 安装与官方 profile 安装是同一插件的两种安装方式，**每个部署二选一**——同时启用会双挂载（Node 半挂两次、页面渲染两个侧边栏）。已用官方方式装过时，先移除 `~/.dsh/profiles/web/cordis.patch.yml` 里的 better-sidebar 挂载行与 `package.json` 的 `link:` 依赖，再走 registry。
+
+### 更新（registry 通道）
+
+```sh
+cd DSH-better-sidebar && git pull && pnpm install && pnpm build
+node scripts/package-registry.mjs
+dsh registry uninstall dsh-external/dsh-better-sidebar
+dsh registry install ./registry
+dsh registry enable dsh-external/dsh-better-sidebar
 ```
 
 ## 为什么用它
