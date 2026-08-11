@@ -1,13 +1,13 @@
 /**
  * Side card settings section render tests: the section is DECLARATIVE —
- * every card (icon, title, type id, extensions, on/off state) derives from
- * the sidebar service's tab/viewer registries instead of hardcoded copy.
- * The toggles are CARDS: the whole card is the switch, the visual state IS
- * the state (highlighted = enabled), announced via `aria-pressed`. These
- * specs pin that derivation with a fake store + a small registry:
- * registered tabs/viewers appear with their declared icon/title/settings,
- * disabled states render pressed=false, and a disabled tab hides its
- * declared nested cards.
+ * every small card (icon, title, type id, extensions, on/off state) derives
+ * from the sidebar service's tab/viewer registries instead of hardcoded
+ * copy. The toggles are CARDS in a responsive grid: the card's main area is
+ * the switch, the visual state IS the state (highlighted = enabled),
+ * announced via `aria-pressed`, and the check badge sits at the far right.
+ * Features that declare related settings carry a gear corner button whose
+ * popup rows (native checkboxes) are tested through the extracted
+ * FeatureSettingsRows component (the Modal portal renders only while open).
  *
  * Rendered with renderToString (mount effects — the settings RPC sync — do
  * not run in SSR; the initial store prefs are the render input).
@@ -17,7 +17,8 @@ import { renderToString } from 'react-dom/server'
 import { createElement } from 'react'
 import { createSidebarStore, type SidebarStore } from '../src/client/state.ts'
 import { createBetterSidebarService, type BetterSidebarService } from '../src/client/service.ts'
-import { SideCardSection, type SideCardSectionProps } from '../src/client/SideCardSection.tsx'
+import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
+import { FeatureSettingsRows, SideCardSection, type SideCardSectionProps } from '../src/client/SideCardSection.tsx'
 
 /** One tab + one viewer + the subagent-style nested toggle under a tab. */
 function mount(): { store: SidebarStore; service: BetterSidebarService } {
@@ -68,7 +69,7 @@ function pressedCount(html: string, value: string): number {
 }
 
 describe('SideCardSection declarative inventory', () => {
-  it('renders one card per registered tab: icon + title + type id + pressed state', () => {
+  it('renders one small card per registered tab: icon + title + type id + pressed state', () => {
     const { store, service } = mount()
     const html = renderSection(store, service)
     expect(html).toContain('data-icon="explorer"')
@@ -77,32 +78,15 @@ describe('SideCardSection declarative inventory', () => {
     expect(html).toContain('>explorer<')
     expect(html).toContain('data-icon="subagent"')
     expect(html).toContain('>Subagents<')
-    // Default prefs: openByDefault + both tabs + the nested auto-open + the
-    // image viewer are all enabled → 5 cards pressed, none pressed=false.
-    expect(pressedCount(html, 'true')).toBe(5)
+    // Default prefs: openByDefault + both tabs + the image viewer are all
+    // enabled → 4 cards pressed, none pressed=false. The nested auto-open
+    // toggle is NOT an inline card (it lives in the popup).
+    expect(pressedCount(html, 'true')).toBe(4)
     expect(pressedCount(html, 'false')).toBe(0)
-  })
-
-  it('renders the declared nested card under an enabled tab', () => {
-    const { store, service } = mount()
-    const html = renderSection(store, service)
-    // The subagent tab's declared related setting appears while enabled,
-    // bound to its prefs key (default true → pressed).
-    expect(html).toContain('Auto-open Subagents')
-    expect(html).toContain('Expand on new subagent')
-  })
-
-  it('hides the nested cards while the parent tab is disabled', () => {
-    const { store, service } = mount()
-    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { subagent: false } })
-    const html = renderSection(store, service)
-    // The parent card stays (so the user can re-enable it) but pressed=false.
-    expect(html).toContain('>Subagents<')
     expect(html).not.toContain('Auto-open Subagents')
-    expect(pressedCount(html, 'false')).toBe(1)
   })
 
-  it('renders one card per registered viewer: icon + title + exts', () => {
+  it('renders one small card per registered viewer: icon + title + exts', () => {
     const { store, service } = mount()
     const html = renderSection(store, service)
     expect(html).toContain('data-icon="image"')
@@ -111,12 +95,62 @@ describe('SideCardSection declarative inventory', () => {
     expect(html).toContain('png · jpg')
   })
 
-  it('a disabled viewer renders pressed=false', () => {
+  it('renders the gear corner button on features that declare related settings', () => {
     const { store, service } = mount()
-    store.setPrefs({ ...store.getPrefs(), viewersEnabled: { image: false } })
     const html = renderSection(store, service)
+    // Subagents declares a toggle → its card carries the settings gear
+    // (aria-label = "<title> Feature settings"); Explorer and Image declare
+    // none → no gear.
+    expect(html.match(/aria-label="[^"]*Feature settings"/g)?.length).toBe(1)
+  })
+
+  it('a disabled feature renders pressed=false', () => {
+    const { store, service } = mount()
+    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { subagent: false }, viewersEnabled: { image: false } })
+    const html = renderSection(store, service)
+    expect(html).toContain('>Subagents<')
     expect(html).toContain('>Image<')
-    expect(pressedCount(html, 'false')).toBe(1)
-    expect(pressedCount(html, 'true')).toBe(4)
+    expect(pressedCount(html, 'false')).toBe(2)
+    expect(pressedCount(html, 'true')).toBe(2)
+  })
+
+  it('hides the gear of a disabled feature (its related settings are dormant)', () => {
+    const { store, service } = mount()
+    store.setPrefs({ ...store.getPrefs(), tabsEnabled: { subagent: false } })
+    const html = renderSection(store, service)
+    expect(html).not.toContain('Feature settings')
+  })
+})
+
+describe('FeatureSettingsRows (the secondary settings popup body)', () => {
+  const prefs: typeof SIDEBAR_PREFS_DEFAULTS = {
+    ...SIDEBAR_PREFS_DEFAULTS,
+    autoOpenSubagent: false,
+  }
+  const toggles = [{
+    key: 'autoOpenSubagent',
+    title: () => 'Auto-open Subagents',
+    desc: () => 'Expand on new subagent',
+  }]
+
+  it('renders one native checkbox row per declared toggle with its current value', () => {
+    const html = renderToString(createElement(FeatureSettingsRows, {
+      toggles,
+      prefs,
+      onToggle: () => {},
+    }))
+    expect(html).toContain('Auto-open Subagents')
+    expect(html).toContain('Expand on new subagent')
+    // The checkbox reflects the prefs value (false here → unchecked).
+    expect(html).not.toContain('checked=""')
+  })
+
+  it('checks the row when the pref is on', () => {
+    const html = renderToString(createElement(FeatureSettingsRows, {
+      toggles,
+      prefs: { ...prefs, autoOpenSubagent: true },
+      onToggle: () => {},
+    }))
+    expect(html).toContain('checked=""')
   })
 })

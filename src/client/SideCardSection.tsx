@@ -6,16 +6,19 @@
  * the sidebar service's registries instead of hardcoding rows:
  *  - 常规: new conversations open the panel by default (a toggle card), and
  *    the default panel width as a percent of the window (number input row).
- *  - 侧边栏内容: one CARD per REGISTERED tab type (built-ins and external
- *    plugins alike) — icon + title + type id, clicked to toggle the switch
- *    persisted in `prefs.tabsEnabled[id]`. A card's `settings.toggles`
- *    declaration renders as nested smaller cards under it while the tab is
- *    enabled (e.g. the Subagent page's "auto-open when a subagent appears").
- *  - 文件预览: one CARD per REGISTERED file viewer — icon + title + the
- *    extensions it covers, clicked to toggle `prefs.viewersEnabled[id]`.
+ *  - 侧边栏内容: one SMALL CARD per REGISTERED tab type (built-ins and
+ *    external plugins alike), laid out in a responsive grid that wraps
+ *    several cards per row — icon + title + type id, clicked to toggle the
+ *    switch persisted in `prefs.tabsEnabled[id]`.
+ *  - 文件预览: one SMALL CARD per REGISTERED file viewer — icon + title +
+ *    the extensions it covers, clicked to toggle `prefs.viewersEnabled[id]`.
  *
  * A card's on/off state is its VISUAL STATE: enabled = highlighted (brand
- * border + tinted fill + check badge), disabled = neutral and dimmed.
+ * border + tinted fill + a check badge pinned to the card's far right),
+ * disabled = neutral and dimmed. Features that declare `settings.toggles`
+ * carry a gear corner button that opens a native Modal with the related
+ * settings as native checkbox rows (e.g. the Subagent page's "auto-open
+ * when a subagent appears", the Terminal page's model terminal tools).
  *
  * Writes ride the plugin's own fenced settings route (the host calls the
  * settings seam in-process — the DSH settings RPC domain does not serve
@@ -27,7 +30,13 @@
  * shell.
  */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { IconCheckOutline16, IconPanelLeftOutline16, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  IconCheckOutline16,
+  IconPanelLeftOutline16,
+  IconSettingsOutline16,
+  Input,
+  Modal,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import clsx from 'clsx'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -96,6 +105,41 @@ function prefBool(prefs: SidebarPrefs, key: string): boolean {
 }
 
 /**
+ * The body of a feature's secondary settings popup: one native checkbox row
+ * per declared toggle. Extracted so the rows are testable without opening
+ * the Modal (the Modal portal renders only while open).
+ */
+export function FeatureSettingsRows(props: {
+  toggles: readonly SidebarSettingToggle[]
+  prefs: SidebarPrefs
+  onToggle: (toggle: SidebarSettingToggle, next: boolean) => void
+}) {
+  const { toggles, prefs, onToggle } = props
+  return (
+    <div className={css.popupRows}>
+      {toggles.map(toggle => {
+        const title = textOf(toggle.title)
+        return (
+          <label key={toggle.key} className={css.popupRow}>
+            <span className={css.rowText}>
+              <span className={css.title}>{title}</span>
+              {textOf(toggle.desc) !== '' && <span className={css.desc}>{textOf(toggle.desc)}</span>}
+            </span>
+            <input
+              type="checkbox"
+              className={css.toggle}
+              checked={prefBool(prefs, toggle.key)}
+              aria-label={title}
+              onChange={event => { onToggle(toggle, event.currentTarget.checked) }}
+            />
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Render the Side card preferences section.
  * @param props - composed slot props (runtime share + injected store/service).
  * @returns the section element tree.
@@ -104,6 +148,8 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   const [prefs, setPrefs] = useState<SidebarPrefs>(() => store.getPrefs())
   const [widthDraft, setWidthDraft] = useState<string>(String(store.getPrefs().defaultWidthPercent))
   const [error, setError] = useState<string | null>(null)
+  // Which feature's secondary settings popup is open (null = closed).
+  const [settingsFor, setSettingsFor] = useState<TabDescriptor | null>(null)
 
   // The declarative inventory: the registered tab types and file viewers.
   // Local state + service.subscribe (registry changes are rare — plugin
@@ -214,10 +260,10 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   }
 
   /**
-   * One toggle CARD: the whole card is the switch — clicking it flips the
-   * feature, and the visual state IS the state (highlighted = enabled, with
-   * a check badge; neutral + dimmed = disabled). Nested related settings
-   * render as smaller indented cards (`sub`).
+   * One SMALL toggle card for the responsive inventory grid: the card's main
+   * area is the switch (click to flips, visual state IS the state), the
+   * check badge sits at the far right, and a feature that declares related
+   * settings carries a gear corner button opening its settings popup.
    */
   const renderCard = (props: {
     title: string
@@ -225,28 +271,48 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
     icon?: ReactNode
     enabled: boolean
     onToggle: (next: boolean) => void
-    sub?: boolean
-  }) => (
-    <button
-      type="button"
-      className={clsx(css.card, props.sub === true && css.cardSub, props.enabled && css.cardOn)}
-      aria-pressed={props.enabled}
-      onClick={() => { props.onToggle(!props.enabled) }}
-    >
-      {props.icon !== null && props.icon !== undefined && (
-        <span className={css.cardIcon}>{props.icon}</span>
-      )}
-      <span className={css.cardText}>
-        <span className={css.cardTitle}>{props.title}</span>
-        <span className={css.cardDesc}>{props.desc}</span>
-      </span>
-      {props.enabled && (
-        <span className={css.cardCheck}>
-          <IconCheckOutline16 size={14} />
-        </span>
-      )}
-    </button>
-  )
+    /** A feature with declared related settings shows the gear corner button. */
+    onOpenSettings?: () => void
+  }) => {
+    const hasSettings = props.onOpenSettings !== undefined
+    return (
+      <div
+        className={clsx(css.card, props.enabled && css.cardOn, hasSettings && css.cardWithGear)}
+      >
+        <button
+          type="button"
+          className={css.cardMain}
+          aria-pressed={props.enabled}
+          title={props.desc}
+          onClick={() => { props.onToggle(!props.enabled) }}
+        >
+          <span className={css.cardTop}>
+            {props.icon !== null && props.icon !== undefined && (
+              <span className={css.cardIcon}>{props.icon}</span>
+            )}
+            <span className={css.cardTitle}>{props.title}</span>
+            {props.enabled && (
+              <span className={css.cardCheck}>
+                <IconCheckOutline16 size={14} />
+              </span>
+            )}
+          </span>
+          <span className={css.cardDesc}>{props.desc}</span>
+        </button>
+        {hasSettings && (
+          <button
+            type="button"
+            className={css.cardGear}
+            aria-label={`${props.title} ${t('settingsPopup')}`}
+            title={t('settingsPopup')}
+            onClick={props.onOpenSettings}
+          >
+            <IconSettingsOutline16 size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={css.section}>
@@ -282,46 +348,66 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
         </span>
       </div>
 
-      {/* 侧边栏内容: one card per registered tab type, icon + type id; the
-          card's `settings.toggles` render as nested smaller cards while the
-          tab itself is enabled. */}
+      {/* 侧边栏内容: one small card per registered tab type in a responsive
+          grid; features declaring `settings.toggles` open their settings in
+          the popup (gear corner button) instead of nested inline rows. */}
       <div className={css.sectionHeading}>{t('settingsTabsTitle')}</div>
-      {tabs.map(tab => (
-        <Fragment key={tab.id}>
-          {renderCard({
-            title: textOf(tab.title),
-            desc: tab.id,
-            icon: iconOf(tab.icon, 16),
-            enabled: prefs.tabsEnabled[tab.id] !== false,
-            onToggle: (next) => { onToggleTab(tab.id, next) },
-          })}
-          {prefs.tabsEnabled[tab.id] !== false && (tab.settings?.toggles ?? []).map(toggle => (
-            <Fragment key={`${tab.id}:${toggle.key}`}>
-              {renderCard({
-                title: textOf(toggle.title),
-                desc: textOf(toggle.desc),
-                enabled: prefBool(prefs, toggle.key),
-                onToggle: (next) => { onToggleSetting(toggle, next) },
-                sub: true,
-              })}
-            </Fragment>
-          ))}
-        </Fragment>
-      ))}
+      <div className={css.grid}>
+        {tabs.map(tab => (
+          <Fragment key={tab.id}>
+            {renderCard({
+              title: textOf(tab.title),
+              desc: tab.id,
+              icon: iconOf(tab.icon, 16),
+              enabled: prefs.tabsEnabled[tab.id] !== false,
+              onToggle: (next) => { onToggleTab(tab.id, next) },
+              // The settings gear only while the feature is enabled: its
+              // related settings are dormant while the feature is off.
+              onOpenSettings: prefs.tabsEnabled[tab.id] !== false
+                && (tab.settings?.toggles?.length ?? 0) > 0
+                ? () => { setSettingsFor(tab) }
+                : undefined,
+            })}
+          </Fragment>
+        ))}
+      </div>
 
-      {/* 文件预览: one card per registered file viewer, icon + title + exts. */}
+      {/* 文件预览: one small card per registered file viewer. */}
       <div className={css.sectionHeading}>{t('settingsViewersTitle')}</div>
-      {viewers.map(viewer => (
-        <Fragment key={viewer.id}>
-          {renderCard({
-            title: textOf(viewer.title) || viewer.id,
-            desc: viewer.exts.length === 0 ? t('settingsViewerCatchAll') : viewer.exts.join(' · '),
-            icon: iconOf(viewer.icon, 16),
-            enabled: prefs.viewersEnabled[viewer.id] !== false,
-            onToggle: (next) => { onToggleViewer(viewer.id, next) },
-          })}
-        </Fragment>
-      ))}
+      <div className={css.grid}>
+        {viewers.map(viewer => (
+          <Fragment key={viewer.id}>
+            {renderCard({
+              title: textOf(viewer.title) || viewer.id,
+              desc: viewer.exts.length === 0 ? t('settingsViewerCatchAll') : viewer.exts.join(' · '),
+              icon: iconOf(viewer.icon, 16),
+              enabled: prefs.viewersEnabled[viewer.id] !== false,
+              onToggle: (next) => { onToggleViewer(viewer.id, next) },
+            })}
+          </Fragment>
+        ))}
+      </div>
+
+      {/* The secondary settings popup: a feature's declared related settings
+          as native checkbox rows (Modal chrome is the app's own). Mounted
+          only while a feature is open — the Modal primitive runs hooks
+          unconditionally, so a closed-but-mounted Modal would break SSR
+          (and the renderToString spec) under the test dual-react split. */}
+      {settingsFor !== null && (
+        <Modal
+          open
+          onClose={() => { setSettingsFor(null) }}
+          title={textOf(settingsFor.title)}
+          closeLabel={t('close')}
+        >
+          <FeatureSettingsRows
+            toggles={settingsFor.settings?.toggles ?? []}
+            prefs={prefs}
+            onToggle={onToggleSetting}
+          />
+        </Modal>
+      )}
+
       {error !== null && (
         <div className={css.error} role="alert">
           {error}

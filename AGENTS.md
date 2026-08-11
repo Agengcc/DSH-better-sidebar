@@ -370,7 +370,7 @@ interface BetterSidebarService {
 }
 ```
 
-> **声明式设置（v0.5.0+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里（图标 + 标题 + 类型 id + **可点击卡片**，高亮 = 启用，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的嵌套开关（如子代理的 `autoOpenSubagent`）仅父级启用时显示，同为小卡片样式；**key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools`），外部插件的自定义键会被 settings seam 丢弃。
+> **声明式设置（v0.5.0+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里——响应式网格中的**小卡片**（图标 + 标题 + 类型 id + **高亮 = 启用**，勾选徽标钉在卡片最右端，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的相关设置（如子代理的 `autoOpenSubagent`）通过卡片右下角的齿轮按钮在**原生弹窗**中编辑（复选框行），父级卡片关闭时齿轮隐藏；**key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools`），外部插件的自定义键会被 settings seam 丢弃。
 
 ---
 

@@ -1,11 +1,14 @@
 /**
- * Side card settings section chrome: the toggle cards are the switch — a
- * clickable block whose visual state IS the state (enabled = brand border +
- * tinted fill + check badge; disabled = neutral hairline + dimmed text).
- * Nested declarative toggles render as smaller indented cards; the width
- * input stays a native settings row; the section heading groups the three
- * inventories. The shell strips the last row's separator via the
- * trailing-child rule.
+ * Side card settings section chrome (DSH-native tokens throughout):
+ * - the feature inventories are responsive GRIDS of small toggle cards
+ *   (auto-fill columns — several cards per row, wrapping);
+ * - a card's on/off state IS its visual state: enabled = brand border +
+ *   tinted fill + a check badge pinned to the far right of the top row,
+ *   disabled = neutral hairline + dimmed text;
+ * - features that declare related settings carry a gear corner button
+ *   opening a native Modal whose rows are the DSH settings-row recipe
+ *   (title/desc left + native accent checkbox, hairline separators);
+ * - the width input stays a native settings row (a value, not a switch).
  */
 
 .section {
@@ -19,19 +22,23 @@
   border-bottom: none;
 }
 
-/* One toggle card: whole-card click, `aria-pressed` announces the state. */
+/* Responsive inventory: as many small cards per row as the width allows. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+}
+
+/* One small toggle card (visual chrome; the interactive part is .cardMain). */
 .card {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 14px;
+  flex-direction: column;
   border-radius: 8px;
   border: 1px solid var(--dsw-alias-border-l2);
   background: transparent;
   font: inherit;
   color: inherit;
-  text-align: left;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
 }
@@ -41,21 +48,39 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.card:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-l4);
-  outline-offset: 2px;
-}
-
 /* Enabled = highlighted: brand border + tinted fill. */
 .cardOn {
   border-color: var(--dsw-alias-button-primary-fill);
   background: var(--dsw-alias-interactive-bg-active);
 }
 
-/* Nested declarative toggle (a feature's related setting): smaller, indented. */
-.cardSub {
-  margin-left: 28px;
+/* The card's switch: the whole main area (top row + desc) flips the feature. */
+.cardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
   padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardMain:focus-visible,
+.cardGear:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l4);
+  outline-offset: 2px;
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .cardIcon {
@@ -69,38 +94,68 @@
   color: var(--dsw-alias-button-primary-fill);
 }
 
-.cardText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
 .cardTitle {
-  font-size: 14px;
-  line-height: 22px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
   color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cardOn .cardTitle {
   color: var(--dsw-alias-label-primary);
 }
 
+/* The check badge: pinned to the FAR RIGHT of the top row (enabled only). */
+.cardCheck {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--dsw-alias-button-primary-fill);
+}
+
 .cardDesc {
-  font-size: 12px;
-  line-height: 17px;
+  font-size: 11px;
+  line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cardOn .cardDesc {
   color: var(--dsw-alias-label-secondary);
 }
 
-.cardCheck {
+/* The gear corner button: bottom-right of cards that declare related
+   settings; the desc gets right padding so the ellipsis never runs under it. */
+.cardWithGear .cardDesc {
+  padding-right: 18px;
+}
+
+.cardGear {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
   display: inline-flex;
   align-items: center;
-  flex: none;
-  color: var(--dsw-alias-button-primary-fill);
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.cardGear:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* Inventory section heading (常规 / 侧边栏内容 / 文件预览). */
@@ -113,7 +168,7 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* The width input stays a native settings row (it is a value, not a switch). */
+/* Native settings row recipe (the width input row + popup rows). */
 .row {
   display: flex;
   align-items: center;
@@ -140,6 +195,43 @@
   font-size: 12px;
   line-height: 17px;
   color: var(--dsw-alias-label-secondary);
+}
+
+/* Native checkbox: 16px, brand accent (the settings-row recipe). */
+.toggle {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--dsw-alias-button-primary-fill);
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l4);
+  outline-offset: 2px;
+}
+
+/* Secondary settings popup body: stacked native rows, trailing separator
+   stripped by the trailing-child rule. */
+.popupRows {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.popupRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  cursor: pointer;
+}
+
+.popupRows > :last-child {
+  border-bottom: none;
 }
 
 .control {
