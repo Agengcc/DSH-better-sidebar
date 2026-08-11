@@ -11,7 +11,7 @@ import {
   IconBranchOutline16, IconCodeOutline16, IconFolderOpen16, IconThinkOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
-import { TERMINAL_LIMIT, allLeaves, isAgentTabId, type SidebarState } from './state.ts'
+import { allLeaves, isAgentTabId, type SidebarState } from './state.ts'
 import { downloadUrl, mediaUrl } from './api.ts'
 import { t } from './locales.ts'
 import { openSidebarFile } from './intercept.tsx'
@@ -27,6 +27,9 @@ import { PptxView } from './PptxView.tsx'
 import { IconTerminalOutline16, IconDiffOutline16 } from './icons.tsx'
 import type { BetterSidebarService, FileViewerDescriptor, TabDescriptor } from './service.ts'
 import css from './sidebar.module.css'
+
+/** How many UI-owned terminals may be open at once (agent-owned ones are uncapped). */
+const TERMINAL_LIMIT = 3
 
 /** Count UI-owned terminals (agent:` tabs excluded — they are the model's). */
 function uiTerminalCount(state: SidebarState): number {
@@ -54,7 +57,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       title: () => t('explorer'),
       icon: (size: number) => <IconFolderOpen16 size={size} />,
       order: 10,
-      dedupeKey: () => 'explorer',
+      single: true,
       component: ({ ctx, store, scope, expanded, onToggleDir, onReferenceFile }) => (
         <ExplorerView
           sessionId={scope.sessionId}
@@ -71,7 +74,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       title: () => t('git'),
       icon: (size: number) => <IconBranchOutline16 size={size} />,
       order: 20,
-      dedupeKey: () => 'git',
+      single: true,
       component: ({ ctx, store, scope, onOpenDiff }) => (
         <GitView
           scope={scope}
@@ -85,7 +88,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       title: () => t('subagent'),
       icon: (size: number) => <IconThinkOutline16 size={size} />,
       order: 30,
-      dedupeKey: () => 'subagent',
+      single: true,
       component: ({ ctx, scope, visible, onSubagentJump }) => (
         <SubagentView
           sessionId={scope.sessionId}
@@ -100,7 +103,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       title: () => t('terminal'),
       icon: (size: number) => <IconTerminalOutline16 size={size} />,
       order: 40,
-      available: (state) => uiTerminalCount(state) < TERMINAL_LIMIT,
+      available: (_ctx, _scope, state) => uiTerminalCount(state) < TERMINAL_LIMIT,
       createTab: (state) => {
         const count = uiTerminalCount(state)
         if (count >= TERMINAL_LIMIT) return null

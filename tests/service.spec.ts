@@ -104,22 +104,44 @@ describe('matchFileViewer', () => {
     expect(service.matchFileViewer('x.txt')?.id).toBe('catchall')
   })
 
-  it('detect overrides exts when head bytes are available', () => {
+  it('detect claims files the viewer would otherwise miss, at its priority', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    // by-magic does not match 'bin' by extension; only its detect (PNG magic)
+    // can claim it — and only when head bytes are available.
+    service.registerFileViewer({ id: 'by-ext', exts: ['bin'], priority: 5, fetchStrategy: 'fsRead', component: () => null })
+    service.registerFileViewer({
+      id: 'by-magic',
+      exts: ['mag'],
+      priority: 10,
+      fetchStrategy: 'fsRead',
+      detect: (_path, head) => head[0] === 0x89,
+      component: () => null,
+    })
+    // No head: by-magic's exts miss, by-ext claims .bin.
+    expect(service.matchFileViewer('file.bin')?.id).toBe('by-ext')
+    // Head with PNG magic: by-magic's detect fires at priority 10 before
+    // by-ext (5) is consulted.
+    expect(service.matchFileViewer('file.bin', new Uint8Array([0x89, 0x50]))?.id).toBe('by-magic')
+    // Head without the magic: detect misses, by-ext claims .bin again.
+    expect(service.matchFileViewer('file.bin', new Uint8Array([0x00, 0x50]))?.id).toBe('by-ext')
+  })
+
+  it('priority decides first: a higher-priority exts match beats a lower-priority detect', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
     service.registerFileViewer({ id: 'by-ext', exts: ['bin'], priority: 10, fetchStrategy: 'fsRead', component: () => null })
     service.registerFileViewer({
       id: 'by-magic',
-      exts: [],
+      exts: ['mag'],
       priority: 5,
       fetchStrategy: 'fsRead',
       detect: (_path, head) => head[0] === 0x89,
       component: () => null,
     })
-    // Without head bytes, by-ext wins (priority 10 > 5, and .bin matches).
-    expect(service.matchFileViewer('file.bin')?.id).toBe('by-ext')
-    // With magic bytes, by-magic wins (detect overrides).
-    expect(service.matchFileViewer('file.bin', new Uint8Array([0x89, 0x50]))?.id).toBe('by-magic')
+    // Per-descriptor walk: by-ext (priority 10) claims .bin before by-magic's
+    // detect (priority 5) is ever consulted — the design's priority-first rule.
+    expect(service.matchFileViewer('file.bin', new Uint8Array([0x89, 0x50]))?.id).toBe('by-ext')
   })
 
   it('returns undefined when no viewer matches and no catch-all', () => {
@@ -148,7 +170,7 @@ describe('service.openTab dedupe', () => {
     expect(tabs.filter(t => t.type === 'singleton')).toHaveLength(1)
   })
 
-  it('no dedupeKey opens a new tab each time', () => {
+  it('no dedupeKey opens a new tab for each distinct id', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
     service.registerTab({
@@ -157,11 +179,27 @@ describe('service.openTab dedupe', () => {
       component: () => null,
     })
     store.setSession('s1')
-    service.openTab({ type: 'multi', title: 'Multi' })
-    service.openTab({ type: 'multi', title: 'Multi' })
+    service.openTab({ type: 'multi', title: 'Multi', id: 'multi:1' })
+    service.openTab({ type: 'multi', title: 'Multi', id: 'multi:2' })
     const state = store.getSnapshot().state!
     const tabs = allLeaves(state.splits).flatMap(l => l.tabs)
     expect(tabs.filter(t => t.type === 'multi')).toHaveLength(2)
+  })
+
+  it('reopening with the same id focuses the existing tab (id safety net)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'multi',
+      title: 'Multi',
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'multi', title: 'Multi', id: 'multi:1' })
+    service.openTab({ type: 'multi', title: 'Multi', id: 'multi:1' })
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(l => l.tabs)
+    expect(tabs.filter(t => t.type === 'multi')).toHaveLength(1)
   })
 
   it('createTab mints custom ids and patches state', () => {
@@ -185,5 +223,79 @@ describe('service.openTab dedupe', () => {
     expect(tabs[0]!.id).toBe('counter:1')
     expect(tabs[1]!.id).toBe('counter:2')
     expect(state.nextTerminal).toBe(3)
+  })
+
+  it('a caller-provided title wins over the descriptor title (editor shows the file name)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'editor', title: () => 'Editor', component: () => null })
+    store.setSession('s1')
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    const state = store.getSnapshot().state!
+    const tab = allLeaves(state.splits).flatMap(l => l.tabs).find(t => t.type === 'editor')
+    expect(tab?.title).toBe('main.ts')
+  })
+
+  it('the descriptor title is the default when no title is given', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'plain', title: () => 'Plain', component: () => null })
+    store.setSession('s1')
+    service.openTab({ type: 'plain' })
+    const state = store.getSnapshot().state!
+    const tab = allLeaves(state.splits).flatMap(l => l.tabs).find(t => t.type === 'plain')
+    expect(tab?.title).toBe('Plain')
+  })
+
+  it('single: true dedupes like dedupeKey: () => id (sugar)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'singleton', title: 'Singleton', single: true, component: () => null })
+    store.setSession('s1')
+    service.openTab({ type: 'singleton' })
+    service.openTab({ type: 'singleton', id: 'singleton:extra' })
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(l => l.tabs).filter(t => t.type === 'singleton')
+    expect(tabs).toHaveLength(1)
+  })
+
+  it('an explicit dedupeKey wins over single: true', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'multi',
+      title: 'Multi',
+      single: true,
+      dedupeKey: (tab) => tab.id, // per-id, not per-type: two tabs coexist
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'multi', id: 'multi:1' })
+    service.openTab({ type: 'multi', id: 'multi:2' })
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(l => l.tabs).filter(t => t.type === 'multi')
+    expect(tabs).toHaveLength(2)
+    service.openTab({ type: 'multi', id: 'multi:1' })
+    const state2 = store.getSnapshot().state!
+    const tabs2 = allLeaves(state2.splits).flatMap(l => l.tabs).filter(t => t.type === 'multi')
+    expect(tabs2).toHaveLength(2)
+  })
+
+  it('available receives ctx, scope and the live state (superset signature)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    const seen: unknown[] = []
+    service.registerTab({
+      id: 'gated',
+      title: 'Gated',
+      available: (ctx, scope, state) => {
+        seen.push([ctx, scope, state])
+        return true
+      },
+      component: () => null,
+    })
+    store.setSession('s1')
+    expect(service.getTabs()[0]!.available?.({} as never, { sessionId: 's1', cwd: '/p' }, store.getSnapshot().state!)).toBe(true)
+    expect(seen).toHaveLength(1)
   })
 })

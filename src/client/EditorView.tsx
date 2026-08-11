@@ -261,6 +261,7 @@ export function EditorView(props: { ctx: Context; store: SidebarStore; scope: Se
       )}
       {load.status === 'ready' && load.viewer !== undefined && createElement(load.viewer.component, {
         ctx, store, scope, path, title,
+        viewerId: load.viewer.id,
         content: load.content,
         truncated: load.truncated,
         mediaUrl: load.mediaUrl,
