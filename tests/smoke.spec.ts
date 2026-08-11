@@ -507,6 +507,7 @@ describe('side card settings routes', () => {
         defaultWidthPercent: 30,
         autoOpenSubagent: true,
         agentTerminalTools: false,
+        interceptOpenPath: true,
         // The enable-switch maps default to {} (everything on).
         tabsEnabled: {},
         viewersEnabled: {},

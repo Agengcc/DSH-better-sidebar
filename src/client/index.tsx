@@ -15,7 +15,7 @@ import { createSidebarStore } from './state.ts'
 import { createBetterSidebarService } from './service.ts'
 import { registerBuiltins } from './builtins/index.ts'
 import { Sidebar } from './Sidebar.tsx'
-import { registerTurnTailInterception } from './intercept.tsx'
+import { registerOpenPathInterception, registerTurnTailInterception } from './intercept.tsx'
 import { loadPrefs } from './prefs.ts'
 import { SideCardSection } from './SideCardSection.tsx'
 import { api } from './api.ts'
@@ -24,7 +24,7 @@ import css from './sidebar.module.css'
 import './layout.css'
 
 /** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'sessions', 'connection']
+export const inject = ['slots', 'sessions', 'connection', 'workspaces']
 
 /**
  * Error boundary over the sidebar tree: a render error must never blank the
@@ -144,6 +144,18 @@ export function apply(ctx: Context): void {
         }
       },
       'dsh-better-sidebar: turn-tail interception',
+    )
+
+    ctx.effect(
+      () => {
+        try {
+          return registerOpenPathInterception(ctx, sidebarStore)
+        } catch (error) {
+          fail('interception', error)
+          return undefined
+        }
+      },
+      'dsh-better-sidebar: open-path interception',
     )
 
     // The "Side card" settings section: appears in the DSH Settings shell

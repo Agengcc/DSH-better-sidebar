@@ -233,6 +233,17 @@ export interface SidebarConversation {
 }
 
 /**
+ * The client workspaces service face (mirror of the runtime IWorkspaces). Only
+ * the chat's file-open funnel is touched: `openPath` hands an absolute path
+ * to the Host OS's default application, and every chat-side file open
+ * (tool rows, produced-files, prose mentions) funnels through it.
+ */
+export interface SidebarWorkspacesService {
+  /** Open a filesystem path with the Host operating system's default application. */
+  openPath(path: string): Promise<void>
+}
+
+/**
  * The invariant service face (mirror of @deepseek-ai/dsh-invariants'
  * InvariantService). The upstream augmentation does not reach this Context
  * (dual-cordis-instance resolution), so the register signature is restated
@@ -307,6 +318,7 @@ declare module 'cordis' {
     connection: SidebarConnectionHandle
     loader: SidebarLoader
     slots: SidebarSlotsService
+    workspaces: SidebarWorkspacesService
     settings: SidebarSettingsService
     invariants: SidebarInvariantsService
     tools: SidebarToolsService

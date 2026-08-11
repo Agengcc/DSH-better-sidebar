@@ -43,6 +43,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     agentTerminalTools: typeof record.agentTerminalTools === 'boolean'
       ? record.agentTerminalTools
       : SIDEBAR_PREFS_DEFAULTS.agentTerminalTools,
+    interceptOpenPath: typeof record.interceptOpenPath === 'boolean'
+      ? record.interceptOpenPath
+      : SIDEBAR_PREFS_DEFAULTS.interceptOpenPath,
     tabsEnabled: booleanMapOf(record.tabsEnabled),
     viewersEnabled: booleanMapOf(record.viewersEnabled),
   }

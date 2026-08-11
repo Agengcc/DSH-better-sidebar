@@ -32,6 +32,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconCheckOutline16,
+  IconCodeOutline16,
   IconPanelLeftOutline16,
   IconSettingsOutline16,
   Input,
@@ -347,6 +348,13 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
           <span className={css.suffix}>{t('settingsWidthSuffix')}</span>
         </span>
       </div>
+      {renderCard({
+        title: t('settingsOpenPathTitle'),
+        desc: t('settingsOpenPathDesc'),
+        icon: <IconCodeOutline16 size={16} />,
+        enabled: prefs.interceptOpenPath,
+        onToggle: (next) => { togglePref({ interceptOpenPath: next }) },
+      })}
 
       {/* 侧边栏内容: one small card per registered tab type in a responsive
           grid; features declaring `settings.toggles` open their settings in

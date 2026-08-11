@@ -11,6 +11,7 @@ import type { Context } from '../context-types.ts'
 import type { SidebarStore } from './state.ts'
 import { t } from './locales.ts'
 import { resolveSidebarPath, selectProducedFiles } from './produced-files.ts'
+import { wrapOpenPath } from './openpath-intercept.ts'
 import css from './sidebar.module.css'
 
 /** Open a file in the sidebar's editor (used by the intercepted row and the explorer). */
@@ -73,4 +74,21 @@ export function registerTurnTailInterception(ctx: Context, store: SidebarStore):
       openInSidebar: (path: string) => { openSidebarFile(ctx, store, sessionId, path) },
     }),
   }, SidebarProducedFiles)
+}
+
+/**
+ * Register the chat file-open interception: wraps `ctx.workspaces.openPath`
+ * — the single funnel every chat-side file open goes through (tool-row path
+ * links, the produced-files row, prose mentions) — so opens land in the
+ * sidebar editor instead of the Host OS. Gated by BOTH the `interceptOpenPath`
+ * pref and the editor tab's enable switch; declined opens fall through to
+ * the original method. Returns the disposer restoring the original (HMR-safe).
+ */
+export function registerOpenPathInterception(ctx: Context, store: SidebarStore): () => void {
+  return wrapOpenPath(ctx.workspaces, {
+    takeoverEnabled: () => store.getPrefs().interceptOpenPath !== false
+      && store.getPrefs().tabsEnabled['editor'] !== false,
+    currentSessionId: () => ctx.sessions.list.getSnapshot().current,
+    openInSidebar: (path, sessionId) => { openSidebarFile(ctx, store, sessionId, path) },
+  })
 }

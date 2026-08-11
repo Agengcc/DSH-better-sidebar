@@ -78,10 +78,10 @@ describe('SideCardSection declarative inventory', () => {
     expect(html).toContain('>explorer<')
     expect(html).toContain('data-icon="subagent"')
     expect(html).toContain('>Subagents<')
-    // Default prefs: openByDefault + both tabs + the image viewer are all
-    // enabled → 4 cards pressed, none pressed=false. The nested auto-open
-    // toggle is NOT an inline card (it lives in the popup).
-    expect(pressedCount(html, 'true')).toBe(4)
+    // Default prefs: openByDefault + interceptOpenPath + both tabs + the
+    // image viewer are all enabled → 5 cards pressed, none pressed=false.
+    // The nested auto-open toggle is NOT an inline card (it lives in the popup).
+    expect(pressedCount(html, 'true')).toBe(5)
     expect(pressedCount(html, 'false')).toBe(0)
     expect(html).not.toContain('Auto-open Subagents')
   })
@@ -111,7 +111,8 @@ describe('SideCardSection declarative inventory', () => {
     expect(html).toContain('>Subagents<')
     expect(html).toContain('>Image<')
     expect(pressedCount(html, 'false')).toBe(2)
-    expect(pressedCount(html, 'true')).toBe(2)
+    // openByDefault + interceptOpenPath + the explorer stay pressed.
+    expect(pressedCount(html, 'true')).toBe(3)
   })
 
   it('hides the gear of a disabled feature (its related settings are dormant)', () => {
