@@ -4,16 +4,18 @@
  *
  * The section is DECLARATIVE — it renders the enable/disable inventory from
  * the sidebar service's registries instead of hardcoding rows:
- *  - 常规: new conversations open the panel by default (native checkbox),
- *    and the default panel width as a percent of the window (number input).
- *  - 侧边栏内容: one row per REGISTERED tab type (built-ins and external
- *    plugins alike) — icon + title + type id + an on/off switch persisted in
- *    `prefs.tabsEnabled[id]`. A tab's `settings.toggles` declaration renders
- *    as nested switches under its row while the tab is enabled (e.g. the
- *    Subagent page's "auto-open when a subagent appears").
- *  - 文件预览: one row per REGISTERED file viewer — icon + title + the
- *    extensions it covers + an on/off switch persisted in
- *    `prefs.viewersEnabled[id]`.
+ *  - 常规: new conversations open the panel by default (a toggle card), and
+ *    the default panel width as a percent of the window (number input row).
+ *  - 侧边栏内容: one CARD per REGISTERED tab type (built-ins and external
+ *    plugins alike) — icon + title + type id, clicked to toggle the switch
+ *    persisted in `prefs.tabsEnabled[id]`. A card's `settings.toggles`
+ *    declaration renders as nested smaller cards under it while the tab is
+ *    enabled (e.g. the Subagent page's "auto-open when a subagent appears").
+ *  - 文件预览: one CARD per REGISTERED file viewer — icon + title + the
+ *    extensions it covers, clicked to toggle `prefs.viewersEnabled[id]`.
+ *
+ * A card's on/off state is its VISUAL STATE: enabled = highlighted (brand
+ * border + tinted fill + check badge), disabled = neutral and dimmed.
  *
  * Writes ride the plugin's own fenced settings route (the host calls the
  * settings seam in-process — the DSH settings RPC domain does not serve
@@ -25,7 +27,8 @@
  * shell.
  */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutline16, IconPanelLeftOutline16, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import clsx from 'clsx'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -210,49 +213,51 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
     void commit({ defaultWidthPercent: clamped }).then(outcome => applyOutcome(previous, outcome))
   }
 
-  /** One enable/disable row: icon + title + desc + checkbox. */
-  const renderRow = (props: {
+  /**
+   * One toggle CARD: the whole card is the switch — clicking it flips the
+   * feature, and the visual state IS the state (highlighted = enabled, with
+   * a check badge; neutral + dimmed = disabled). Nested related settings
+   * render as smaller indented cards (`sub`).
+   */
+  const renderCard = (props: {
     title: string
     desc: string
     icon?: ReactNode
-    checked: boolean
-    label: string
+    enabled: boolean
     onToggle: (next: boolean) => void
     sub?: boolean
   }) => (
-    <label className={props.sub === true ? css.subRow : css.row}>
-      <span className={css.rowText}>
-        <span className={css.titleLine}>
-          {props.icon !== null && props.icon !== undefined && <span className={css.rowIcon}>{props.icon}</span>}
-          <span className={css.title}>{props.title}</span>
-        </span>
-        <span className={css.desc}>{props.desc}</span>
+    <button
+      type="button"
+      className={clsx(css.card, props.sub === true && css.cardSub, props.enabled && css.cardOn)}
+      aria-pressed={props.enabled}
+      onClick={() => { props.onToggle(!props.enabled) }}
+    >
+      {props.icon !== null && props.icon !== undefined && (
+        <span className={css.cardIcon}>{props.icon}</span>
+      )}
+      <span className={css.cardText}>
+        <span className={css.cardTitle}>{props.title}</span>
+        <span className={css.cardDesc}>{props.desc}</span>
       </span>
-      <input
-        type="checkbox"
-        className={css.toggle}
-        checked={props.checked}
-        aria-label={props.label}
-        onChange={event => { props.onToggle(event.currentTarget.checked) }}
-      />
-    </label>
+      {props.enabled && (
+        <span className={css.cardCheck}>
+          <IconCheckOutline16 size={14} />
+        </span>
+      )}
+    </button>
   )
 
   return (
     <div className={css.section}>
-      <label className={css.row}>
-        <span className={css.rowText}>
-          <span className={css.title}>{t('settingsOpenTitle')}</span>
-          <span className={css.desc}>{t('settingsOpenDesc')}</span>
-        </span>
-        <input
-          type="checkbox"
-          className={css.toggle}
-          checked={prefs.openByDefault}
-          aria-label={t('settingsOpenTitle')}
-          onChange={event => { onToggle(event.currentTarget.checked) }}
-        />
-      </label>
+      <div className={css.sectionHeading}>{t('settingsGeneralTitle')}</div>
+      {renderCard({
+        title: t('settingsOpenTitle'),
+        desc: t('settingsOpenDesc'),
+        icon: <IconPanelLeftOutline16 size={16} />,
+        enabled: prefs.openByDefault,
+        onToggle,
+      })}
       <div className={css.row}>
         <span className={css.rowText}>
           <span className={css.title}>{t('settingsWidthTitle')}</span>
@@ -277,27 +282,25 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
         </span>
       </div>
 
-      {/* 侧边栏内容: one row per registered tab type, icon + type id + switch,
-          plus each tab's declaratively-declared nested toggles (shown only
-          while the tab itself is enabled). */}
+      {/* 侧边栏内容: one card per registered tab type, icon + type id; the
+          card's `settings.toggles` render as nested smaller cards while the
+          tab itself is enabled. */}
       <div className={css.sectionHeading}>{t('settingsTabsTitle')}</div>
       {tabs.map(tab => (
         <Fragment key={tab.id}>
-          {renderRow({
+          {renderCard({
             title: textOf(tab.title),
             desc: tab.id,
             icon: iconOf(tab.icon, 16),
-            checked: prefs.tabsEnabled[tab.id] !== false,
-            label: textOf(tab.title),
+            enabled: prefs.tabsEnabled[tab.id] !== false,
             onToggle: (next) => { onToggleTab(tab.id, next) },
           })}
           {prefs.tabsEnabled[tab.id] !== false && (tab.settings?.toggles ?? []).map(toggle => (
             <Fragment key={`${tab.id}:${toggle.key}`}>
-              {renderRow({
+              {renderCard({
                 title: textOf(toggle.title),
                 desc: textOf(toggle.desc),
-                checked: prefBool(prefs, toggle.key),
-                label: textOf(toggle.title),
+                enabled: prefBool(prefs, toggle.key),
                 onToggle: (next) => { onToggleSetting(toggle, next) },
                 sub: true,
               })}
@@ -306,16 +309,15 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
         </Fragment>
       ))}
 
-      {/* 文件预览: one row per registered file viewer, icon + title + exts + switch. */}
+      {/* 文件预览: one card per registered file viewer, icon + title + exts. */}
       <div className={css.sectionHeading}>{t('settingsViewersTitle')}</div>
       {viewers.map(viewer => (
         <Fragment key={viewer.id}>
-          {renderRow({
+          {renderCard({
             title: textOf(viewer.title) || viewer.id,
             desc: viewer.exts.length === 0 ? t('settingsViewerCatchAll') : viewer.exts.join(' · '),
             icon: iconOf(viewer.icon, 16),
-            checked: prefs.viewersEnabled[viewer.id] !== false,
-            label: textOf(viewer.title) || viewer.id,
+            enabled: prefs.viewersEnabled[viewer.id] !== false,
             onToggle: (next) => { onToggleViewer(viewer.id, next) },
           })}
         </Fragment>

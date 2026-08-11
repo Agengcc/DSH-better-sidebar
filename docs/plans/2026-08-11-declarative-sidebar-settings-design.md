@@ -133,3 +133,4 @@ isViewerEnabled(id: string): boolean
 2. **宿主 `syncToolsGate` 不改**：`agentTerminalTools` 仅随自身开关走，不与 `tabsEnabled['terminal']` 联动（模型终端工具是模型面向能力，与侧边栏 UI 开关解耦）。
 3. **`renderRow` 统一行渲染**：tab/viewer/嵌套开关共用一行渲染器（`sub` 参数区分缩进），CSS 新增 `.sectionHeading` / `.rowIcon` / `.titleLine` / `.subRow`。
 4. **清单排序**：tabs 按 `hidden` 置后 + `order` 升序（editor/diff 殿后）；viewers 按 priority 降序（code 兜底最后）。
+5. **开关改为卡片点击（v0.5.0 追加）**：清单项与嵌套相关设置、`openByDefault` 全部从"复选框行"改为**可点击卡片**——`<button aria-pressed>`，整卡即开关，视觉状态即状态（启用 = 品牌描边 + 交互选中填充 + `IconCheckOutline16` 勾选徽标；禁用 = 中性 hairline + 文字降级）。嵌套相关设置渲染为更小的缩进卡片；宽度输入保持原生设置行（它是数值不是开关）。设置导航齿轮图标为宿主 shell 硬编码（`navIcon` 按 section id 映射，无插件注入点），用户选择不改宿主，保持现状。
