@@ -222,8 +222,20 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     for (const v of Array.from(viewers.values()).sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
     )) {
-      if (head !== undefined && v.detect !== undefined && v.detect(path, head)) return v
-      if (v.exts.length === 0 || v.exts.includes(ext)) return v
+      // Content sniff first (only when head bytes are available).
+      if (head !== undefined && v.detect !== undefined) {
+        if (v.detect(path, head)) return v
+        // A catch-all with detect is SNIFF-ONLY: it must not blind-claim
+        // paths it never sniffed (a magic-number viewer must not swallow
+        // every file before the real viewers get their turn).
+        if (v.exts.length === 0) continue
+      } else if (v.exts.length === 0) {
+        // Blind catch-all (no detect) claims anything; a sniff-only
+        // catch-all (detect defined, no head yet) yields this round.
+        if (v.detect === undefined) return v
+        continue
+      }
+      if (v.exts.includes(ext)) return v
     }
     return undefined
   }

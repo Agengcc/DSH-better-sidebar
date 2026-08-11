@@ -144,6 +144,26 @@ describe('matchFileViewer', () => {
     expect(service.matchFileViewer('file.bin', new Uint8Array([0x89, 0x50]))?.id).toBe('by-ext')
   })
 
+  it('a catch-all with detect is sniff-only: it never blind-claims without head', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerFileViewer({ id: 'img', exts: ['png'], priority: 0, fetchStrategy: 'mediaUrl', component: () => null })
+    service.registerFileViewer({
+      id: 'magic-sniffer',
+      exts: [],
+      priority: 100,
+      fetchStrategy: 'custom',
+      detect: (_path, head) => head[0] === 0x89,
+      component: () => null,
+    })
+    // No head: the sniff-only catch-all yields — the real png viewer wins.
+    expect(service.matchFileViewer('photo.png')?.id).toBe('img')
+    // Head with the magic: the sniffer claims it (detect at priority 100).
+    expect(service.matchFileViewer('photo.png', new Uint8Array([0x89, 0x50]))?.id).toBe('magic-sniffer')
+    // Head without the magic: the sniffer yields again, img claims it.
+    expect(service.matchFileViewer('photo.png', new Uint8Array([0x00, 0x50]))?.id).toBe('img')
+  })
+
   it('returns undefined when no viewer matches and no catch-all', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)

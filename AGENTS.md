@@ -78,7 +78,7 @@ export function apply(ctx: Context): void {
 import type { TabDescriptor, FileViewerDescriptor, BetterSidebarService } from 'dsh-better-sidebar'
 ```
 
-类型定义在 `lib/types/client/service.d.ts`，通过 `package.json` 的 `./client/service` exports 子路径暴露。
+类型定义在 `lib/types/client/service.d.ts`，通过 `package.json` 的 `./client/service`（别名 `./client/api`）exports 子路径暴露。
 
 ---
 
@@ -98,12 +98,17 @@ interface TabDescriptor {
   order?: number
   /** 从 + 菜单隐藏（editor/diff 用：由其他流程触发打开，不在菜单里） */
   hidden?: boolean
-  /** + 菜单禁用判定（如 terminal 配额满） */
-  available?: (state: SidebarState) => boolean
+  /** + 菜单禁用判定（如 terminal 配额满）。三参：ctx、会话 scope、当前状态 */
+  available?: (ctx: Context, scope: SessionScope, state: SidebarState) => boolean
+  /**
+   * 单实例语法糖：`single: true` ≡ `dedupeKey: () => id`（打开时聚焦既有
+   * 同类型 tab 而非新开）。显式给出 dedupeKey 时优先于 single。
+   */
+  single?: boolean
   /**
    * 去重键：openTab 时若已存在 dedupeKey 相同的 tab，则聚焦而非新开。
-   * 返回 undefined 表示不去重（每次都新开）。
-   * 内置策略：explorer/git/subagent 用 () => id（单实例）；editor 用 tab => tab.path；diff 用 tab => tab.id。
+   * 返回 undefined 表示不去重（每次都新开，但同 id 会被 id 安全网聚焦）。
+   * 内置策略：explorer/git/subagent 用 single: true；editor 用 tab => tab.path；diff 用 tab => tab.id。
    */
   dedupeKey?: (tab: SidebarTab) => string | undefined
   /**
@@ -122,7 +127,7 @@ interface TabDescriptor {
 ```ts
 interface TabComponentProps {
   ctx: Context                 // client cordis context
-  store: SidebarStore          // better-sidebar 的状态 store（可调 reduce/openTab 等）
+  store: SidebarStore          // better-sidebar 的状态 store（可调 reduce 等）
   scope: SessionScope          // { sessionId, cwd? }
   tab: SidebarTab              // 当前 tab 实例（含 id/type/title/path?/diff?）
   visible: boolean             // 是否是当前激活 tab 且面板打开（不可见时暂停轮询等）
@@ -146,7 +151,7 @@ ctx.effect(() =>
     title: 'Notes',
     icon: <NoteIcon />,
     order: 50,
-    dedupeKey: () => 'my-plugin:notes',  // 单实例
+    single: true,  // ≡ dedupeKey: () => 'my-plugin:notes'
     component: ({ scope }) => <NotesView sessionId={scope.sessionId} />,
   })
 )
@@ -230,6 +235,7 @@ interface FileViewerProps {
   scope: SessionScope
   path: string
   title: string
+  viewerId: string         // 命中 viewer 的 id（如 'code' / 'my-plugin:csv'）
   content?: string        // fetchStrategy='fsRead' 时
   truncated?: boolean     // fetchStrategy='fsRead' 时
   mediaUrl?: string       // fetchStrategy='mediaUrl' 时
@@ -249,16 +255,17 @@ interface FileViewerProps {
 
 ### 4.4 匹配算法
 
-`matchFileViewer(path, head?)` 按以下顺序解析：
+`matchFileViewer(path, head?)` **单趟**按 priority 降序（稳定排序，相同 priority 按注册顺序）遍历每个 descriptor：
 
-1. **priority 降序**（稳定排序，相同 priority 按注册顺序）
-2. **detect 嗅探**：若 `head` 字节可用，遍历 priority 降序的 viewer，第一个 `detect(path, head)` 返回 true 的命中（**覆盖 exts**）
-3. **exts 匹配**：第一个 `exts` 含目标扩展名的 viewer 命中（`exts: []` 跳过此轮）
-4. **catch-all**：第一个 `exts: []` 的 viewer 命中
-5. **fallback**：返回 `undefined`，EditorView 走 CodeMirror 兜底（按扩展名选语法高亮）
+1. 若 `head` 字节可用且该 descriptor 有 `detect` → 调 `detect(path, head)`，true 则命中；**miss 且是 catch-all（`exts: []`）则本轮放弃**（纯嗅探型不得盲认领）
+2. 否则匹配 `exts`（小写无点；`exts: []` 且无 `detect` 是盲 catch-all，直接命中）
 
-> **内置 viewer**（不可重复注册）：image(0) / pdf(0) / docx(0) / xlsx(0) / pptx(0) / binary-download(-50)。
-> code/markdown **没有**注册为 viewer，是 EditorView 的兜底逻辑（matchFileViewer 返回 undefined 时走 fsRead + CodeMirror/MarkdownText）。外部 viewer 注册同扩展名 + 更高 priority 即可覆盖。
+即：**priority 高的 descriptor 先获得裁决权**（其 detect 或 exts 任一命中即赢），低 priority 的 detect 不会越过高 priority 的 exts 匹配。`exts: []` + `detect` 的组合是"纯嗅探"：无 head 时不认领任何文件（不会吞掉图片/PDF 等真实 viewer 的文件），有 head 时只认领 detect 命中的。全部 miss 返回 `undefined`（编辑器显示下载按钮）。
+
+> **head 字节从哪来**：第一次匹配（纯扩展名）没有 head。`fsRead` 策略读取后若文件为二进制，host 的 `fs.read` 响应会带 `head` 字段（base64，前 4KB），编辑器会用它对 `detect` viewer **重匹配一次**——所以 detect 型 viewer 的实际触发场景是"扩展名匹配落空/二进制文件"。文本文件的 detect 嗅探不在内置流程内（用 `exts` 或 `custom` 策略替代）。
+
+> **内置 viewer**（不可重复注册，全部 8 个）：image(0) / pdf(0) / docx(0) / xlsx(0) / pptx(0) / markdown(0, fsRead) / code(-100, catch-all, fsRead) / binary-download(-50, exts doc/xls/ppt + NUL detect)。
+> code 是兜底 viewer：任何其他 viewer 未认领的文件都会落到 code（CodeMirror 文本编辑）；二进制文件经 head 重匹配被 binary-download 的 NUL detect 认领（下载按钮）。外部 viewer 注册同扩展名 + 更高 priority 即可覆盖。
 
 ### 4.5 注册示例
 
@@ -324,10 +331,14 @@ interface BetterSidebarService {
   getFileViewers(): readonly FileViewerDescriptor[]
   /** 按 id 查 tab 描述符 */
   getTab(id: string): TabDescriptor | undefined
-  /** 按 path 匹配 file viewer（priority desc → detect → exts） */
+  /** 按 path 匹配 file viewer（priority 降序单趟：detect → exts） */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
-  /** 打开一个 tab（+ 菜单和外部触发都用它；走 descriptor.dedupeKey 去重） */
-  openTab(seed: { type: string; title: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
+  /**
+   * 打开一个 tab（+ 菜单和外部触发都用它；走 descriptor.dedupeKey 去重）。
+   * title 可选：给出时优先于 descriptor.title（editor 显示文件名）；
+   * 有 createTab 的 descriptor（terminal）会忽略 title/path/id。
+   */
+  openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
   /** 关闭一个 tab */
   closeTab(tabId: string): void
   /** 订阅注册表变化（register/dispose 时触发） */
@@ -439,9 +450,10 @@ function parseCsv(text: string): string[][] { /* ... */ }
 
 better-sidebar 自己的内置 tab 和 viewer 就是参考实现（"吃狗粮"）：
 
-- **`src/client/builtins.tsx`**：6 个内置 tab（explorer/git/subagent/terminal/editor/diff）+ 6 个内置 viewer（image/pdf/docx/xlsx/pptx/binary-download）的注册代码
+- **`src/client/builtins/`**：6 个内置 tab（explorer/git/subagent/terminal/editor/diff）+ 8 个内置 viewer（image/pdf/docx/xlsx/pptx/markdown/code/binary-download）的注册代码（tabs.tsx / viewers.tsx / index.ts）
 - **`src/client/service.ts`**：`BetterSidebarService` 接口 + `createBetterSidebarService` 工厂实现
-- **`tests/service.spec.ts`**：12 个测试覆盖 register/dispose/matchFileViewer/dedupe/createTab
-- **`docs/plans/2026-08-11-service-registry-design.md`**：设计文档
+- **`tests/service.spec.ts`**：注册表生命周期 / 匹配算法 / dedupe / createTab 测试
+- **`tests/builtins.spec.ts`**：内置注册清单断言（6 tab + 8 viewer）
+- **`docs/plans/2026-08-11-service-registry-design.md`**：设计文档（含实施偏差记录）
 
 调试时直接读这些文件即可看到所有 API 的真实用法。

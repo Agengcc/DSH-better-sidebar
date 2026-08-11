@@ -293,7 +293,7 @@ better-sidebar 从 v0.4.0 起暴露 `ctx.betterSidebar` 服务（Cordis context 
 - **侧边栏页面（tab）**：`ctx.betterSidebar.registerTab({ id, title, icon, component, ... })`
 - **文件类型预览器**：`ctx.betterSidebar.registerFileViewer({ id, exts, fetchStrategy, component, ... })`
 
-两个方法都返回 disposer，用 `ctx.effect(() => register(...))` 包裹即可让 Cordis fiber 卸载时自动撤销（HMR-safe）。内置 6 个 tab（explorer/git/subagent/terminal/editor/diff）和 6 个 viewer（image/pdf/docx/xlsx/pptx/binary-download）也通过同一服务注册（"吃狗粮"），外部插件与内置一视同仁。
+两个方法都返回 disposer，用 `ctx.effect(() => register(...))` 包裹即可让 Cordis fiber 卸载时自动撤销（HMR-safe）。内置 6 个 tab（explorer/git/subagent/terminal/editor/diff）和 8 个 viewer（image/pdf/docx/xlsx/pptx/markdown/code/binary-download）也通过同一服务注册（"吃狗粮"），外部插件与内置一视同仁。预览路由、+ 菜单、tab 图标全部由注册表驱动，无硬编码分发。
 
 **消费插件最小骨架**：
 ```ts
