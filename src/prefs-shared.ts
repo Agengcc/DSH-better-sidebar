@@ -36,6 +36,38 @@ export interface SidebarPrefs {
    */
   interceptOpenPath: boolean
   /**
+   * Whether the HTML previewer drops its sandboxed iframe. Sandbox ON (the
+   * default) renders previewed HTML in an opaque-origin iframe that cannot
+   * touch the GUI; turning it OFF runs the previewed page with the GUI's
+   * own origin — full read/write access to session files and internal
+   * APIs. Only for trusted local content; the setting copy warns.
+   */
+  htmlViewerNoSandbox: boolean
+  /**
+   * Whether a newly opened HTML preview starts UNSANDBOXED (the per-surface
+   * temporary unlock pre-applied). Off by default: previews open sandboxed
+   * and the status row offers the one-tap unlock; when on, previews open
+   * in the red unsandboxed state and the status row offers a one-tap
+   * restore for the current file.
+   */
+  htmlViewerDefaultUnsafe: boolean
+  /**
+   * Whether the browser tab drops its sandboxed iframe. Sandbox ON (the
+   * default) keeps browsed sites in an opaque origin with no GUI access;
+   * turning it OFF runs any visited site with the GUI's own origin — it
+   * can read session data and act as the logged-in GUI. Only for trusted
+   * sites; the setting copy warns.
+   */
+  browserNoSandbox: boolean
+  /**
+   * Whether clicking an http(s) EXTERNAL link in the GUI (chat messages,
+   * tool rows, prose mentions) opens the sidebar browser instead of a new
+   * browser tab. On by default; gated on the browser tab's own enable
+   * switch (both must be on for the takeover). Ctrl/Cmd+click always
+   * bypasses the takeover.
+   */
+  browserInterceptLinks: boolean
+  /**
    * Per-tab enable switches, keyed by tab descriptor id (`'explorer'`,
    * `'my-plugin:db'`). An ABSENT key means enabled — only an explicit
    * `false` disables a tab type (hidden from the + menu, `openTab` refuses,
@@ -66,6 +98,10 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   autoOpenSubagent: true,
   agentTerminalTools: false,
   interceptOpenPath: true,
+  htmlViewerNoSandbox: false,
+  htmlViewerDefaultUnsafe: false,
+  browserNoSandbox: false,
+  browserInterceptLinks: true,
   tabsEnabled: {},
   viewersEnabled: {},
 }

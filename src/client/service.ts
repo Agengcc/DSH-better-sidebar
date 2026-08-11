@@ -22,7 +22,7 @@
 import type { ReactNode } from 'react'
 import type { Context } from '../context-types.ts'
 import {
-  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane,
+  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane, patchTab,
   type SidebarState, type SidebarStore, type SidebarTab,
 } from './state.ts'
 import type { SessionScope } from './api.ts'
@@ -194,9 +194,12 @@ export interface BetterSidebarService {
    * Open a tab (used by external tabs and the + menu). `title` overrides
    * the descriptor's title when given (the editor tab shows the file name);
    * when the descriptor provides `createTab` it mints the tab itself and
-   * `title`/`path`/`id` are ignored. A disabled tab type is a no-op.
+   * `title`/`path`/`id` are ignored. `url` lands the tab with its `path`
+   * pre-set to the URL (the browser tab's navigation seed; the caller
+   * usually pairs it with a hostname `title`). A disabled tab type is a
+   * no-op.
    */
-  openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void
+  openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string; url?: string }): void
   /** Close a tab by id. */
   closeTab(tabId: string): void
   /** Subscribe to registry changes (register/dispose). */
@@ -297,7 +300,7 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     return undefined
   }
 
-  const openTab = (seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string }): void => {
+  const openTab = (seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string; url?: string }): void => {
     // A type the user disabled in settings never opens — neither from the
     // + menu nor from derived flows (file opens, subagent auto-open,
     // external plugins). Already-open tabs keep rendering.
@@ -309,22 +312,36 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       const descriptor = tabs.get(seed.type)
       if (descriptor === undefined) return state
       // Let the descriptor mint the tab (terminal's nextTerminal bump, etc.).
+      let tab: SidebarTab
+      let next: SidebarState
       if (descriptor.createTab !== undefined) {
         const result = descriptor.createTab(state)
         if (result === null) return state
-        const next = applyDedupe(state, result.tab, descriptor)
-        return result.patch !== undefined ? { ...next, ...result.patch } : next
+        tab = result.tab
+        next = applyDedupe(state, result.tab, descriptor)
+        if (result.patch !== undefined) next = { ...next, ...result.patch }
+      } else {
+        tab = {
+          id: seed.id ?? seed.type,
+          type: seed.type,
+          // A caller-provided title wins (the editor shows the file name);
+          // otherwise the descriptor's (possibly i18n) title is the default.
+          title: seed.title ?? (typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title),
+          ...(seed.path !== undefined ? { path: seed.path } : {}),
+          ...(seed.diff !== undefined ? { diff: seed.diff } : {}),
+        }
+        next = applyDedupe(state, tab, descriptor)
       }
-      const tab: SidebarTab = {
-        id: seed.id ?? seed.type,
-        type: seed.type,
-        // A caller-provided title wins (the editor shows the file name);
-        // otherwise the descriptor's (possibly i18n) title is the default.
-        title: seed.title ?? (typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title),
-        ...(seed.path !== undefined ? { path: seed.path } : {}),
-        ...(seed.diff !== undefined ? { diff: seed.diff } : {}),
+      // A URL seed pre-fills the tab's path (the browser tab navigates to it
+      // on mount). An explicit seed.title also wins over a createTab-minted
+      // default title (e.g. the sidebar-browser's hostname title).
+      if (seed.url !== undefined) {
+        return patchTab(next, tab.id, {
+          path: seed.url,
+          ...(seed.title !== undefined ? { title: seed.title } : {}),
+        })
       }
-      return applyDedupe(state, tab, descriptor)
+      return next
     })
   }
 

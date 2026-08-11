@@ -1,8 +1,8 @@
 /**
- * Built-in registration tests: the plugin registers 6 tabs and 8 file
+ * Built-in registration tests: the plugin registers 7 tabs and 9 file
  * viewers through the same service external plugins use (dogfooding);
- * the catch-all `code` viewer and the NUL-sniffing `binary-download`
- * viewer pin the registry's matching behavior.
+ * the catch-all `code` viewer, the NUL-sniffing `binary-download` viewer,
+ * and the html/browser sandbox settings pin the registry's behavior.
  */
 import { describe, expect, it } from 'vitest'
 // First import: browser globals before the xterm-carrying builtin graph loads.
@@ -11,20 +11,21 @@ import './browser-globals.ts'
 import type { Context } from '../src/context-types.ts'
 import { createBetterSidebarService } from '../src/client/service.ts'
 import { createSidebarStore } from '../src/client/state.ts'
+import { allLeaves } from '../src/client/state.ts'
 import { registerBuiltins } from '../src/client/builtins/index.ts'
 
-function setup(): { service: ReturnType<typeof createBetterSidebarService>; dispose: () => void } {
+function setup(): { service: ReturnType<typeof createBetterSidebarService>; store: ReturnType<typeof createSidebarStore>; dispose: () => void } {
   const store = createSidebarStore()
   const service = createBetterSidebarService(store)
   const dispose = registerBuiltins({} as Context, service)
-  return { service, dispose }
+  return { service, store, dispose }
 }
 
 describe('built-in tab registrations', () => {
-  it('registers the 6 built-in tabs', () => {
+  it('registers the 7 built-in tabs', () => {
     const { service } = setup()
     expect(service.getTabs().map(t => t.id).sort()).toEqual(
-      ['diff', 'editor', 'explorer', 'git', 'subagent', 'terminal'],
+      ['browser', 'diff', 'editor', 'explorer', 'git', 'subagent', 'terminal'],
     )
   })
 
@@ -52,6 +53,29 @@ describe('built-in tab registrations', () => {
     expect(toggles.map(t => t.key)).toEqual(['agentTerminalTools'])
   })
 
+  it('the browser tab declares its sandbox and link-takeover related settings', () => {
+    const { service } = setup()
+    const toggles = service.getTab('browser')?.settings?.toggles ?? []
+    expect(toggles.map(t => t.key)).toEqual(['browserNoSandbox', 'browserInterceptLinks'])
+    expect(toggles[0]?.title).toBeDefined()
+    expect(toggles[0]?.desc).toBeDefined()
+    expect(toggles[1]?.title).toBeDefined()
+    expect(toggles[1]?.desc).toBeDefined()
+  })
+
+  it('the browser createTab mints browser:<n> ids and bumps nextBrowser', () => {
+    const { service, store } = setup()
+    store.setSession('s1')
+    service.openTab({ type: 'browser' })
+    service.openTab({ type: 'browser' })
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs).filter(t => t.type === 'browser')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[0]!.id).toBe('browser:1')
+    expect(tabs[1]!.id).toBe('browser:2')
+    expect(state.nextBrowser).toBe(3)
+  })
+
   it('every built-in tab carries the settings-surface icon', () => {
     const { service } = setup()
     for (const tab of service.getTabs()) {
@@ -61,10 +85,10 @@ describe('built-in tab registrations', () => {
 })
 
 describe('built-in file viewer registrations', () => {
-  it('registers the 8 built-in file viewers', () => {
+  it('registers the 9 built-in file viewers', () => {
     const { service } = setup()
     expect(service.getFileViewers().map(v => v.id).sort()).toEqual(
-      ['binary-download', 'code', 'docx', 'image', 'markdown', 'pdf', 'pptx', 'xlsx'],
+      ['binary-download', 'code', 'docx', 'html', 'image', 'markdown', 'pdf', 'pptx', 'xlsx'],
     )
   })
 
@@ -82,6 +106,24 @@ describe('built-in file viewer registrations', () => {
     expect(service.matchFileViewer('readme.md')?.id).toBe('markdown')
     expect(service.matchFileViewer('readme.markdown')?.id).toBe('markdown')
     expect(service.matchFileViewer('readme.md', new Uint8Array([0x61]))?.id).toBe('markdown')
+  })
+
+  it('html claims html/htm before the catch-all', () => {
+    const { service } = setup()
+    expect(service.matchFileViewer('index.html')?.id).toBe('html')
+    expect(service.matchFileViewer('page.htm')?.id).toBe('html')
+    expect(service.matchFileViewer('index.html', new Uint8Array([0x3c, 0x21]))?.id).toBe('html')
+    expect(service.matchFileViewer('index.HTML')?.id).toBe('html')
+  })
+
+  it('the html viewer declares its sandbox and default-unsafe related settings', () => {
+    const { service } = setup()
+    const toggles = service.getFileViewers().find(v => v.id === 'html')?.settings?.toggles ?? []
+    expect(toggles.map(t => t.key)).toEqual(['htmlViewerNoSandbox', 'htmlViewerDefaultUnsafe'])
+    expect(toggles[0]?.title).toBeDefined()
+    expect(toggles[0]?.desc).toBeDefined()
+    expect(toggles[1]?.title).toBeDefined()
+    expect(toggles[1]?.desc).toBeDefined()
   })
 
   it('binary-download claims legacy office by extension', () => {

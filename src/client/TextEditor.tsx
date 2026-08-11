@@ -15,16 +15,26 @@ import { EditorState } from '@codemirror/state'
 import { EditorView as CodeMirrorView, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { IconCheckOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api } from './api.ts'
+import { api, htmlUrl } from './api.ts'
 import { languageForPath } from './lang.ts'
 import { cmSurfaceTheme, CmThemeCompartment } from './cm-themes.ts'
 import { isDarkScheme, subscribeColorScheme } from './theme.ts'
+import { SandboxStatusBar } from './SandboxStatusBar.tsx'
 import { t } from './locales.ts'
 import type { FileViewerProps } from './service.ts'
 import css from './sidebar.module.css'
 
 /** Previewable files (rendered output vs source editing). */
 type ViewMode = 'preview' | 'edit'
+
+/**
+ * The sandbox tokens of the HTML preview iframe. NO allow-same-origin (the
+ * preview must stay in an opaque origin — with the route's own origin it
+ * could read session data) and NO allow-top-navigation (a previewed page
+ * must not hijack the GUI). The user can disable the sandbox per-feature
+ * in the side card settings (warned); the toggle below reflects it.
+ */
+export const HTML_IFRAME_SANDBOX = 'allow-scripts allow-popups allow-downloads allow-modals'
 
 export function TextEditor(props: FileViewerProps) {
   const { scope, path, viewerId, content, truncated } = props
@@ -136,13 +146,23 @@ export function TextEditor(props: FileViewerProps) {
   }
 
   const markdown = viewerId === 'markdown'
+  const html = viewerId === 'html'
   const editable = content !== undefined
   const saveLabel = saveState === 'saving' ? t('loading') : saveState === 'saved' ? t('saved') : saveState === 'failed' ? t('saveFailed') : ''
+  // Per-feature sandbox escape hatch: the global side card setting (warned)
+  // plus a per-surface temporary unlock. The unlock state starts at the
+  // "default unsafe" pref so a preview can open straight into the red
+  // unsandboxed state (still restorable from the status row). With the
+  // sandbox OFF the preview iframe drops its sandbox attribute entirely —
+  // the previewed page then runs on the GUI's own origin with full session
+  // access.
+  const [localUnlock, setLocalUnlock] = useState(() => props.store?.getPrefs().htmlViewerDefaultUnsafe === true)
+  const htmlNoSandbox = props.store?.getPrefs().htmlViewerNoSandbox === true || localUnlock
 
   return (
     <>
       <div className={css.editorHeader}>
-        {markdown && (
+        {(markdown || html) && (
           <div className={css.editorModeToggle}>
             <button
               type="button"
@@ -178,7 +198,7 @@ export function TextEditor(props: FileViewerProps) {
         <>
           {truncated === true && mode === 'edit' && <div className={css.editorBanner}>{t('truncation')}</div>}
           <div
-            className={clsx(css.editorCm, markdown && mode === 'preview' && css.editorCmHidden)}
+            className={clsx(css.editorCm, (markdown || html) && mode === 'preview' && css.editorCmHidden)}
             ref={hostRef}
           />
         </>
@@ -187,6 +207,29 @@ export function TextEditor(props: FileViewerProps) {
         <div className={css.editorMd}>
           <MarkdownText text={draft ?? content ?? ''} />
         </div>
+      )}
+      {html && mode === 'preview' && (
+        <>
+          <SandboxStatusBar
+            sandboxed={!htmlNoSandbox}
+            local={localUnlock}
+            dangerCopy={t('htmlNoSandboxWarning')}
+            onUnlock={() => { setLocalUnlock(true) }}
+            onRestore={() => { setLocalUnlock(false) }}
+          />
+          {/* Route-src (never srcdoc — a srcdoc frame inherits the parent
+              origin when unsandboxed; the route URL keeps the frame
+              cross-origin by construction). The preview shows the SAVED
+              file; the draft is only visible in edit mode. */}
+          <iframe
+            className={css.editorHtml}
+            src={htmlUrl(scope, path)}
+            sandbox={htmlNoSandbox ? undefined : HTML_IFRAME_SANDBOX}
+            referrerPolicy="no-referrer"
+            allow=""
+            title={path}
+          />
+        </>
       )}
     </>
   )

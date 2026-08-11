@@ -307,6 +307,28 @@ describe('service.openTab dedupe', () => {
     expect(tab?.title).toBe('main.ts')
   })
 
+  it('a url seed lands the tab with its path pre-set (the sidebar-browser navigation seed)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'browser',
+      title: () => 'Browser',
+      createTab: (state) => ({
+        tab: { id: `browser:${state.nextBrowser}`, type: 'browser', title: 'Browser' },
+        patch: { nextBrowser: state.nextBrowser + 1 },
+      }),
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'browser', url: 'https://example.com/x', title: 'example.com' })
+    const state = store.getSnapshot().state!
+    const tab = allLeaves(state.splits).flatMap(l => l.tabs).find(t => t.type === 'browser')
+    expect(tab?.id).toBe('browser:1')
+    expect(tab?.path).toBe('https://example.com/x')
+    expect(tab?.title).toBe('example.com')
+    expect(state.nextBrowser).toBe(2)
+  })
+
   it('the descriptor title is the default when no title is given', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)

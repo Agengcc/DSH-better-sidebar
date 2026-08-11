@@ -703,6 +703,186 @@
   background: var(--dsw-alias-state-warn-tertiary);
 }
 
+/* Live sandbox status row (HTML preview / browser tab): GREEN while the
+   sandbox is on (with the one-tap temporary unlock), RED while it is off
+   (global setting or temporary unlock) — the red state is the persistent
+   warning that the page runs on the GUI's own origin. */
+.sandboxStatus {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font: var(--dsw-font-xxxs-11);
+}
+
+.sandboxStatusOn {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-1);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.sandboxStatusOff {
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
+}
+
+.sandboxDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.sandboxStatusOff .sandboxDot {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.sandboxStatusText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sandboxAction {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sandboxAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The HTML preview iframe: fills the editor body. Route-src (never srcdoc)
+   so the frame is cross-origin by construction even if the sandbox
+   attribute is ever dropped; sandboxed by default (see TextEditor). */
+.editorHtml {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: var(--dsw-alias-bg-base);
+}
+
+/* ── Browser tab ──────────────────────────────────────────────────────── */
+
+.browser {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.browserBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.browserInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+}
+
+.browserInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.browserMessage {
+  flex: none;
+  padding: 4px 12px;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
+}
+
+.browserFrame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: var(--dsw-alias-bg-base);
+}
+
+.browserStart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Embed-refusal panel (X-Frame-Options / frame-ancestors): replaces the
+   blank refused iframe with the reason + open-in-browser actions. */
+.browserBlocked {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.browserBlockedTitle {
+  font: var(--dsw-font-xxs-strong-12);
+  color: var(--dsw-alias-label-primary);
+}
+
+.browserBlockedDesc {
+  max-width: 280px;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.browserBlockedActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.browserBlockedButton {
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+
+.browserBlockedButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .editorCm {
   flex: 1;
   min-height: 0;

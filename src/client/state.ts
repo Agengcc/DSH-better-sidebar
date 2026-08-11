@@ -61,6 +61,8 @@ export interface SidebarState {
   activePane: string | null
   /** Monotonic terminal tab counter (ids survive reloads). */
   nextTerminal: number
+  /** Monotonic browser tab counter (ids survive reloads; mirrors nextTerminal). */
+  nextBrowser: number
   /** Explorer expansion set (absolute directory paths). */
   expanded: string[]
   splits: SplitNode
@@ -129,6 +131,7 @@ export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true, seedEx
     width,
     activePane: leaf.id,
     nextTerminal: 1,
+    nextBrowser: 1,
     expanded: [],
     splits: leaf,
   }
@@ -306,6 +309,36 @@ export function activateTab(state: SidebarState, paneId: string, tabId: string):
       if (leaf.tabs.some(tab => tab.id === tabId)) leaf.active = tabId
     }),
   }
+}
+
+/** Update the display fields of one open tab (title / path) without
+ *  re-opening it. The browser tab persists its current URL and hostname
+ *  title through this reducer so a reload restores the visited page. A
+ *  missing tab id is a no-op. */
+export function patchTab(
+  state: SidebarState,
+  tabId: string,
+  patch: { title?: string; path?: string },
+): SidebarState {
+  let changed = false
+  const walk = (node: SplitNode): SplitNode => {
+    if (node.kind === 'leaf') {
+      const tabs = node.tabs.map(tab => {
+        if (tab.id !== tabId) return tab
+        changed = true
+        return {
+          ...tab,
+          ...(patch.title !== undefined ? { title: patch.title } : {}),
+          ...(patch.path !== undefined ? { path: patch.path } : {}),
+        }
+      })
+      return tabs === node.tabs ? node : { ...node, tabs }
+    }
+    const children = node.children.map(walk)
+    return children === node.children ? node : { ...node, children }
+  }
+  const splits = walk(state.splits)
+  return changed ? { ...state, splits } : state
 }
 
 /**
@@ -572,6 +605,12 @@ export function sanitizeState(parsed: unknown): SidebarState | undefined {
   if (typeof record.nextTerminal !== 'number' || !Number.isInteger(record.nextTerminal) || record.nextTerminal < 1) {
     return undefined
   }
+  // nextBrowser arrived in a later build; a missing or malformed value on an
+  // OLDER persisted state defaults to 1 so existing layouts keep loading
+  // (unlike nextTerminal, which is strict — it predates the v1 shape).
+  const nextBrowser = typeof record.nextBrowser === 'number' && Number.isInteger(record.nextBrowser) && record.nextBrowser >= 1
+    ? record.nextBrowser
+    : 1
   if (typeof record.activePane !== 'string' && record.activePane !== null) return undefined
   if (!Array.isArray(record.expanded) || record.expanded.some(item => typeof item !== 'string')) return undefined
   const reid = new Map<string, string>()
@@ -585,6 +624,7 @@ export function sanitizeState(parsed: unknown): SidebarState | undefined {
     // new tabs still land in the pane the user was using.
     activePane: typeof record.activePane === 'string' ? (reid.get(record.activePane) ?? record.activePane) : null,
     nextTerminal: record.nextTerminal,
+    nextBrowser,
     expanded: record.expanded as string[],
     splits,
   }

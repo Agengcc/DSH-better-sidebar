@@ -16,6 +16,7 @@ import { createBetterSidebarService } from './service.ts'
 import { registerBuiltins } from './builtins/index.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { registerOpenPathInterception, registerTurnTailInterception } from './intercept.tsx'
+import { registerLinkInterception } from './link-intercept.ts'
 import { loadPrefs } from './prefs.ts'
 import { SideCardSection } from './SideCardSection.tsx'
 import { api } from './api.ts'
@@ -156,6 +157,30 @@ export function apply(ctx: Context): void {
         }
       },
       'dsh-better-sidebar: open-path interception',
+    )
+
+    ctx.effect(
+      () => {
+        try {
+          // External http(s) links in the chat/GUI open the sidebar browser
+          // instead of a new window (gated on the browserInterceptLinks pref
+          // AND the browser tab's enable switch; Ctrl/Cmd+click bypasses).
+          return registerLinkInterception({
+            takeoverEnabled: () => sidebarStore.getPrefs().browserInterceptLinks !== false
+              && sidebarStore.getPrefs().tabsEnabled['browser'] !== false,
+            openInSidebar: (url) => {
+              let title: string | undefined
+              try { title = new URL(url).hostname } catch { /* keep the default title */ }
+              ctx.betterSidebar?.openTab({ type: 'browser', url, title })
+            },
+            selfOrigin: window.location.origin,
+          })
+        } catch (error) {
+          fail('interception', error)
+          return undefined
+        }
+      },
+      'dsh-better-sidebar: link interception',
     )
 
     // The "Side card" settings section: appears in the DSH Settings shell

@@ -16,6 +16,12 @@
   flex-direction: column;
   gap: 8px;
   width: 100%;
+  /* Tall inventories (7 tab cards + 9 viewer cards + general rows) must
+     never be clipped by the settings shell: fill the shell's options area
+     and scroll inside the section when the content outgrows the panel. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .section > :last-child {

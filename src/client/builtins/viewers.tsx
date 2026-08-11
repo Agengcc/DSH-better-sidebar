@@ -1,8 +1,8 @@
 /**
- * The 8 built-in file viewer descriptors: every preview surface is a
- * registered viewer (image / pdf / docx / xlsx / pptx / markdown / code /
- * binary-download), exactly like external plugins register theirs. The
- * `binary-download` viewer sniffs NUL bytes via `detect` for unknown
+ * The 9 built-in file viewer descriptors: every preview surface is a
+ * registered viewer (image / pdf / docx / xlsx / pptx / markdown / html /
+ * code / binary-download), exactly like external plugins register theirs.
+ * The `binary-download` viewer sniffs NUL bytes via `detect` for unknown
  * binaries and serves doc/xls/ppt by extension; `code` is the catch-all
  * (`exts: []`, lowest priority) that claims any file no other viewer did.
  *
@@ -23,12 +23,13 @@ import {
   IconDocxOutline16,
   IconXlsxOutline16,
   IconPptxOutline16,
+  IconHtmlOutline16,
 } from '../icons.tsx'
 import type { FileViewerDescriptor } from '../service.ts'
 import { t } from '../locales.ts'
 import css from '../sidebar.module.css'
 
-/** The 8 built-in file viewer descriptors. */
+/** The 9 built-in file viewer descriptors. */
 export function builtinViewers(): readonly FileViewerDescriptor[] {
   return [
     {
@@ -89,6 +90,28 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconMarkdownOutline16 size={size} />,
       exts: ['md', 'markdown'],
       fetchStrategy: 'fsRead',
+      component: (props) => <TextEditor {...props} />,
+    },
+    {
+      id: 'html',
+      title: () => t('viewerHtml'),
+      icon: (size: number) => <IconHtmlOutline16 size={size} />,
+      exts: ['html', 'htm'],
+      fetchStrategy: 'fsRead',
+      // Declarative settings: the sandbox escape hatch and the default-unsafe
+      // start state render under this viewer's row in the Side card settings
+      // page (both warned on).
+      settings: {
+        toggles: [{
+          key: 'htmlViewerNoSandbox',
+          title: () => t('settingsHtmlSandboxTitle'),
+          desc: () => t('settingsHtmlSandboxDesc'),
+        }, {
+          key: 'htmlViewerDefaultUnsafe',
+          title: () => t('settingsHtmlDefaultUnsafeTitle'),
+          desc: () => t('settingsHtmlDefaultUnsafeDesc'),
+        }],
+      },
       component: (props) => <TextEditor {...props} />,
     },
     {

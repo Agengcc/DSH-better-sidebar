@@ -1,9 +1,10 @@
 /**
- * The 6 built-in tab descriptors: the plugin registers its own pages
- * (explorer / git / terminal / subagent / editor / diff) through the same
- * {@link BetterSidebarService} external plugins use — eating its own
- * dogfood. The terminal descriptor owns its quota (`TERMINAL_LIMIT`) and
- * mints `terminal:<n>` ids through `createTab`.
+ * The 7 built-in tab descriptors: the plugin registers its own pages
+ * (explorer / git / terminal / browser / subagent / editor / diff) through
+ * the same {@link BetterSidebarService} external plugins use — eating its
+ * own dogfood. The terminal descriptor owns its quota (`TERMINAL_LIMIT`)
+ * and mints `terminal:<n>` ids through `createTab`; the browser mints
+ * `browser:<n>` the same way (no quota).
  */
 import { IconBranchOutline16, IconCodeOutline16, IconFolderOpen16, IconThinkOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../../context-types.ts'
@@ -16,7 +17,8 @@ import { TerminalView } from '../TerminalView.tsx'
 import { GitView } from '../GitView.tsx'
 import { DiffTab } from '../DiffTab.tsx'
 import { SubagentView } from '../SubagentView.tsx'
-import { IconTerminalOutline16, IconDiffOutline16 } from '../icons.tsx'
+import { BrowserView } from '../BrowserView.tsx'
+import { IconTerminalOutline16, IconDiffOutline16, IconGlobeOutline16 } from '../icons.tsx'
 import type { TabDescriptor } from '../service.ts'
 
 /** How many UI-owned terminals may be open at once (agent-owned ones are uncapped). */
@@ -29,7 +31,7 @@ function uiTerminalCount(state: SidebarState): number {
     .filter(tab => tab.type === 'terminal' && !isAgentTabId(tab.id)).length
 }
 
-/** The 6 built-in tab descriptors. */
+/** The 7 built-in tab descriptors. */
 export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
   return [
     {
@@ -129,6 +131,35 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       component: ({ scope, tab, store }) => (
         <TerminalView scope={scope} tabId={tab.id} store={store} />
       ),
+    },
+    {
+      id: 'browser',
+      title: () => t('browser'),
+      icon: (size: number) => <IconGlobeOutline16 size={size} />,
+      order: 50,
+      // Declarative settings: the sandbox escape hatch and the link
+      // takeover render under this tab's row in the Side card settings
+      // page (the sandbox one is warned on).
+      settings: {
+        toggles: [{
+          key: 'browserNoSandbox',
+          title: () => t('settingsBrowserSandboxTitle'),
+          desc: () => t('settingsBrowserSandboxDesc'),
+        }, {
+          key: 'browserInterceptLinks',
+          title: () => t('settingsBrowserLinksTitle'),
+          desc: () => t('settingsBrowserLinksDesc'),
+        }],
+      },
+      createTab: (state) => ({
+        tab: {
+          id: `browser:${state.nextBrowser}`,
+          type: 'browser',
+          title: t('browser'),
+        },
+        patch: { nextBrowser: state.nextBrowser + 1 },
+      }),
+      component: (props) => <BrowserView {...props} />,
     },
     {
       id: 'diff',

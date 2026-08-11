@@ -4,7 +4,7 @@ import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
 import {
   activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, patchTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
   type SidebarState, type SidebarTab, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -454,6 +454,52 @@ describe('sidebar state', () => {
     expect((after.splits as { active: string | null }).active).toBe(tabId)
   })
 
+  it('patchTab updates the title and path of one open tab (browser persistence)', () => {
+    let s = state()
+    const leaf = s.splits as { id: string; tabs: { id: string; type: string; title: string; path?: string }[] }
+    s = openTabInActivePane(s, { id: 'browser:1', type: 'browser', title: 'Browser' })
+    const browserId = 'browser:1'
+    s = patchTab(s, browserId, { path: 'https://example.com/', title: 'example.com' })
+    const tab = (s.splits as { tabs: { id: string; title: string; path?: string }[] }).tabs.find(t => t.id === browserId)
+    expect(tab).toMatchObject({ title: 'example.com', path: 'https://example.com/' })
+    // A partial patch leaves the other field untouched.
+    s = patchTab(s, browserId, { title: 'example.org' })
+    const again = (s.splits as { tabs: { id: string; title: string; path?: string }[] }).tabs.find(t => t.id === browserId)
+    expect(again).toMatchObject({ title: 'example.org', path: 'https://example.com/' })
+    // Other tabs are untouched.
+    expect(leaf.tabs[0]).toBeDefined()
+  })
+
+  it('patchTab is a no-op for a missing tab id', () => {
+    const s = state()
+    const after = patchTab(s, 'nope', { title: 'X', path: 'https://x/' })
+    expect(after).toBe(s)
+  })
+
+  it('sanitize accepts nextBrowser (defaulting a missing/malformed one to 1)', () => {
+    const base = {
+      panelOpen: true,
+      width: 400,
+      nextTerminal: 1,
+      activePane: 'pane:1',
+      expanded: [],
+      splits: {
+        kind: 'leaf',
+        id: 'pane:1',
+        active: null,
+        tabs: [{ id: 't', type: 'explorer', title: 'Explorer' }],
+      },
+    }
+    // Older persisted states lack the field: they must keep loading.
+    expect(sanitizeState(base)?.nextBrowser).toBe(1)
+    // A present valid value survives; a malformed one falls back to 1.
+    expect(sanitizeState({ ...base, nextBrowser: 7 })?.nextBrowser).toBe(7)
+    expect(sanitizeState({ ...base, nextBrowser: 'x' })?.nextBrowser).toBe(1)
+    expect(sanitizeState({ ...base, nextBrowser: 0 })?.nextBrowser).toBe(1)
+    // The default state seeds 1.
+    expect(makeDefaultState().nextBrowser).toBe(1)
+  })
+
   it('tabOpenIn: a tab is open until it is truly closed, wherever it lives', () => {
     let s = state()
     const leaf = s.splits as { id: string; tabs: { id: string }[] }
@@ -838,6 +884,10 @@ describe('side card preferences', () => {
         autoOpenSubagent: false,
         agentTerminalTools: true,
         interceptOpenPath: true,
+        htmlViewerNoSandbox: false,
+        htmlViewerDefaultUnsafe: false,
+        browserNoSandbox: false,
+        browserInterceptLinks: true,
         tabsEnabled: {},
         viewersEnabled: {},
       })
@@ -851,6 +901,10 @@ describe('side card preferences', () => {
         autoOpenSubagent: true,
         agentTerminalTools: false,
         interceptOpenPath: true,
+        htmlViewerNoSandbox: false,
+        htmlViewerDefaultUnsafe: false,
+        browserNoSandbox: false,
+        browserInterceptLinks: true,
         tabsEnabled: {},
         viewersEnabled: {},
       })
@@ -864,6 +918,10 @@ describe('side card preferences', () => {
         autoOpenSubagent: true,
         agentTerminalTools: false,
         interceptOpenPath: true,
+        htmlViewerNoSandbox: false,
+        htmlViewerDefaultUnsafe: false,
+        browserNoSandbox: false,
+        browserInterceptLinks: true,
         tabsEnabled: {},
         viewersEnabled: {},
       })
@@ -905,9 +963,9 @@ describe('side card preferences', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, tabsEnabled: {}, viewersEnabled: {} })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, tabsEnabled: {}, viewersEnabled: {} })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)
@@ -920,7 +978,7 @@ describe('side card preferences', () => {
 
   it('skips the default explorer tab when the explorer type is disabled', () => {
     const store = createSidebarStore()
-    store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, tabsEnabled: { explorer: false }, viewersEnabled: {} })
+    store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: { explorer: false }, viewersEnabled: {} })
     store.setSession('no-explorer')
     const state = store.getSnapshot().state!
     const tabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
@@ -928,7 +986,7 @@ describe('side card preferences', () => {
     expect(state.splits.kind).toBe('leaf')
     // Re-enabling seeds the explorer tab again.
     const openStore = createSidebarStore()
-    openStore.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, tabsEnabled: {}, viewersEnabled: {} })
+    openStore.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     openStore.setSession('with-explorer')
     const openTabs = allLeaves(openStore.getSnapshot().state!.splits).flatMap(leaf => leaf.tabs)
     expect(openTabs.map(tab => tab.type)).toEqual(['explorer'])

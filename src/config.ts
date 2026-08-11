@@ -81,6 +81,10 @@ export const PrefsSchema: z<SidebarPrefs> = z.object({
   autoOpenSubagent: z.boolean().default(true),
   agentTerminalTools: z.boolean().default(false),
   interceptOpenPath: z.boolean().default(true),
+  htmlViewerNoSandbox: z.boolean().default(false),
+  htmlViewerDefaultUnsafe: z.boolean().default(false),
+  browserNoSandbox: z.boolean().default(false),
+  browserInterceptLinks: z.boolean().default(true),
   // Per-feature enable switches are OPEN maps (any tab/viewer id, built-in or
   // external): an absent key means enabled, so old documents resolve to {}
   // (everything on) with no migration. Non-boolean values fail validation.

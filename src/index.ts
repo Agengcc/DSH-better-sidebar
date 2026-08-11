@@ -26,7 +26,9 @@ import {
   type SidebarPrefs,
 } from './config.ts'
 import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
-import { isTrustedApiRequest } from './trust-fence.ts'
+import { decodeHtmlUrl } from './html-route.ts'
+import { extractFrameAncestors } from './browser-probe.ts'
+import { isTrustedApiRequest, isLoopbackHostname } from './trust-fence.ts'
 import * as git from './git.ts'
 import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
@@ -68,6 +70,8 @@ const MEDIA_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.avif': 'image/avif',
   '.pdf': 'application/pdf',
+  '.html': 'text/html',
+  '.htm': 'text/html',
 }
 
 /** Content type served by /sidebar/file (binary-safe fallback for unknowns). */
@@ -350,6 +354,55 @@ function buildApi(
         throw new SidebarError('settings-rejected', error instanceof Error ? error.message : String(error), 400)
       }
     },
+    // Probe a URL's RESPONSE HEADERS so the sidebar browser can explain an
+    // iframe refusal: X-Frame-Options / CSP frame-ancestors are exactly the
+    // signals the browser enforces when it refuses to embed a site. The
+    // probe is display-only (headers back to the caller), restricted to
+    // http(s) non-loopback URLs with a hard timeout, and gated by the same
+    // trust fence as every other route — a cross-site page cannot reach it.
+    'browser.probe': async (payload) => {
+      const raw = requireString(payload, 'url')
+      let parsed: URL
+      try {
+        parsed = new URL(raw)
+      } catch {
+        throw new SidebarError('bad-request', 'invalid url', 400)
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new SidebarError('bad-request', 'only http/https urls can be probed', 400)
+      }
+      // Mirror the browser tab's address-bar policy: loopback stays unreachable
+      // from the sidebar, so probing it would leak nothing the tab could use.
+      if (isLoopbackHostname(parsed.hostname)) {
+        throw new SidebarError('bad-request', 'local addresses are not probed', 400)
+      }
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8000)
+      try {
+        let response = await fetch(parsed, { method: 'HEAD', redirect: 'follow', signal: controller.signal })
+        // Some servers answer HEAD with 405/501; retry once as GET (the
+        // body is discarded — only the headers matter).
+        if (response.status === 405 || response.status === 501) {
+          response = await fetch(parsed, { method: 'GET', redirect: 'follow', signal: controller.signal })
+        }
+        const csp = response.headers.get('content-security-policy')
+        const frameAncestors = extractFrameAncestors(csp)
+        const xFrameOptions = response.headers.get('x-frame-options')
+        return {
+          reachable: true,
+          url: response.url,
+          status: response.status,
+          ...(xFrameOptions !== null ? { xFrameOptions } : {}),
+          ...(frameAncestors !== undefined ? { frameAncestors } : {}),
+        }
+      } catch {
+        // DNS / TLS / connection / timeout: nothing to judge — the client
+        // keeps the plain iframe.
+        return { reachable: false }
+      } finally {
+        clearTimeout(timer)
+      }
+    },
   }
 }
 
@@ -512,6 +565,70 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
       }
     },
   }), 'dsh-better-sidebar: /sidebar/file media route')
+
+  // ── HTML preview route (sandboxed HTML + its relative assets) ───────────
+  // Serves files under the session cwd for the built-in HTML previewer. The
+  // URL is path-encoded (see html-route.ts) so the previewed page's relative
+  // assets (./style.css, img/x.png) resolve back into this route with the
+  // session scope intact — a query-encoded URL would drop the scope when the
+  // browser resolves relatives. Every response carries the CSP `sandbox`
+  // directive: inside the editor's iframe the sandbox ATTRIBUTE is the
+  // boundary, this header is defense-in-depth so even a top-level load of
+  // the URL (e.g. a popup opened by a previewed page) stays in an opaque
+  // origin with no same-origin access to the GUI.
+  ctx.effect(() => ctx.httpServer.register({
+    kind: 'prefix',
+    path: '/sidebar/html',
+    handler: async (req, res) => {
+      if (!fence(req)) {
+        res.writeHead(403)
+        res.end('forbidden')
+        return
+      }
+      if (req.method !== 'GET') {
+        res.writeHead(405)
+        res.end()
+        return
+      }
+      try {
+        const url = new URL(req.url ?? '/', 'http://dsh.internal')
+        const decoded = decodeHtmlUrl(url.pathname)
+        if (!decoded.ok) {
+          writeError(res, new SidebarError('bad-request', decoded.message, decoded.status))
+          return
+        }
+        const { sessionId, path } = decoded.ref
+        // The session's authoritative cwd (client cwd cannot ride in the URL
+        // — the path encoding has no query; a detached first request falls
+        // back to the process cwd and is normally refused by isWithin, same
+        // semantics as the media route's fallback).
+        const cwd = sessionCwdOf(ctx, sessionId)
+        const absolute = requireAbsolute(path)
+        if (!isWithin(cwd, absolute)) {
+          throw new SidebarError('fs-error', 'html path outside the session working directory', 403)
+        }
+        const info = await stat(absolute)
+        if (!info.isFile() || info.size > resolved.mediaLimit) {
+          throw new SidebarError('fs-error', 'not a file or too large', 400)
+        }
+        const type = mediaTypeForPath(absolute)
+        const body = await readFile(absolute)
+        res.writeHead(200, {
+          'content-type': type,
+          'cache-control': 'no-cache',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+          // The sandbox directive (no allow-same-origin → opaque origin) is
+          // the previewer's security boundary even for top-level loads;
+          // object-src 'none' blocks plugin embeds.
+          'content-security-policy': "sandbox allow-scripts allow-popups allow-downloads allow-modals; object-src 'none'",
+        })
+        res.end(body)
+      } catch (error) {
+        writeError(res, error)
+      }
+    },
+  }), 'dsh-better-sidebar: /sidebar/html preview route')
 
   // ── Terminal WebSocket ──────────────────────────────────────────────────
   // One upgrade endpoint serves both UI-tab terminals (?tab=...) and

@@ -46,6 +46,18 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     interceptOpenPath: typeof record.interceptOpenPath === 'boolean'
       ? record.interceptOpenPath
       : SIDEBAR_PREFS_DEFAULTS.interceptOpenPath,
+    htmlViewerNoSandbox: typeof record.htmlViewerNoSandbox === 'boolean'
+      ? record.htmlViewerNoSandbox
+      : SIDEBAR_PREFS_DEFAULTS.htmlViewerNoSandbox,
+    htmlViewerDefaultUnsafe: typeof record.htmlViewerDefaultUnsafe === 'boolean'
+      ? record.htmlViewerDefaultUnsafe
+      : SIDEBAR_PREFS_DEFAULTS.htmlViewerDefaultUnsafe,
+    browserNoSandbox: typeof record.browserNoSandbox === 'boolean'
+      ? record.browserNoSandbox
+      : SIDEBAR_PREFS_DEFAULTS.browserNoSandbox,
+    browserInterceptLinks: typeof record.browserInterceptLinks === 'boolean'
+      ? record.browserInterceptLinks
+      : SIDEBAR_PREFS_DEFAULTS.browserInterceptLinks,
     tabsEnabled: booleanMapOf(record.tabsEnabled),
     viewersEnabled: booleanMapOf(record.viewersEnabled),
   }

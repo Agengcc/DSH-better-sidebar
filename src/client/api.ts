@@ -6,6 +6,8 @@
  * hydrating at page load (a detached session would otherwise fail the
  * request). Failures surface as {@link SidebarApiError} with the wire code.
  */
+import { encodeHtmlUrl } from '../html-route.ts'
+import type { BrowserProbeResult } from './browser.ts'
 
 /** One wire failure. */
 export class SidebarApiError extends Error {
@@ -152,6 +154,10 @@ export const api = {
       patch,
       ...(expectedRevision !== undefined ? { expectedRevision } : {}),
     }),
+  /** Probe a URL's response headers (the sidebar browser's embeddability
+   *  check; see the host's browser.probe route). */
+  browserProbe: (url: string, signal?: AbortSignal) =>
+    call<BrowserProbeResult>('browser.probe', { url }, signal),
 }
 
 /** Absolute URL of the media route for one path (images only). */
@@ -171,4 +177,11 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
   if (scope.cwd !== undefined && scope.cwd !== '') params.set('cwd', scope.cwd)
   if (download) params.set('download', '1')
   return `/sidebar/file?${params.toString()}`
+}
+
+/** Absolute URL of the HTML preview route (see html-route.ts): the path is
+ *  fully encoded so the previewed page's relative assets resolve back into
+ *  the same route with the session scope intact. */
+export function htmlUrl(scope: SessionScope, path: string): string {
+  return encodeHtmlUrl(scope.sessionId, path)
 }

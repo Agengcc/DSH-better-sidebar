@@ -15,6 +15,7 @@ const elementStub = (): Record<string, unknown> => ({
   classList: { add: () => {}, remove: () => {}, contains: () => false },
   setAttribute: () => {},
   getAttribute: () => null,
+  hasAttribute: () => false,
   appendChild: () => {},
   addEventListener: () => {},
   removeEventListener: () => {},
