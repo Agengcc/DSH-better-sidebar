@@ -8,7 +8,7 @@
  */
 import { IconCodeOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
-import { openTab, type SidebarStore } from './state.ts'
+import type { SidebarStore } from './state.ts'
 import { t } from './locales.ts'
 import { resolveSidebarPath, selectProducedFiles } from './produced-files.ts'
 import css from './sidebar.module.css'
@@ -19,12 +19,9 @@ export function openSidebarFile(ctx: Context, store: SidebarStore, sessionId: st
   const absolute = resolveSidebarPath(summary?.cwd, path)
   const at = Math.max(absolute.lastIndexOf('/'), absolute.lastIndexOf('\\'))
   const title = at === -1 ? absolute : absolute.slice(at + 1)
-  store.reduce(state => openTab(state, {
-    id: `editor:${absolute}`,
-    type: 'editor',
-    title,
-    path: absolute,
-  }))
+  // Route through the sidebar service so the editor descriptor's dedupeKey
+  // (per-path) applies; the id is path-derived so multiple editors coexist.
+  ctx.betterSidebar?.openTab({ type: 'editor', title, path: absolute, id: `editor:${absolute}` })
 }
 
 /** The intercepted produced-files row (visual twin of the deliverables chips). */

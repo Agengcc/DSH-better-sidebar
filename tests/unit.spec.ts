@@ -214,23 +214,26 @@ describe('git parsing', () => {
 describe('sidebar state', () => {
   const state = (): SidebarState => makeDefaultState()
 
-  it('opens tabs into the active pane and dedupes single-instance types', () => {
+  it('opens tabs into the active pane and dedupes by id (safety net)', () => {
     let s = state()
     const gitTab = { id: 'git', type: 'git' as const, title: 'Git' }
     s = openTab(s, gitTab)
     expect(s.splits.kind).toBe('leaf')
     expect((s.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
-    // Reopening git focuses the existing tab instead of duplicating.
-    const after = openTab(s, { id: 'git2', type: 'git' as const, title: 'Git' })
+    // Reopening with the SAME id focuses the existing tab instead of duplicating.
+    const after = openTab(s, { id: 'git', type: 'git' as const, title: 'Git' })
     expect((after.splits as { tabs: unknown[] }).tabs).toHaveLength(2)
+    // A different id opens a new tab (type-level dedupe is the service's job).
+    const after2 = openTab(s, { id: 'git2', type: 'git' as const, title: 'Git' })
+    expect((after2.splits as { tabs: unknown[] }).tabs).toHaveLength(3)
   })
 
-  it('dedupes editors by path', () => {
+  it('opens multiple editors with distinct ids (path-level dedupe is the service descriptor\'s job)', () => {
     let s = state()
     const firstId = (s.splits as { tabs: { id: string }[] }).tabs[0]!.id
     s = openTab(s, { id: 'e1', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
     const after = openTab(s, { id: 'e2', type: 'editor', title: 'a.ts', path: '/p/a.ts' })
-    expect((after.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([firstId, 'e1'])
+    expect((after.splits as { tabs: { id: string }[] }).tabs.map(t => t.id)).toEqual([firstId, 'e1', 'e2'])
   })
 
   const diffTab = (id: string): SidebarTab => ({
@@ -644,10 +647,16 @@ describe('persisted state sanitization', () => {
     const withSplit = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withSplit.splits = { kind: 'split', id: 's1', dir: 'row', sizes: [0.5], children: [] }
     expect(sanitizeState(withSplit)).toBeUndefined()
-    // Unknown tab types (older layouts) are rejected.
-    const withBadTab = JSON.parse(JSON.stringify(makeDefaultState(400)))
-    withBadTab.splits.tabs[0].type = 'watcher'
-    expect(sanitizeState(withBadTab)).toBeUndefined()
+    // Unknown tab types (external plugins not yet loaded) are accepted —
+    // they render as <OrphanedTab/> at view time and recover if the plugin
+    // loads later. Only diff tabs are dropped (ephemeral).
+    const withExternalTab = JSON.parse(JSON.stringify(makeDefaultState(400)))
+    withExternalTab.splits.tabs[0].type = 'my-plugin:db'
+    const externalClean = sanitizeState(withExternalTab)
+    expect(externalClean).toBeDefined()
+    if (externalClean !== undefined && externalClean.splits.kind === 'leaf') {
+      expect(externalClean.splits.tabs[0]!.type).toBe('my-plugin:db')
+    }
     // An active id that no tab carries is rejected.
     const withBadActive = JSON.parse(JSON.stringify(makeDefaultState(400)))
     withBadActive.splits.active = 'ghost-tab'

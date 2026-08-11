@@ -286,6 +286,30 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 - client 状态按会话持久化到 `localStorage`（`dsh-sidebar:v1:<sessionId>`），读取时结构校验 + 宽度钳制视口 + 重复 id 重新编号
 - client bundle externals 仅模块表词条（react/cordis/ui-primitives 等），xterm/CodeMirror 等全部内联
 
+## 🔌 服务化（v0.4.0+）：让其他插件注册 tab 和文件预览器
+
+better-sidebar 从 v0.4.0 起暴露 `ctx.betterSidebar` 服务（Cordis context 属性），其他插件可通过它注册：
+
+- **侧边栏页面（tab）**：`ctx.betterSidebar.registerTab({ id, title, icon, component, ... })`
+- **文件类型预览器**：`ctx.betterSidebar.registerFileViewer({ id, exts, fetchStrategy, component, ... })`
+
+两个方法都返回 disposer，用 `ctx.effect(() => register(...))` 包裹即可让 Cordis fiber 卸载时自动撤销（HMR-safe）。内置 6 个 tab（explorer/git/subagent/terminal/editor/diff）和 6 个 viewer（image/pdf/docx/xlsx/pptx/binary-download）也通过同一服务注册（"吃狗粮"），外部插件与内置一视同仁。
+
+**消费插件最小骨架**：
+```ts
+import type {} from 'dsh-better-sidebar'  // 触发 ctx.betterSidebar 类型合并
+export const inject = ['betterSidebar']
+export function apply(ctx: Context) {
+  ctx.effect(() => ctx.betterSidebar.registerTab({
+    id: 'my-plugin:db',
+    title: 'Database',
+    component: ({ scope }) => <DbView sessionId={scope.sessionId} />,
+  }))
+}
+```
+
+**完整接入文档**：见 [`AGENTS.md`](./AGENTS.md) ——含 `TabDescriptor` / `FileViewerDescriptor` 全字段、`fetchStrategy` 对照、匹配算法、HMR 陷阱、完整最小示例。
+
 ## 🔐 安全边界
 
 - 路由受 Host 头信任围栏保护（与 `/api` 一致；`0.0.0.0` 部署时由 `dsh web` 启动器动态派生的 LAN IP 列表生效）

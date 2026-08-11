@@ -7,23 +7,20 @@
  * and unsaved edits survive the toggle. Reads cap at the host's 512KB bound
  * (a banner marks truncation).
  */
-import { useEffect, useRef, useState } from 'react'
+import { createElement, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { EditorState } from '@codemirror/state'
 import { EditorView as CodeMirrorView, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { IconCheckOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { Context } from '../context-types.ts'
 import { api, downloadUrl, mediaUrl, type SessionScope } from './api.ts'
 import { languageForPath } from './lang.ts'
 import { cmSurfaceTheme, CmThemeCompartment } from './cm-themes.ts'
 import { isDarkScheme, subscribeColorScheme } from './theme.ts'
 import { t } from './locales.ts'
-import { officeKindForExt } from './office-types.ts'
-import { DocxView, XlsxView } from './office-view.tsx'
-import { isPdfExt } from './pdf-types.ts'
-import { PdfView } from './PdfView.tsx'
-import { PptxView } from './PptxView.tsx'
-import { isImageExt } from './image-types.ts'
+import type { FileViewerDescriptor } from './service.ts'
+import type { SidebarStore } from './state.ts'
 import css from './sidebar.module.css'
 
 const MD_EXT = ['.md', '.markdown']
@@ -31,14 +28,14 @@ const MD_EXT = ['.md', '.markdown']
 type EditorLoad =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; kind: 'text' | 'image' | 'md' | 'docx' | 'xlsx' | 'pptx' | 'pdf'; content: string; truncated: boolean }
+  | { status: 'ready'; viewer?: FileViewerDescriptor; kind?: 'text' | 'md'; content?: string; truncated?: boolean; mediaUrl?: string; customData?: unknown }
   | { status: 'binary' }  // unknown binary / OLE legacy formats → download button
 
 /** Previewable files (rendered output vs source editing). */
 type ViewMode = 'preview' | 'edit'
 
-export function EditorView(props: { scope: SessionScope; path: string; title: string }) {
-  const { scope, path, title } = props
+export function EditorView(props: { ctx: Context; store: SidebarStore; scope: SessionScope; path: string; title: string }) {
+  const { ctx, store, scope, path, title } = props
   const [load, setLoad] = useState<EditorLoad>({ status: 'loading' })
   const [mode, setMode] = useState<ViewMode>('preview')
   /** The editor's current text (null while clean); preview renders this. */
@@ -62,30 +59,44 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
     setDraft(null)
     setDirty(false)
     setSaveState('idle')
-    // Office preview short-circuit: the host's readText would NUL-probe every
-    // Office file as binary (a wasted round-trip), and .docx/.xlsx have their
-    // own renderers below. Detect by extension and skip fsRead entirely —
-    // the renderer fetches bytes through the media route itself.
     const ext = extOfPath(path)
-    // Images are binary by nature; short-circuit before fsRead's NUL probe or
-    // every PNG/JPEG would be classified as an unsupported binary file.
-    if (isImageExt(ext)) {
-      setLoad({ status: 'ready', kind: 'image', content: '', truncated: false })
-      return
+    // Registry-driven viewer match: image/pdf/office/binary-download etc.
+    // are registered through ctx.betterSidebar; code/markdown have no
+    // registered viewer and fall through to the fsRead + CodeMirror path.
+    const viewer = ctx.betterSidebar?.matchFileViewer(path)
+    if (viewer !== undefined) {
+      switch (viewer.fetchStrategy) {
+        case 'mediaUrl':
+        case 'none':
+          setLoad({ status: 'ready', viewer, mediaUrl: mediaUrl(scope, path) })
+          return
+        case 'binary-download':
+          setLoad({ status: 'binary' })
+          return
+        case 'custom':
+          void viewer.load?.(path, scope).then((data) => {
+            if (cancelled) return
+            setLoad({ status: 'ready', viewer, customData: data })
+          }).catch((error: unknown) => {
+            if (cancelled) return
+            setLoad({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+          })
+          return
+        case 'fsRead':
+          // An fsRead viewer (e.g. external CSV viewer) gets its content
+          // through the host's fs.read and renders through viewer.component.
+          api.fsRead(scope, path).then((result) => {
+            if (cancelled) return
+            if (result.kind === 'binary') { setLoad({ status: 'binary' }); return }
+            setLoad({ status: 'ready', viewer, content: result.content, truncated: result.truncated })
+          }).catch((error: unknown) => {
+            if (cancelled) return
+            setLoad({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+          })
+          return
+      }
     }
-    if (isPdfExt(ext)) {
-      setLoad({ status: 'ready', kind: 'pdf', content: '', truncated: false })
-      return
-    }
-    const officeKind = officeKindForExt(ext)
-    if (officeKind === 'docx' || officeKind === 'xlsx' || officeKind === 'pptx') {
-      setLoad({ status: 'ready', kind: officeKind, content: '', truncated: false })
-      return
-    }
-    if (officeKind === 'download-only') {
-      setLoad({ status: 'binary' })
-      return
-    }
+    // Fallback: code/markdown (no registered viewer) — fsRead + CodeMirror.
     api.fsRead(scope, path).then((result) => {
       if (cancelled) return
       if (result.kind === 'binary') {
@@ -103,7 +114,7 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
       setLoad({ status: 'error', message: error instanceof Error ? error.message : String(error) })
     })
     return () => { cancelled = true }
-  }, [scope.sessionId, scope.cwd, path])
+  }, [scope.sessionId, scope.cwd, path, ctx])
 
   // Create the CodeMirror editor once the file is loaded. The view owns the
   // document; React only tracks dirty/draft state through the update
@@ -112,7 +123,7 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
   // colors live in a compartment so a scheme flip reconfigures only that
   // part — the document, undo history and scroll position survive.
   useEffect(() => {
-    if (load.status !== 'ready' || (load.kind !== 'text' && load.kind !== 'md')) return
+    if (load.status !== 'ready' || load.viewer !== undefined || (load.kind !== 'text' && load.kind !== 'md')) return
     const host = hostRef.current
     if (host === null) return
     const language = languageForPath(path)
@@ -248,26 +259,16 @@ export function EditorView(props: { scope: SessionScope; path: string; title: st
           />
         </>
       )}
-      {load.status === 'ready' && load.kind === 'image' && (
-        <div className={css.editorImageWrap}>
-          <img className={css.editorImage} src={mediaUrl(scope, path)} alt={title} />
-        </div>
-      )}
-      {load.status === 'ready' && load.kind === 'docx' && (
-        <DocxView scope={scope} path={path} title={title} />
-      )}
-      {load.status === 'ready' && load.kind === 'xlsx' && (
-        <XlsxView scope={scope} path={path} title={title} />
-      )}
-      {load.status === 'ready' && load.kind === 'pptx' && (
-        <PptxView scope={scope} path={path} title={title} />
-      )}
-      {load.status === 'ready' && load.kind === 'pdf' && (
-        <PdfView scope={scope} path={path} title={title} />
-      )}
+      {load.status === 'ready' && load.viewer !== undefined && createElement(load.viewer.component, {
+        ctx, store, scope, path, title,
+        content: load.content,
+        truncated: load.truncated,
+        mediaUrl: load.mediaUrl,
+        customData: load.customData,
+      })}
       {previewable && mode === 'preview' && (
         <div className={css.editorMd}>
-          <MarkdownText text={draft ?? load.content} />
+          <MarkdownText text={draft ?? load.content ?? ''} />
         </div>
       )}
     </div>

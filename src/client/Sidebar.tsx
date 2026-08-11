@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { IconChevronRightOutline14, IconFullscreenOutline16, IconPanelLeftOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab, openTab,
+  agentUuidOf, allLeaves, closeTab, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab,
   reconcileAgentTerminals,
   resizeSplit, setWidth, toggleExpanded, togglePanel,
   TERMINAL_LIMIT, type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
@@ -23,18 +23,11 @@ import {
 import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import type { NewTabOption } from './TabBar.tsx'
 import type { TabDragPayload } from './TabBar.tsx'
-import { tabTypeIcon } from './icons.tsx'
 import { relativeTo } from './paths.ts'
-import { ExplorerView } from './ExplorerView.tsx'
-import { EditorView } from './EditorView.tsx'
-import { TerminalView } from './TerminalView.tsx'
-import { GitView } from './GitView.tsx'
-import { DiffTab } from './DiffTab.tsx'
-import { SubagentView } from './SubagentView.tsx'
+import { OrphanedTab } from './OrphanedTab.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
 import { t } from './locales.ts'
 import { api } from './api.ts'
-import { openSidebarFile } from './intercept.tsx'
 import css from './sidebar.module.css'
 
 /** How many consecutive reconnect failures stop the agent-terminals push loop
@@ -60,64 +53,31 @@ function TabContent(props: {
 }) {
   const { tab, sessionId, cwd, expanded, onToggleDir, onReferenceFile, ctx, store, visible, onSubagentJump, onOpenDiff } = props
   const scope = { sessionId, cwd }
-  switch (tab.type) {
-    case 'explorer':
-      return (
-        <ExplorerView
-          sessionId={sessionId}
-          cwd={cwd}
-          expanded={expanded}
-          onToggle={onToggleDir}
-          onOpenFile={(path) => { openSidebarFile(ctx, store, sessionId, path) }}
-          onReferenceFile={onReferenceFile}
-        />
-      )
-    case 'git':
-      return (
-        <GitView
-          scope={scope}
-          onOpenFile={(path) => { openSidebarFile(ctx, store, sessionId, path) }}
-          onOpenDiff={onOpenDiff}
-        />
-      )
-    case 'diff':
-      return tab.diff === undefined
-        ? null
-        : <DiffTab sessionId={sessionId} cwd={cwd} diff={tab.diff} />
-    case 'terminal':
-      return <TerminalView scope={scope} tabId={tab.id} store={store} />
-    case 'editor':
-      return <EditorView scope={scope} path={tab.path ?? ''} title={tab.title} />
-    case 'subagent':
-      return (
-        <SubagentView
-          sessionId={sessionId}
-          ctx={ctx}
-          active={visible}
-          onOpenChild={(address) => { onSubagentJump(address.childSessionId) }}
-        />
-      )
+  const descriptor = ctx.betterSidebar?.getTab(tab.type)
+  if (descriptor === undefined) {
+    return <OrphanedTab ctx={ctx} store={store} scope={scope} tab={tab} visible={visible} />
   }
+  return descriptor.component({
+    ctx, store, scope, tab, visible, expanded,
+    onToggleDir, onReferenceFile, onOpenDiff, onSubagentJump,
+  })
 }
 
-/** The + menu options for the current state (UI-tab terminal cap applied).
- * Agent-owned terminals (`agent:` tabs) are the model's, not the user's:
- * they never count toward the per-session UI cap. */
-function buildNewTabOptions(state: SidebarState): NewTabOption[] {
-  const uiTerminalCount = allLeaves(state.splits)
-    .flatMap(leaf => leaf.tabs)
-    .filter(tab => tab.type === 'terminal' && !isAgentTabId(tab.id)).length
-  return [
-    { id: 'explorer', label: t('openExplorer'), icon: tabTypeIcon('explorer', 16) },
-    { id: 'git', label: t('openGit'), icon: tabTypeIcon('git', 16) },
-    { id: 'subagent', label: t('openSubagent'), icon: tabTypeIcon('subagent', 16) },
-    {
-      id: 'terminal',
-      label: uiTerminalCount >= TERMINAL_LIMIT ? `${t('newTerminal')} (${t('terminalLimit')})` : t('newTerminal'),
-      disabled: uiTerminalCount >= TERMINAL_LIMIT,
-      icon: tabTypeIcon('terminal', 16),
-    },
-  ]
+/** The + menu options for the current state, driven by the tab registry.
+ * Hidden tabs (editor/diff) never show; `available` returning false shows
+ * a disabled row (e.g. terminal at capacity) instead of hiding the option. */
+function buildNewTabOptions(state: SidebarState, ctx: Context): NewTabOption[] {
+  const service = ctx.betterSidebar
+  if (service === undefined) return []
+  return service.getTabs()
+    .filter(d => !d.hidden)
+    .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+    .map(d => ({
+      id: d.id,
+      label: typeof d.title === 'function' ? d.title() : d.title,
+      disabled: !(d.available?.(state) ?? true),
+      icon: typeof d.icon === 'function' ? d.icon(16) : d.icon,
+    }))
 }
 
 export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
@@ -225,12 +185,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     if (sessionId === undefined || prev === undefined) return
     if (!detectNewDirectSubagent(prev, sessionList, sessionId)) return
     if (!store.getPrefs().autoOpenSubagent) return
-    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
-      id: 'subagent',
-      type: 'subagent',
-      title: t('subagent'),
-    }))
-  }, [sessionList, sessionId, store])
+    store.reduce(s => s.panelOpen ? s : togglePanel(s))
+    ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
+  }, [sessionList, sessionId, store, ctx])
 
   /**
    * Topology jump-back: clicking a subagent node on the Subagent page calls
@@ -248,12 +205,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     const pending = subagentJumpRef.current
     if (pending === undefined || sessionId !== pending) return
     subagentJumpRef.current = undefined
-    store.reduce(s => openTab(s.panelOpen ? s : togglePanel(s), {
-      id: 'subagent',
-      type: 'subagent',
-      title: t('subagent'),
-    }))
-  }, [sessionId, store])
+    store.reduce(s => s.panelOpen ? s : togglePanel(s))
+    ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
+  }, [sessionId, store, ctx])
 
   // Panel width drag (left edge strip).
   const widthDrag = useRef({ startX: 0, startWidth: 0 })
@@ -367,30 +321,11 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   }
 
   const onNewTab = (optionId: string): void => {
-    store.reduce((s) => {
-      if (optionId === 'explorer') {
-        return openTab(s, { id: 'explorer', type: 'explorer', title: t('explorer') })
-      }
-      if (optionId === 'git') {
-        return openTab(s, { id: 'git', type: 'git', title: t('git') })
-      }
-      if (optionId === 'subagent') {
-        return openTab(s, { id: 'subagent', type: 'subagent', title: t('subagent') })
-      }
-      if (optionId === 'terminal') {
-        const count = allLeaves(s.splits)
-          .flatMap(leaf => leaf.tabs)
-          .filter(tab => tab.type === 'terminal' && !isAgentTabId(tab.id)).length
-        if (count >= TERMINAL_LIMIT) return s
-        const tab: SidebarTab = {
-          id: `terminal:${s.nextTerminal}`,
-          type: 'terminal',
-          title: `${t('terminal')} ${s.nextTerminal}`,
-        }
-        return { ...openTab(s, tab), nextTerminal: s.nextTerminal + 1 }
-      }
-      return s
-    })
+    const service = ctx.betterSidebar
+    const descriptor = service?.getTab(optionId)
+    if (descriptor === undefined) return
+    const title = typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title
+    service.openTab({ type: optionId, title })
   }
 
   /**
@@ -498,10 +433,15 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         <div className={css.panelBody}>
           <Workbench
             state={state}
-            newTabOptions={buildNewTabOptions(state)}
+            newTabOptions={buildNewTabOptions(state, ctx)}
             actions={actions}
             onNewTab={onNewTab}
             renderTab={renderTab}
+            getTabIcon={(tab) => {
+              const descriptor = ctx.betterSidebar?.getTab(tab.type)
+              if (descriptor === undefined) return null
+              return typeof descriptor.icon === 'function' ? descriptor.icon(14) : descriptor.icon
+            }}
           />
         </div>
       </div>

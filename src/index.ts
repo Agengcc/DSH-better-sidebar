@@ -36,6 +36,19 @@ import { readJsonBody, requireString, SidebarError, writeError, writeJson, write
 
 export { Config }
 export type { SidebarConfig, ResolvedSidebarConfig }
+// Re-export the Context augmentation (declare module 'cordis') so consumers
+// `import type {} from 'dsh-better-sidebar'` and gain `ctx.betterSidebar`.
+// Also re-export the service descriptor types so consumers can type their
+// registerTab / registerFileViewer arguments without reaching into /client.
+export type { Context } from './context-types.ts'
+export type {
+  BetterSidebarService,
+  TabDescriptor,
+  TabComponentProps,
+  FileViewerDescriptor,
+  FileViewerProps,
+  FileFetchStrategy,
+} from './client/service.ts'
 
 /** Plugin identity for cordis.yml rows. */
 export const name = 'dsh-better-sidebar'
