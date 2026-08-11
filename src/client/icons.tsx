@@ -1,14 +1,10 @@
 /**
  * Icons the sidebar needs beyond the primitives set: a terminal glyph (the
- * icon library has none) and the per-tab-type icon mapping shared by the
- * tab strip, the + menu, and the empty-pane cards.
+ * icon library has none) and a diff glyph. Per-tab icons live on the tab
+ * descriptors (`descriptor.icon`), not in a type-keyed switch — the icon
+ * mapping was registry-ized with the tab types.
  */
-import type { ReactNode } from 'react'
-import {
-  IconBranchOutline16, IconCodeOutline16, IconFolderOpen16, IconThinkOutline16,
-} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { TabType } from './state.ts'
 
 /**
  * Terminal glyph in the app's outline style (1.5px stroke, currentColor):
@@ -30,16 +26,3 @@ export const IconDiffOutline16 = ({ size = 16, className }: IconProps) => (
     <path d="M9.5 12.5h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 )
-
-/** The one icon per tab type (shared by tabs, the + menu, and pane cards). */
-export function tabTypeIcon(type: TabType, size = 16): ReactNode {
-  switch (type) {
-    case 'explorer': return <IconFolderOpen16 size={size} />
-    case 'git': return <IconBranchOutline16 size={size} />
-    case 'terminal': return <IconTerminalOutline16 size={size} />
-    case 'subagent': return <IconThinkOutline16 size={size} />
-    case 'editor': return <IconCodeOutline16 size={size} />
-    case 'diff': return <IconDiffOutline16 size={size} />
-    default: return null
-  }
-}

@@ -21,7 +21,7 @@ if (g.localStorage === undefined) {
 }
 
 import { createBetterSidebarService } from '../src/client/service.ts'
-import { createSidebarStore, allLeaves } from '../src/client/state.ts'
+import { createSidebarStore, allLeaves, openDiffTab } from '../src/client/state.ts'
 
 describe('BetterSidebar service', () => {
   it('registerTab adds to the registry and dispose removes it', () => {
@@ -297,5 +297,27 @@ describe('service.openTab dedupe', () => {
     store.setSession('s1')
     expect(service.getTabs()[0]!.available?.({} as never, { sessionId: 's1', cwd: '/p' }, store.getSnapshot().state!)).toBe(true)
     expect(seen).toHaveLength(1)
+  })
+
+  it('openDiffTab and the service dedupeKey agree on diff identity (per-change id rule)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'diff',
+      title: 'Diff',
+      dedupeKey: (tab) => tab.id,
+      component: () => null,
+    })
+    store.setSession('s1')
+    const seed = { kind: 'worktree' as const, path: '/p/a.ts', staged: false }
+    const paneId = store.getSnapshot().state!.activePane!
+    // The git view's placement path (split surgery) opens the diff tab...
+    store.reduce(s => openDiffTab(s, paneId, { id: 'diff:1', type: 'diff', title: 'a.ts', diff: seed }))
+    // ...and a service open of the same change focuses the existing tab
+    // (the descriptor's dedupeKey is the same per-change id rule).
+    service.openTab({ type: 'diff', title: 'a.ts', diff: seed, id: 'diff:1' })
+    const state = store.getSnapshot().state!
+    const tabs = allLeaves(state.splits).flatMap(l => l.tabs).filter(t => t.type === 'diff')
+    expect(tabs).toHaveLength(1)
   })
 })

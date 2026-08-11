@@ -1,0 +1,102 @@
+/**
+ * Built-in registration tests: the plugin registers 6 tabs and 8 file
+ * viewers through the same service external plugins use (dogfooding);
+ * the catch-all `code` viewer and the NUL-sniffing `binary-download`
+ * viewer pin the registry's matching behavior.
+ */
+import { describe, expect, it } from 'vitest'
+// First import: browser globals before the xterm-carrying builtin graph loads.
+import './browser-globals.ts'
+
+import type { Context } from '../src/context-types.ts'
+import { createBetterSidebarService } from '../src/client/service.ts'
+import { createSidebarStore } from '../src/client/state.ts'
+import { registerBuiltins } from '../src/client/builtins/index.ts'
+
+function setup(): { service: ReturnType<typeof createBetterSidebarService>; dispose: () => void } {
+  const store = createSidebarStore()
+  const service = createBetterSidebarService(store)
+  const dispose = registerBuiltins({} as Context, service)
+  return { service, dispose }
+}
+
+describe('built-in tab registrations', () => {
+  it('registers the 6 built-in tabs', () => {
+    const { service } = setup()
+    expect(service.getTabs().map(t => t.id).sort()).toEqual(
+      ['diff', 'editor', 'explorer', 'git', 'subagent', 'terminal'],
+    )
+  })
+
+  it('editor and diff are hidden from the + menu (opened by file-open / git view)', () => {
+    const { service } = setup()
+    expect(service.getTabs().filter(t => t.hidden).map(t => t.id).sort()).toEqual(['diff', 'editor'])
+  })
+
+  it('single-instance tabs use the single sugar', () => {
+    const { service } = setup()
+    for (const id of ['explorer', 'git', 'subagent']) {
+      expect(service.getTab(id)?.single).toBe(true)
+    }
+  })
+})
+
+describe('built-in file viewer registrations', () => {
+  it('registers the 8 built-in file viewers', () => {
+    const { service } = setup()
+    expect(service.getFileViewers().map(v => v.id).sort()).toEqual(
+      ['binary-download', 'code', 'docx', 'image', 'markdown', 'pdf', 'pptx', 'xlsx'],
+    )
+  })
+
+  it('code is the catch-all at the lowest priority', () => {
+    const { service } = setup()
+    const code = service.getFileViewers().find(v => v.id === 'code')
+    expect(code?.exts).toEqual([])
+    expect(code?.priority).toBe(-100)
+    expect(code?.fetchStrategy).toBe('fsRead')
+    expect(service.matchFileViewer('anything.zzz')?.id).toBe('code')
+  })
+
+  it('markdown claims md/markdown before the catch-all', () => {
+    const { service } = setup()
+    expect(service.matchFileViewer('readme.md')?.id).toBe('markdown')
+    expect(service.matchFileViewer('readme.markdown')?.id).toBe('markdown')
+    expect(service.matchFileViewer('readme.md', new Uint8Array([0x61]))?.id).toBe('markdown')
+  })
+
+  it('binary-download claims legacy office by extension', () => {
+    const { service } = setup()
+    expect(service.matchFileViewer('old.doc')?.id).toBe('binary-download')
+    expect(service.matchFileViewer('old.xls')?.id).toBe('binary-download')
+    expect(service.matchFileViewer('old.ppt')?.id).toBe('binary-download')
+  })
+
+  it('binary-download NUL detect claims unknown-extension binaries over code', () => {
+    const { service } = setup()
+    // First match (no head) falls to the catch-all code viewer...
+    expect(service.matchFileViewer('blob.zzz')?.id).toBe('code')
+    // ...but the head re-match (NUL probe) routes it to binary-download.
+    expect(service.matchFileViewer('blob.zzz', new Uint8Array([0x01, 0x00, 0x02]))?.id).toBe('binary-download')
+    // A NUL-free blob stays with code.
+    expect(service.matchFileViewer('blob.zzz', new Uint8Array([0x61, 0x62]))?.id).toBe('code')
+  })
+
+  it('office mediaUrl viewers beat the binary sniffers for their own extensions', () => {
+    const { service } = setup()
+    // A .docx is a zip (no NUL in its head): the docx viewer (priority 0)
+    // claims it before binary-download (-50) is consulted.
+    expect(service.matchFileViewer('book.docx', new Uint8Array([0x50, 0x4b, 0x03, 0x04]))?.id).toBe('docx')
+  })
+})
+
+describe('built-in disposer', () => {
+  it('unregisters everything (HMR-safe)', () => {
+    const { service, dispose } = setup()
+    dispose()
+    expect(service.getTabs()).toHaveLength(0)
+    expect(service.getFileViewers()).toHaveLength(0)
+    // The disposer is idempotent.
+    dispose()
+  })
+})

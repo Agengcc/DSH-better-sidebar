@@ -20,7 +20,7 @@ export function OrphanedTab(props: TabComponentProps): ReactNode {
       </div>
       <div className={css.editorPlaceholder}>
         <span>{t('pluginNotLoaded')}</span>
-        <code style={{ display: 'block', marginTop: 8, fontSize: 12, opacity: 0.7 }}>{tab.type}</code>
+        <code className={css.orphanedType}>{tab.type}</code>
       </div>
     </div>
   )
