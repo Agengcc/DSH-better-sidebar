@@ -15,7 +15,7 @@
 1. 克隆并构建：
    git clone https://github.com/dsh-external/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
    cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
-   （若 pnpm install 因 @deepseek-ai/* 的 link: 依赖解析失败，说明 DSH 源码 checkout 不在 ~/.dsh/source/current —— 停下来告诉我，不要继续）
+   （@deepseek-ai/* 依赖从 npm 解析（0.0.1-rc.? 预发布版）；若 pnpm install 401/404，说明 ~/.npmrc 没有可用的 @deepseek-ai 只读令牌 —— 用安装者自己的只读令牌配置，或把 devDependencies 改回指向自己 ~/.dsh/source/current 的 link:，不要继续）
 2. 注册到 web profile：
    a. 编辑 ~/.dsh/profiles/web/package.json，在 dependencies 中加入 "dsh-better-sidebar": "link:<第 1 步克隆目录的绝对路径>"
    b. 编辑 ~/.dsh/profiles/web/cordis.patch.yml，追加挂载行：
@@ -37,7 +37,7 @@
 
 1. 拉取最新代码并重新构建：
    cd ~/Code/DSH-better-sidebar && git pull && pnpm install && pnpm build
-   （若 pnpm install 因 @deepseek-ai/* 的 link: 依赖解析失败，说明 DSH 源码 checkout 不在 ~/.dsh/source/current —— 停下来告诉我，不要继续）
+   （@deepseek-ai/* 依赖从 npm 解析（0.0.1-rc.? 预发布版）；若 pnpm install 401/404，说明 ~/.npmrc 没有可用的 @deepseek-ai 只读令牌 —— 用安装者自己的只读令牌配置，或把 devDependencies 改回指向自己 ~/.dsh/source/current 的 link:，不要继续）
 2. 核对注册仍然有效（缺失才需要补）：
    a. ~/.dsh/profiles/web/package.json 的 dependencies 中含 "dsh-better-sidebar": "link:<仓库目录的绝对路径>"
    b. ~/.dsh/profiles/web/cordis.patch.yml 中含挂载行（id: better-sidebar, name: 'dsh-better-sidebar'）
@@ -182,7 +182,10 @@ dsh registry enable dsh-external/dsh-better-sidebar
 ### 前置条件
 
 - 已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10
-- **构建/类型检查**需要 DSH 源码 checkout 位于 `~/.dsh/source/current`（`devDependencies` 中的 `@deepseek-ai/*` 以 `link:` 指向它；若 checkout 在其他路径，修改 `package.json` 中对应的 `link:` 路径）。**运行期不依赖该 checkout**——`@deepseek-ai/*` 声明在 `peerDependencies`，由 web profile 提供
+- **构建/类型检查**的 `@deepseek-ai/*` 依赖默认从 npm registry 解析（`0.0.1-rc.?` 预发布版，`devDependencies` / `peerDependencies` 均声明为 `^0.0.1-rc.1`）——需要安装者**自己的只读令牌**：
+  - 在 `~/.npmrc`（用户级，**不要**写进仓库的 `.npmrc` / 提交到 Git）配置：`//registry.npmjs.org/:_authToken=<你自己的只读令牌>`
+  - 或改用本地源码 checkout：把 `devDependencies` 里的 `@deepseek-ai/*` 版本改回 `link:<你自己的 ~/.dsh/source/current 下对应包路径>`
+- **运行期不依赖 npm 或该 checkout**——`@deepseek-ai/*` 声明在 `peerDependencies`，由 web profile 提供
 
 ### 1. 克隆、安装、构建
 

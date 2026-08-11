@@ -145,3 +145,4 @@ lib/
 
 # plugin-registry install staging (assembled by scripts/package-registry.mjs)
 registry/
+.npmrc
