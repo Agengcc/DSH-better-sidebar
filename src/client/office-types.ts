@@ -1,6 +1,6 @@
 /**
  * Office file type dispatch — pure functions mapping file extensions to
- * preview kinds. Kept separate from {@link EditorView} so the mapping is
+ * preview kinds. Kept separate from the editor host so the mapping is
  * unit-testable without mounting React or pulling in docx-preview / Univer.
  *
  * The host side never inspects Office extensions: the binary NUL probe in
@@ -36,7 +36,7 @@ export type OfficeKind = 'docx' | 'xlsx' | 'pptx' | 'download-only' | null
 /**
  * Map a lowercased extension (with leading dot) to its preview kind.
  *
- * @param ext - the path extension from {@link EditorView.extOfPath} (`.docx`,
+ * @param ext - the path extension (with leading dot) (`.docx`,
  *   `.xlsx`, `.pptx`, `.doc`, `.xls`, `.ppt`, …); `''` when the path has none.
  */
 export function officeKindForExt(ext: string): OfficeKind {

@@ -54,8 +54,9 @@ export interface GitLogEntry {
 
 /** Text read result. */
 export interface FsTextResult { kind: 'text'; content: string; truncated: boolean }
-/** Binary read result (no content; images load through the media route). */
-export interface FsBinaryResult { kind: 'binary'; size: number; truncated: boolean }
+/** Binary read result (no content; images load through the media route).
+ *  `head` carries the first bytes (base64) for viewer detect sniffing. */
+export interface FsBinaryResult { kind: 'binary'; size: number; truncated: boolean; head: string }
 
 async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   let response: Response

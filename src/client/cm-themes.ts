@@ -5,7 +5,7 @@
  * values, and those come from the same designed palettes the app's code
  * surfaces use — the one-dark family for dark, the one-light family for
  * light. The scheme flip reconfigures these via a compartment (see
- * EditorView), so the document, undo history and scroll survive re-theming.
+ * TextEditor), so the document, undo history and scroll survive re-theming.
  */
 import { Compartment } from '@codemirror/state'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'

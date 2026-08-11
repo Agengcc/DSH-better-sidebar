@@ -1,22 +1,24 @@
 /**
  * Built-in tab types and file viewers: the plugin registers its own
  * built-in pages (explorer / git / terminal / subagent / editor / diff)
- * and file previewers (image / pdf / docx / xlsx / pptx / binary-download)
- * through the same {@link BetterSidebarService} external plugins use —
- * eating its own dogfood. Code/Markdown editing stays inlined in
- * {@link EditorView} as the catch-all fallback (no matching viewer →
- * fsRead + CodeMirror/MarkdownText).
+ * and file previewers (image / pdf / docx / xlsx / pptx / markdown / code /
+ * binary-download) through the same {@link BetterSidebarService} external
+ * plugins use — eating its own dogfood. Code/markdown are registered
+ * viewers like any other (fsRead strategy, {@link TextEditor}); the
+ * `binary-download` viewer sniffs NUL bytes via `detect` for unknown
+ * binaries and serves doc/xls/ppt by extension.
  */
 import {
   IconBranchOutline16, IconCodeOutline16, IconFolderOpen16, IconThinkOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
 import { allLeaves, isAgentTabId, type SidebarState } from './state.ts'
-import { downloadUrl, mediaUrl } from './api.ts'
+import { mediaUrl } from './api.ts'
 import { t } from './locales.ts'
 import { openSidebarFile } from './intercept.tsx'
 import { ExplorerView } from './ExplorerView.tsx'
-import { EditorView } from './EditorView.tsx'
+import { EditorHost } from './EditorHost.tsx'
+import { TextEditor } from './TextEditor.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { GitView } from './GitView.tsx'
 import { DiffTab } from './DiffTab.tsx'
@@ -24,6 +26,7 @@ import { SubagentView } from './SubagentView.tsx'
 import { DocxView, XlsxView } from './office-view.tsx'
 import { PdfView } from './PdfView.tsx'
 import { PptxView } from './PptxView.tsx'
+import { BinaryDownload } from './binary-download.tsx'
 import { IconTerminalOutline16, IconDiffOutline16 } from './icons.tsx'
 import type { BetterSidebarService, FileViewerDescriptor, TabDescriptor } from './service.ts'
 import css from './sidebar.module.css'
@@ -49,7 +52,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       hidden: true,
       dedupeKey: (tab) => tab.path,
       component: ({ ctx, store, scope, tab }) => (
-        <EditorView ctx={ctx} store={store} scope={scope} path={tab.path ?? ''} title={tab.title} />
+        <EditorHost ctx={ctx} store={store} scope={scope} path={tab.path ?? ''} title={tab.title} />
       ),
     },
     {
@@ -135,7 +138,7 @@ function builtinTabs(ctx: Context): readonly TabDescriptor[] {
   ]
 }
 
-/** The 6 built-in file viewer descriptors (code/markdown stay in EditorView). */
+/** The 8 built-in file viewer descriptors — every preview surface is a registered viewer. */
 const builtinViewers: readonly FileViewerDescriptor[] = [
   {
     id: 'image',
@@ -180,18 +183,27 @@ const builtinViewers: readonly FileViewerDescriptor[] = [
     ),
   },
   {
+    id: 'markdown',
+    exts: ['md', 'markdown'],
+    fetchStrategy: 'fsRead',
+    component: (props) => <TextEditor {...props} />,
+  },
+  {
+    id: 'code',
+    exts: [],
+    priority: -100,
+    fetchStrategy: 'fsRead',
+    component: (props) => <TextEditor {...props} />,
+  },
+  {
     id: 'binary-download',
     exts: ['doc', 'xls', 'ppt'],
     priority: -50,
     fetchStrategy: 'binary-download',
-    component: ({ scope, path }) => (
-      <div className={css.editorBinary}>
-        <span className={css.editorBinaryNotice}>{t('binaryNoPreview')}</span>
-        <a className={css.editorDownloadLink} href={downloadUrl(scope, path)} download>
-          {t('downloadToView')}
-        </a>
-      </div>
-    ),
+    // NUL probe: a file whose head bytes contain a NUL is binary — claimed
+    // before the catch-all code viewer on the head re-match.
+    detect: (_path, head) => head.includes(0),
+    component: ({ scope, path }) => <BinaryDownload scope={scope} path={path} />,
   },
 ]
 
@@ -199,7 +211,7 @@ const builtinViewers: readonly FileViewerDescriptor[] = [
  * Register all built-in tabs and viewers with the service. Returns a
  * disposer that unregisters everything (cordis auto-invokes it on fiber
  * disposal). The `ctx` is threaded into tab descriptors that need it
- * (EditorView reads `ctx.betterSidebar` for file-viewer matching).
+ * (EditorHost reads `ctx.betterSidebar` for file-viewer matching).
  */
 export function registerBuiltins(ctx: Context, service: BetterSidebarService): () => void {
   const disposers: (() => void)[] = []
