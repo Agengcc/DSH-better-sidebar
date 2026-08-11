@@ -263,7 +263,7 @@ pnpm watch       # tsdown --watch（client bundle 热重建）
 插件按 DSH 官方插件规范组织（参考 [dsh-external/turtle-ui](https://github.com/dsh-external/turtle-ui) 与 mainline `packages/client/AGENTS.md`），并额外提供 plugin-registry 标准发布面（`dsh.plugin.json`）。**安装通道与渲染方式是两个独立概念**：安装走 profile 清单协议（`dsh plugin` / cordis.yml 行，见[官方 profile 安装](#官方-profile-安装推荐无需-plugin-registry)）**或** registry 通道（`dsh registry`，见[通过 plugin-registry 安装](#通过-plugin-registry-安装可选)），二者互斥；下面的 portal 条目只描述面板在页面上的渲染方式。
 
 - **插件形态**：`export const name / inject / Config / apply`，无 default 导出；`tests/plugin-shape.spec.ts` 通过 `Loader.unwrapExports` 守卫该形态
-- **清单**：`types` + `exports`（`.` / `./invariant` / `./client` / `./src/*` / `./package.json`）、`dsh.client`（`platform: 'web'` + `inject` 边；旧字段 `dshClient` 并存保留兼容）、peerDependencies、`engines`、`files` 产物明细、`prepare`（消费者侧 `tsdown`，git 安装可用）
+- **清单**：`types` + `exports`（`.` / `./invariant` / `./client` / `./src/*` / `./package.json`）、`dsh.client`（`platform: 'web'` + `inject` 边）、peerDependencies、`engines`、`files` 产物明细、`prepare`（消费者侧 `tsdown`，git 安装可用）
 - **client 契约**：仅导出 `apply`/`inject`（+ 类型）；store 为 `createSidebarStore()` 工厂，实例归 `apply` 所有；`src/invariant.ts` 伴生；client bundle 复刻官方 preset（externals = 平台模块表 + runtime/client 豁免、纯度门、CSS Modules 内联）
 - **registry 形态（标准发布面）**：仓库根 `dsh.plugin.json`（原生清单：id `dsh-external/dsh-better-sidebar`、`main` = host 构建产物、`client.main` = registry client bundle、`contributes` 空声明）；`tests/manifest-consistency.spec.ts` 守卫清单与构建产物一致性（id 严格两段、version 与 package.json 同步、bundle id = 清单 id）
 - **双 client bundle**：同一 `src/client/index.tsx` 构建出 `lib/client.js`（官方通道，id = 包名 `dsh-better-sidebar`）与 `lib/client-registry.js`（registry 通道，id = 清单 id）——两通道的 bundle-id 契约互不相同，各产出一份、同源不漂移；每个部署二选一（见安装章节「通道互斥」）
