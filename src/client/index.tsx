@@ -17,6 +17,7 @@ import { registerBuiltins } from './builtins/index.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { registerOpenPathInterception, registerTurnTailInterception } from './intercept.tsx'
 import { registerLinkInterception } from './link-intercept.ts'
+import { registerImeGuard } from './ime-guard.ts'
 import { loadPrefs } from './prefs.ts'
 import { SideCardSection } from './SideCardSection.tsx'
 import { api } from './api.ts'
@@ -181,6 +182,25 @@ export function apply(ctx: Context): void {
         }
       },
       'dsh-better-sidebar: link interception',
+    )
+
+    // The IME guard: composition keys (candidate arrows, confirm, cancel)
+    // belong to the input method, never to page JS. Inlined third-party UI
+    // (Univer's office controls) has shipped unguarded keydown handlers that
+    // hijack ArrowUp/ArrowDown and break Chinese input (#562 regression); the
+    // document-capture guard neutralizes the whole class before React or any
+    // native listener sees the event. Registered as early as possible so no
+    // other capture-phase listener can win the ordering race.
+    ctx.effect(
+      () => {
+        try {
+          return registerImeGuard()
+        } catch (error) {
+          fail('ime guard', error)
+          return undefined
+        }
+      },
+      'dsh-better-sidebar: IME composition guard',
     )
 
     // The "Side card" settings section: appears in the DSH Settings shell
