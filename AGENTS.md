@@ -118,7 +118,7 @@ interface TabDescriptor {
    */
   createTab?: (state: SidebarState) => { tab: SidebarTab; patch?: Partial<SidebarState> } | null
   /**
-   * 声明式设置（v0.5.0+）：每个注册的 tab 都会在 Side card 设置页获得一行
+   * 声明式设置（v0.4.1+）：每个注册的 tab 都会在 Side card 设置页获得一行
    * 开关（图标 + 标题 + 类型 id），`settings.toggles` 在其行下追加嵌套开关，
    * 绑定 SidebarPrefs 字段。嵌套开关仅父级启用时显示。
    */
@@ -224,9 +224,9 @@ ctx.effect(() =>
 interface FileViewerDescriptor {
   /** 唯一 id：'image' / 'pdf' / 'my-plugin:csv' */
   id: string
-  /** 设置清单展示名（v0.5.0+，i18n 友好）；缺省回退到 id */
+  /** 设置清单展示名（v0.4.1+，i18n 友好）；缺省回退到 id */
   title?: string | (() => string)
-  /** 设置清单图标（v0.5.0+）：ReactNode 或 (size: number) => ReactNode */
+  /** 设置清单图标（v0.4.1+）：ReactNode 或 (size: number) => ReactNode */
   icon?: ReactNode | ((size: number) => ReactNode)
   /** 小写无点的扩展名数组：['png','jpg']。[] = catch-all（仅最低优先级有效） */
   exts: readonly string[]
@@ -238,7 +238,7 @@ interface FileViewerDescriptor {
   detect?: (path: string, head: Uint8Array) => boolean
   /** fetchStrategy='custom' 时的加载函数 */
   load?: (path: string, scope: SessionScope) => Promise<unknown>
-  /** 声明式设置（v0.5.0+）：形状同 TabDescriptor.settings */
+  /** 声明式设置（v0.4.1+）：形状同 TabDescriptor.settings */
   settings?: { toggles?: readonly { key: string; title: string | (() => string); desc?: string | (() => string) }[] }
   /** 渲染函数 */
   component: (props: FileViewerProps) => ReactNode
@@ -350,9 +350,9 @@ interface BetterSidebarService {
   getFileViewers(): readonly FileViewerDescriptor[]
   /** 按 id 查 tab 描述符 */
   getTab(id: string): TabDescriptor | undefined
-  /** 某个 tab 类型是否在 Side card 设置中启用（v0.5.0+；缺省 = 启用） */
+  /** 某个 tab 类型是否在 Side card 设置中启用（v0.4.1+；缺省 = 启用） */
   isTabEnabled(id: string): boolean
-  /** 某个 file viewer 是否在 Side card 设置中启用（v0.5.0+；缺省 = 启用） */
+  /** 某个 file viewer 是否在 Side card 设置中启用（v0.4.1+；缺省 = 启用） */
   isViewerEnabled(id: string): boolean
   /** 按 path 匹配 file viewer（priority 降序单趟：detect → exts；跳过硬禁用 viewer） */
   matchFileViewer(path: string, head?: Uint8Array): FileViewerDescriptor | undefined
@@ -370,7 +370,7 @@ interface BetterSidebarService {
 }
 ```
 
-> **声明式设置（v0.5.0+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里——响应式网格中的**小卡片**（图标 + 标题 + 类型 id + **高亮 = 启用**，勾选徽标钉在卡片最右端，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的相关设置（如子代理的 `autoOpenSubagent`）通过卡片右下角的齿轮按钮在**原生弹窗**中编辑（复选框行），父级卡片关闭时齿轮隐藏；**key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools`），外部插件的自定义键会被 settings seam 丢弃。
+> **声明式设置（v0.4.1+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里——响应式网格中的**小卡片**（图标 + 标题 + 类型 id + **高亮 = 启用**，勾选徽标钉在卡片最右端，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的相关设置（如子代理的 `autoOpenSubagent`）通过卡片右下角的齿轮按钮在**原生弹窗**中编辑（复选框行），父级卡片关闭时齿轮隐藏；**key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools`），外部插件的自定义键会被 settings seam 丢弃。
 
 ---
 
