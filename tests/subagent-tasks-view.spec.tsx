@@ -225,9 +225,9 @@ describe('SubagentView background tasks', () => {
     )
     const row = container.querySelector('button[aria-label*="unread cmd"]') as HTMLButtonElement
     await act(async () => { row.click() })
-    // read:false → the pane explains the model has not read it (never the
-    // model's cursor, so there is nothing to steal yet).
-    expect(container.textContent).toContain('模型尚未读取该任务的输出')
+    // read:false → the pane explains the output awaits the model's task_output
+    // (never the model's cursor, so there is nothing to steal yet).
+    expect(container.textContent).toContain('等待模型读取该任务的输出')
     unmount()
   })
 

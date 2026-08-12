@@ -21,6 +21,12 @@ export interface SidebarPrefs {
    */
   autoOpenSubagent: boolean
   /**
+   * Whether the sidebar auto-activates (opens the panel) and expands the
+   * Tasks page when a NEW background task appears for the current
+   * conversation (any new task id, not just the first one).
+   */
+  autoOpenTasks: boolean
+  /**
    * Whether the model-facing agent terminal tools (terminal_create / list /
    * send / read / wait_for / resize / signal / close) are injected into the
    * model's toolset. Off by default: the feature stays dormant until the
@@ -103,6 +109,7 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   openByDefault: true,
   defaultWidthPercent: WIDTH_PERCENT_DEFAULT,
   autoOpenSubagent: true,
+  autoOpenTasks: true,
   agentTerminalTools: false,
   bottomPanelAutoTerminal: true,
   interceptOpenPath: true,

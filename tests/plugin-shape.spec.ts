@@ -45,6 +45,8 @@ describe('dsh-better-sidebar plugin export shape', () => {
     expect(resolved.openByDefault).toBe(true)
     expect(resolved.defaultWidthPercent).toBe(30)
     expect(resolved.autoOpenSubagent).toBe(true)
+    // A new background task auto-opens the Tasks page too.
+    expect(resolved.autoOpenTasks).toBe(true)
     // The terminal tools default OFF (the feature is dormant until the user
     // enables it in the side card settings).
     expect(resolved.agentTerminalTools).toBe(false)
@@ -57,6 +59,6 @@ describe('dsh-better-sidebar plugin export shape', () => {
     const overridden = (PrefsSchema as unknown as {
       (input: Record<string, unknown> | undefined): Record<string, unknown>
     })({ openByDefault: false, defaultWidthPercent: 45 })
-    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
+    expect(overridden).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, autoOpenTasks: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
   })
 })

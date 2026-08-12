@@ -109,13 +109,17 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       icon: (size: number) => <IconThinkOutline16 size={size} />,
       order: 30,
       single: true,
-      // Declarative settings: the auto-open switch renders under this row in
-      // the Side card settings page (the Subagent page's own related setting).
+      // Declarative settings: the auto-open switches render under this row in
+      // the Side card settings page (the Tasks page's own related settings).
       settings: {
         toggles: [{
           key: 'autoOpenSubagent',
           title: () => t('settingsSubagentTitle'),
           desc: () => t('settingsSubagentDesc'),
+        }, {
+          key: 'autoOpenTasks',
+          title: () => t('settingsTasksTitle'),
+          desc: () => t('settingsTasksDesc'),
         }],
       },
       component: ({ ctx, scope, visible, onSubagentJump }) => (

@@ -58,6 +58,23 @@ export function treeSessionIds(
 }
 
 /**
+ * Whether a NEW background task appeared for one session between two
+ * consecutive list snapshots (a task id the previous snapshot lacked).
+ * Unlike the subagent auto-open (0 → N only), ANY new task id triggers: the
+ * agent may start several tasks over a session, and each new one should
+ * surface the Tasks page (a fresh page load never triggers — its baseline
+ * starts at the current snapshot).
+ */
+export function detectNewTask(
+  prev: SidebarSessionList,
+  next: SidebarSessionList,
+  sessionId: string,
+): boolean {
+  const prevIds = new Set((prev.tasksBySession?.[sessionId] ?? []).map(task => task.id))
+  return (next.tasksBySession?.[sessionId] ?? []).some(task => !prevIds.has(task.id))
+}
+
+/**
  * Collect the background tasks of the whole current tree, owner-labeled.
  * Sessions without a mirror entry contribute nothing; an absent mirror
  * (runtime older than the tasks feed) yields an empty list.

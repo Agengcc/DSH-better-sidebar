@@ -41,10 +41,10 @@ describe('built-in tab registrations', () => {
     }
   })
 
-  it('the subagent tab declares its auto-open related setting', () => {
+  it('the subagent tab declares its auto-open related settings', () => {
     const { service } = setup()
     const toggles = service.getTab('subagent')?.settings?.toggles ?? []
-    expect(toggles.map(t => t.key)).toEqual(['autoOpenSubagent'])
+    expect(toggles.map(t => t.key)).toEqual(['autoOpenSubagent', 'autoOpenTasks'])
   })
 
   it('the terminal tab declares the model terminal-tools related setting', () => {

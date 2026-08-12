@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   collectTreeTasks,
+  detectNewTask,
   formatTaskDuration,
   isTaskLive,
   orderTasks,
@@ -12,7 +13,7 @@ import {
   taskStatusLabel,
   treeSessionIds,
 } from '../src/client/subagent-tasks.ts'
-import type { SidebarSessionSummary, SidebarTaskStatus, SidebarTaskView } from '../src/context-types.ts'
+import type { SidebarSessionList, SidebarSessionSummary, SidebarTaskStatus, SidebarTaskView } from '../src/context-types.ts'
 
 /** The translator stub: renders duration templates like the real locale copy. */
 const templates: Record<string, string> = {
@@ -129,5 +130,36 @@ describe('status presentation helpers', () => {
     expect(formatTaskDuration(3_661_000, t)).toBe('1小时1分')
     // Negative or fractional input clamps to zero seconds.
     expect(formatTaskDuration(-5, t)).toBe('0秒')
+  })
+})
+
+describe('detectNewTask', () => {
+  const list = (tasksBySession: Record<string, SidebarTaskView[]>): SidebarSessionList => ({
+    current: 'root',
+    byId: { root: { id: 'root', displayTitle: 'root' } },
+    subagentsByParent: {},
+    tasksBySession: tasksBySession,
+  })
+
+  it('fires on EVERY new task id for the session (not just the first)', () => {
+    expect(detectNewTask(list({}), list({ root: [task('bash-1')] }), 'root')).toBe(true)
+    expect(detectNewTask(
+      list({ root: [task('bash-1')] }),
+      list({ root: [task('bash-1'), task('bash-2')] }),
+      'root',
+    )).toBe(true)
+  })
+
+  it('stays quiet on settling, same ids, other sessions, or an absent mirror', () => {
+    // Settling only mutates status, never adds ids.
+    expect(detectNewTask(
+      list({ root: [task('bash-1')] }),
+      list({ root: [task('bash-1', { status: 'completed', finishedAt: 2_000 })] }),
+      'root',
+    )).toBe(false)
+    expect(detectNewTask(list({ root: [task('bash-1')] }), list({ root: [task('bash-1')] }), 'root')).toBe(false)
+    // Tasks owned by another session do not trigger the current one.
+    expect(detectNewTask(list({}), list({ child: [task('bash-1')] }), 'root')).toBe(false)
+    expect(detectNewTask(list({}), list({}), 'root')).toBe(false)
   })
 })

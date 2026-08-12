@@ -44,6 +44,7 @@ import type { TabDragPayload } from './TabBar.tsx'
 import { relativeTo } from './paths.ts'
 import { OrphanedTab } from './OrphanedTab.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
+import { detectNewTask } from './subagent-tasks.ts'
 import { t } from './locales.ts'
 import { api, type SessionScope } from './api.ts'
 import css from './sidebar.module.css'
@@ -237,6 +238,28 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     // Pin the landing to the right panel: the auto-opened Subagent page must
     // appear where the panel just expanded, not in a bottom-panel pane the
     // user last touched.
+    store.reduce(s => ({ ...s, activePane: firstLeaf(s.splits).id }))
+    ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
+  }, [sessionList, sessionId, store, ctx])
+
+  /**
+   * Task auto-activation: the moment a NEW background task appears for the
+   * current conversation (a task id the previous snapshot lacked), the
+   * auto-open pref is on, and the Tasks tab type is enabled, open the panel
+   * (if collapsed) and focus the Tasks page. Unlike the subagent trigger
+   * (0 → N only), ANY new task id triggers: the agent may start several
+   * tasks in one session, and each should surface. A fresh page load never
+   * triggers — its baseline starts at the current snapshot.
+   */
+  const taskBaselineRef = useRef<SidebarSessionList | undefined>(undefined)
+  useEffect(() => {
+    const prev = taskBaselineRef.current
+    taskBaselineRef.current = sessionList
+    if (sessionId === undefined || prev === undefined) return
+    if (!detectNewTask(prev, sessionList, sessionId)) return
+    if (!store.getPrefs().autoOpenTasks) return
+    if (ctx.betterSidebar?.isTabEnabled('subagent') === false) return
+    store.reduce(s => s.panelOpen ? s : togglePanel(s))
     store.reduce(s => ({ ...s, activePane: firstLeaf(s.splits).id }))
     ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
   }, [sessionList, sessionId, store, ctx])
