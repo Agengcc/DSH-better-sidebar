@@ -1187,6 +1187,29 @@ describe('side card preferences', () => {
     expect(openStore.getSnapshot().state?.panelOpen).toBe(true)
   })
 
+  it('seeds a brand-new session COLLAPSED on narrow viewports (the panel is a full-screen drawer there)', () => {
+    // Stub a narrow window (the file otherwise runs without one): only
+    // innerWidth is read while seeding a fresh session.
+    const original = (globalThis as Record<string, unknown>).window
+    ;(globalThis as Record<string, unknown>).window = {
+      innerWidth: 390,
+      clearTimeout: () => {},
+      setTimeout: (_fn: () => void) => 0,
+    }
+    try {
+      const store = createSidebarStore()
+      // Default prefs say openByDefault: true — the narrow viewport overrides
+      // it for the FIRST seeding only (a later user expansion persists).
+      store.setSession('narrow-fresh')
+      expect(store.getSnapshot().state?.panelOpen).toBe(false)
+      // The width seeding still follows the window (clamped to the floor).
+      expect(store.getSnapshot().state?.width).toBe(280)
+    } finally {
+      if (original === undefined) delete (globalThis as Record<string, unknown>).window
+      else (globalThis as Record<string, unknown>).window = original
+    }
+  })
+
   it('skips the default explorer tab when the explorer type is disabled', () => {
     const store = createSidebarStore()
     store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: { explorer: false }, viewersEnabled: {} })

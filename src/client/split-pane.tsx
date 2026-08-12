@@ -12,7 +12,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import type { SidebarState, SidebarTab, SplitNode } from './state.ts'
+import { BOTTOM_MIN, type SidebarState, type SidebarTab, type SplitNode } from './state.ts'
 import type { DropZone } from './state.ts'
 import { TabBar, type NewTabOption, parseDrag, type TabDragPayload } from './TabBar.tsx'
 import css from './sidebar.module.css'
@@ -287,6 +287,117 @@ export function Workbench(props: {
         renderTab={renderTab}
         getTabIcon={getTabIcon}
       />
+    </div>
+  )
+}
+
+/**
+ * The narrow-viewport workbench: BOTH workbench trees stacked in one panel —
+ * the right panel's tree on top, the bottom panel's tree below, with a
+ * draggable divider between them (the desktop "two panels" collapse into one
+ * on mobile; see the breakpoint module). The bottom tree's height is the
+ * shared `state.bottomHeight` — the same field the desktop bottom panel uses
+ * — so a height set on mobile carries over to the desktop bottom panel and
+ * vice versa. Tabs stay in their own trees; the cross-tree drag logic
+ * (state.moveTabToEdge / moveTab) already handles moving a tab between the
+ * two panes.
+ *
+ * The divider writes the height DIRECTLY to the DOM while dragging (the top
+ * tree flexes after the fixed-height bottom tree), committing to the store
+ * once on release — the same pattern as the desktop panel drags, so
+ * terminals/editors never re-render on every pointer move.
+ */
+export function MobileWorkbench(props: {
+  state: SidebarState
+  actions: WorkbenchActions
+  newTabOptions: NewTabOption[]
+  onNewTab: (optionId: string) => void
+  renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
+  getTabIcon?: (tab: SidebarTab) => ReactNode
+  /** Commit a new bottom-tree height (store-backed, clamped by setBottomHeight). */
+  onBottomHeightCommit: (height: number) => void
+}) {
+  const {
+    state, actions, newTabOptions, onNewTab, renderTab, getTabIcon, onBottomHeightCommit,
+  } = props
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const dividerRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef({ startY: 0, startHeight: 0 })
+  const [dragging, setDragging] = useState(false)
+  // One DOM write per frame (like the desktop panel drags): pointer events
+  // outrun the display refresh, and each write reflows the pane content.
+  const dragFrame = useRef<number | null>(null)
+  const pending = useRef<number | null>(null)
+  const scheduleHeight = (height: number): void => {
+    pending.current = height
+    if (dragFrame.current !== null) return
+    dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = null
+      const next = pending.current
+      if (next !== null) bottomRef.current?.style.setProperty('height', `${next}px`)
+    })
+  }
+
+  return (
+    <div className={css.mobileWorkbench}>
+      <div className={css.mobilePane}>
+        <Workbench
+          state={state}
+          newTabOptions={newTabOptions}
+          actions={actions}
+          onNewTab={onNewTab}
+          renderTab={renderTab}
+          getTabIcon={getTabIcon}
+        />
+      </div>
+      <div
+        ref={dividerRef}
+        className={clsx(css.divider, css.dividerCol, dragging && css.dividerActive)}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          dragRef.current = { startY: event.clientY, startHeight: state.bottomHeight }
+          setDragging(true)
+        }}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+          const { startY, startHeight } = dragRef.current
+          const box = dividerRef.current?.parentElement?.getBoundingClientRect()
+          const bodyHeight = box === undefined || box.height === 0 ? window.innerHeight : box.height
+          const next = Math.min(
+            Math.max(BOTTOM_MIN, startHeight + (event.clientY - startY)),
+            Math.max(BOTTOM_MIN, bodyHeight - BOTTOM_MIN),
+          )
+          scheduleHeight(next)
+        }}
+        onPointerUp={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+          event.currentTarget.releasePointerCapture(event.pointerId)
+          if (dragFrame.current !== null) {
+            cancelAnimationFrame(dragFrame.current)
+            dragFrame.current = null
+          }
+          const final = pending.current
+          pending.current = null
+          setDragging(false)
+          if (final !== null) onBottomHeightCommit(final)
+        }}
+      />
+      <div
+        ref={bottomRef}
+        className={clsx(css.mobilePane, css.mobilePaneBottom)}
+        style={{ height: state.bottomHeight }}
+      >
+        <Workbench
+          state={state}
+          tree={state.bottomSplits}
+          newTabOptions={newTabOptions}
+          actions={actions}
+          onNewTab={onNewTab}
+          renderTab={renderTab}
+          getTabIcon={getTabIcon}
+        />
+      </div>
     </div>
   )
 }

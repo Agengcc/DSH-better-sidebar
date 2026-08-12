@@ -465,3 +465,81 @@ describe('service.openTab across the two panels', () => {
     expect(allLeaves(after.bottomSplits).flatMap(l => l.tabs).some(t => t.id === gitTab.id)).toBe(false)
   })
 })
+
+describe('service.openTab narrow-viewport auto-expand', () => {
+  /** The window stub is a plain object (see the file header), so the width is writable. */
+  const setWidth = (width: number): void => {
+    ;(g.window as { innerWidth: number }).innerWidth = width
+  }
+
+  it('expands the collapsed drawer for a path (file) open on a narrow viewport', () => {
+    setWidth(390)
+    try {
+      const store = createSidebarStore()
+      const service = createBetterSidebarService(store)
+      service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+      store.setSession('s1')
+      store.reduce(s => ({ ...s, panelOpen: false }))
+      service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+      expect(store.getSnapshot().state?.panelOpen).toBe(true)
+    } finally {
+      setWidth(1024)
+    }
+  })
+
+  it('expands the collapsed drawer for a URL (browser) open on a narrow viewport', () => {
+    setWidth(390)
+    try {
+      const store = createSidebarStore()
+      const service = createBetterSidebarService(store)
+      service.registerTab({ id: 'browser', title: 'Browser', component: () => null })
+      store.setSession('s1')
+      store.reduce(s => ({ ...s, panelOpen: false }))
+      service.openTab({ type: 'browser', url: 'https://example.com', title: 'example.com' })
+      expect(store.getSnapshot().state?.panelOpen).toBe(true)
+    } finally {
+      setWidth(1024)
+    }
+  })
+
+  it('keeps a collapsed drawer for a type-only open on a narrow viewport', () => {
+    setWidth(390)
+    try {
+      const store = createSidebarStore()
+      const service = createBetterSidebarService(store)
+      service.registerTab({ id: 'explorer', title: 'Explorer', component: () => null })
+      store.setSession('s1')
+      store.reduce(s => ({ ...s, panelOpen: false }))
+      service.openTab({ type: 'explorer', title: 'Explorer' })
+      expect(store.getSnapshot().state?.panelOpen).toBe(false)
+    } finally {
+      setWidth(1024)
+    }
+  })
+
+  it('never expands on a wide viewport (path open keeps the caller’s choice)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+    store.setSession('s1')
+    store.reduce(s => ({ ...s, panelOpen: false }))
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    expect(store.getSnapshot().state?.panelOpen).toBe(false)
+  })
+
+  it('expands on a narrow viewport even when the open focuses an existing tab (id dedupe)', () => {
+    setWidth(390)
+    try {
+      const store = createSidebarStore()
+      const service = createBetterSidebarService(store)
+      service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+      store.setSession('s1')
+      service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+      store.reduce(s => ({ ...s, panelOpen: false }))
+      service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+      expect(store.getSnapshot().state?.panelOpen).toBe(true)
+    } finally {
+      setWidth(1024)
+    }
+  })
+})

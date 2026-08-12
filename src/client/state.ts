@@ -10,6 +10,7 @@
  * operations are pure functions over the node, unit-tested in tests/state.spec.ts.
  */
 import { SIDEBAR_PREFS_DEFAULTS, type SidebarPrefs } from '../prefs-shared.ts'
+import { isNarrowWidth } from './breakpoints.ts'
 
 /**
  * Tab type identifier. Builtins register their ids (explorer / git / editor
@@ -721,12 +722,18 @@ function loadState(sessionId: string, prefs: SidebarPrefs): SidebarState {
   // chosen percent of the window (clamped to the panel floor and the
   // viewport so a huge percent can never crush the app shell), the panel
   // starts open only when the preference says so, and the default explorer
-  // tab is skipped when the user disabled the explorer tab type.
+  // tab is skipped when the user disabled the explorer tab type. On a
+  // NARROW viewport a brand-new session starts collapsed instead — the
+  // panel is a full-screen drawer there, and auto-opening it on first
+  // paint would cover the conversation before the user asked. Only the
+  // first seeding is affected: once the user expands the drawer,
+  // `panelOpen: true` persists like any other state.
   const viewport = typeof window !== 'undefined' ? window.innerWidth : undefined
   const width = viewport === undefined
     ? PANEL_DEFAULT
     : defaultWidthFor(viewport, prefs.defaultWidthPercent)
-  return makeDefaultState(width, prefs.openByDefault, prefs.tabsEnabled['explorer'] !== false)
+  const openByDefault = prefs.openByDefault && (viewport === undefined || !isNarrowWidth(viewport))
+  return makeDefaultState(width, openByDefault, prefs.tabsEnabled['explorer'] !== false)
 }
 
 /**

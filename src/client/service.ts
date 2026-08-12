@@ -22,9 +22,10 @@
 import type { ReactNode } from 'react'
 import type { Context } from '../context-types.ts'
 import {
-  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane, patchTab,
+  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane, patchTab, togglePanel,
   type SidebarState, type SidebarStore, type SidebarTab,
 } from './state.ts'
+import { isNarrowWidth } from './breakpoints.ts'
 import type { SessionScope } from './api.ts'
 
 /** One declarative boolean setting of a tab/viewer, rendered as a nested
@@ -335,13 +336,29 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       // A URL seed pre-fills the tab's path (the browser tab navigates to it
       // on mount). An explicit seed.title also wins over a createTab-minted
       // default title (e.g. the sidebar-browser's hostname title).
+      let landed: SidebarState
       if (seed.url !== undefined) {
-        return patchTab(next, tab.id, {
+        landed = patchTab(next, tab.id, {
           path: seed.url,
           ...(seed.title !== undefined ? { title: seed.title } : {}),
         })
+      } else {
+        landed = next
       }
-      return next
+      // Narrow-viewport drawer: a CONTENT open (file / browser) must be
+      // visible — expand the collapsed drawer so the open lands in sight.
+      // Type-only opens (+ menu, agent-terminal auto-tabs) never expand; on
+      // wide viewports nothing here changes (the panel behavior is the
+      // caller's business).
+      if (
+        typeof window !== 'undefined'
+        && isNarrowWidth(window.innerWidth)
+        && (seed.path !== undefined || seed.url !== undefined)
+        && !landed.panelOpen
+      ) {
+        return togglePanel(landed)
+      }
+      return landed
     })
   }
 
