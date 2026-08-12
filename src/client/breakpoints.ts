@@ -1,18 +1,19 @@
 /**
  * Narrow-viewport ("mobile") breakpoint for the sidebar. Width-based, shared
  * by the layout logic (JS) and the style gates (CSS). The CSS side pairs
- * with this file via `@media (max-width: 1023px)` rules (sidebar.module.css)
- * — 1023px ≡ widths below NARROW_MAX_WIDTH, documented at both ends.
+ * with this file via `@media (max-width: 767px)` rules (sidebar.module.css)
+ * — 767px ≡ widths below NARROW_MAX_WIDTH, documented at both ends.
  *
- * The value matches the DSH app shell's own narrow breakpoint
- * (SIDEBAR_AUTO_COLLAPSE = 1024, ui-layout/columns.ts), so the sidebar's
- * mobile layout switches at exactly the width where the host app collapses
- * its own sidebar to the rail.
+ * "Real narrow" on purpose: the mobile layout (one full-screen drawer, the
+ * bottom panel's tabs merged into the right sidebar) is a phone / portrait
+ * tablet experience. The value is deliberately NOT aligned to the DSH app
+ * shell's own 1024px breakpoint — 1024px windows (small laptops, split
+ * panes) keep the desktop two-panel layout.
  */
 import { useEffect, useState } from 'react'
 
-/** Viewport widths strictly below this are "mobile" (paired CSS: max-width: 1023px). */
-export const NARROW_MAX_WIDTH = 1024
+/** Viewport widths strictly below this are "mobile" (paired CSS: max-width: 767px). */
+export const NARROW_MAX_WIDTH = 768
 
 /** Whether a viewport width is narrow (mobile). */
 export function isNarrowWidth(width: number): boolean {

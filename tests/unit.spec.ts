@@ -4,7 +4,7 @@ import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
 import {
   activateTab, allLeaves, BOTTOM_DEFAULT, BOTTOM_MIN, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, patchTab, reconcileAgentTerminals, resizeSplit, resizeSplitIn, sanitizeState, setBottomHeight, splitPane, tabOpenIn, toggleBottomPanel, toggleExpanded, togglePanel,
+  migrateBottomTabs, moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, patchTab, reconcileAgentTerminals, resizeSplit, resizeSplitIn, sanitizeState, setBottomHeight, splitPane, tabOpenIn, toggleBottomPanel, toggleExpanded, togglePanel,
   type SidebarState, type SidebarTab, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -548,6 +548,66 @@ describe('sidebar state', () => {
       if (previous === undefined) delete g.window
       else g.window = previous
     }
+  })
+
+  // ── Narrow-viewport merge (bottom tabs thrown into the right sidebar) ──
+
+  it('migrateBottomTabs throws the bottom tree tabs into the right tree’s FIRST leaf', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    // Two bottom tabs in their own pane; the right pane holds explorer.
+    s = openTabInActivePane({ ...s, activePane: bottomPane }, { id: 'terminal:1', type: 'terminal', title: 'T1' })
+    s = openTabInActivePane(s, { id: 'terminal:2', type: 'terminal', title: 'T2' })
+    const migrated = migrateBottomTabs(s)
+    // All tabs now live in the right tree's first leaf, bottom tabs appended.
+    expect((migrated.splits as { tabs: SidebarTab[] }).tabs.map(t => t.id))
+      .toEqual([expect.stringMatching(/^tab:/), 'terminal:1', 'terminal:2'])
+    // The bottom tree is emptied (structure stays), the panel closes, and
+    // new tabs land in the right tree.
+    expect((migrated.bottomSplits as { tabs: SidebarTab[] }).tabs).toHaveLength(0)
+    expect(migrated.bottomOpen).toBe(false)
+    expect(migrated.activePane).toBe((migrated.splits as { id: string }).id)
+    // The migrated tabs are fully functional: closing one works through the
+    // right tree.
+    expect(tabOpenIn(migrated, 'terminal:1')).toBe(true)
+    expect(tabOpenIn(closeTab(migrated, migrated.activePane!, 'terminal:1'), 'terminal:1')).toBe(false)
+  })
+
+  it('migrateBottomTabs appends into the FIRST leaf when the right tree is a split', () => {
+    let s = state()
+    s = splitPane(s, 'row') // splits the active pane into two leaves
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = openTabInActivePane({ ...s, activePane: bottomPane }, { id: 'terminal:9', type: 'terminal', title: 'T9' })
+    const migrated = migrateBottomTabs(s)
+    // The first (leftmost) leaf carries the bottom tab; the second leaf
+    // keeps its own tabs untouched.
+    const leaves = allLeaves(migrated.splits)
+    expect(leaves[0]!.tabs.map(t => t.id)).toContain('terminal:9')
+    expect(allLeaves(migrated.bottomSplits).flatMap(l => l.tabs)).toHaveLength(0)
+  })
+
+  it('migrateBottomTabs is idempotent (same reference) once the bottom tree is empty and closed', () => {
+    const s = state()
+    expect(migrateBottomTabs(s)).toBe(s)
+    // With the panel open but no tabs, the migration only closes the panel.
+    const open = toggleBottomPanel(s)
+    const migrated = migrateBottomTabs(open)
+    expect(migrated).not.toBe(open)
+    expect(migrated.bottomOpen).toBe(false)
+    expect(migrateBottomTabs(migrated)).toBe(migrated)
+  })
+
+  it('migrateBottomTabs repoints an active pane that lives in the bottom tree', () => {
+    let s = state()
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = { ...s, activePane: bottomPane } // empty bottom pane, panel closed
+    const migrated = migrateBottomTabs(s)
+    expect(migrated.activePane).toBe((migrated.splits as { id: string }).id)
+    // A tab opened after the migration lands in the VISIBLE right tree.
+    const landed = openTabInActivePane(migrated, { id: 'git', type: 'git' as const, title: 'Git' })
+    expect((landed.splits as { tabs: SidebarTab[] }).tabs.map(t => t.type)).toContain('git')
   })
 
   it('openTabInActivePane lands in the bottom tree when the active pane lives there', () => {

@@ -17,13 +17,13 @@
  * terminal; editors open from the explorer). Tabs live in one tree only —
  * they never cross panels; only the panel sizes drag against each other.
  *
- * Narrow (mobile, <1024px) viewports collapse the two panels into one: the
- * right panel becomes a full-width drawer holding BOTH workbenches stacked
- * (MobileWorkbench, see split-pane.tsx), the bottom panel and its toggle
- * button disappear, and the layout push is disabled (the drawer floats).
- * Crossing the breakpoint never rewrites per-session state — bottomOpen /
- * bottomHeight / both trees survive untouched, so desktop restores exactly
- * what the user left.
+ * Narrow (mobile, <768px) viewports show ONLY the right sidebar: entering
+ * narrow migrates the bottom panel's tabs INTO the right tree
+ * (migrateBottomTabs) — one workbench, the bottom tabs thrown into its
+ * strips. The right panel becomes a full-width drawer, the bottom panel
+ * and its toggle button disappear, and the layout push is disabled (the
+ * drawer floats). Widening does not migrate back: the tabs keep living in
+ * the right tree.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
@@ -31,13 +31,13 @@ import clsx from 'clsx'
 import { IconCloseFill14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
 import {
-  BOTTOM_MIN, PANEL_MIN, agentUuidOf, closeTab, firstLeaf, isAgentTabId, leafWithTab, mapLeaf, moveTab, moveTabToEdge, openDiffTab,
+  BOTTOM_MIN, PANEL_MIN, agentUuidOf, closeTab, firstLeaf, isAgentTabId, leafWithTab, mapLeaf, migrateBottomTabs, moveTab, moveTabToEdge, openDiffTab,
   reconcileAgentTerminals,
   resizeSplitIn, setBottomHeight, setWidth, toggleBottomPanel, toggleExpanded, togglePanel,
   type DropZone, type SidebarState, type SidebarStore, type SidebarTab, type SplitNode,
 } from './state.ts'
 import { IconPanelBottomOutline16, IconPanelRightOutline16 } from './icons.tsx'
-import { MobileWorkbench, Workbench, type WorkbenchActions } from './split-pane.tsx'
+import { Workbench, type WorkbenchActions } from './split-pane.tsx'
 import { useNarrowViewport } from './breakpoints.ts'
 import type { NewTabOption } from './TabBar.tsx'
 import type { TabDragPayload } from './TabBar.tsx'
@@ -106,10 +106,11 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   // Narrow (mobile) viewports collapse the two panels into one: the right
   // panel becomes a full-width drawer holding BOTH workbenches, the bottom
   // panel (and its toggle button) disappears, and the layout push is
-  // disabled (the drawer floats over the app shell). Crossing the
-  // breakpoint never rewrites the per-session state — bottomOpen /
-  // bottomHeight / both trees survive untouched, so desktop restores
-  // exactly what the user left.
+  // disabled (the drawer floats over the app shell). Entering narrow
+  // MIGRATES the bottom tree's tabs into the right tree (migrateBottomTabs)
+  // — the merged display is the right sidebar alone, the bottom tabs thrown
+  // into its strips. Widening never rewrites the migrated state: the tabs
+  // keep living in the right tree.
   const narrow = useNarrowViewport()
 
   // Current conversation (the sessions list feed).
@@ -129,6 +130,18 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const state = snapshot.state
   const sessionId = snapshot.sessionId
   const summaryCwd = sessionId === undefined ? undefined : sessionList.byId[sessionId]?.cwd
+
+  /**
+   * Bottom-panel merge on narrow viewports: whenever a session is current
+   * while narrow (mount, session switch, or a desktop→narrow transition),
+   * throw the bottom tree's tabs into the right tree. Idempotent — after
+   * the first migration the bottom tree is empty and the reducer returns
+   * the same reference, so this effect settles immediately.
+   */
+  useEffect(() => {
+    if (!narrow || sessionId === undefined) return
+    store.reduce(migrateBottomTabs)
+  }, [narrow, sessionId, store])
 
   // While the session's header is still hydrating (or the session is blank),
   // the list summary may carry no cwd; ask the host once (it falls back to
@@ -528,10 +541,7 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       onReferenceFile={referenceInChat}
       ctx={ctx}
       store={store}
-      // On narrow viewports BOTH trees live in the one drawer, so the bottom
-      // tree's visibility is the drawer's (panelOpen), not the bottom
-      // panel's — the bottom panel itself does not exist there.
-      visible={narrow ? state.panelOpen && active : bottom ? state.bottomOpen && active : state.panelOpen && active}
+      visible={bottom ? state.bottomOpen && active : state.panelOpen && active}
       onSubagentJump={(childSessionId) => { subagentJumpRef.current = childSessionId }}
       onOpenDiff={(diffTab) => { store.reduce(s => openDiffTab(s, paneId, diffTab)) }}
     />
@@ -617,28 +627,14 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
             />
           )}
         <div className={css.panelBody}>
-          {narrow
-            ? (
-              <MobileWorkbench
-                state={state}
-                newTabOptions={buildNewTabOptions(state, ctx, { sessionId, cwd })}
-                actions={actions}
-                onNewTab={onNewTab}
-                renderTab={(tab, active, paneId) => renderTab(tab, active, paneId, true)}
-                getTabIcon={tabIconOf}
-                onBottomHeightCommit={(height) => { store.reduce(s => setBottomHeight(s, height)) }}
-              />
-            )
-            : (
-              <Workbench
-                state={state}
-                newTabOptions={buildNewTabOptions(state, ctx, { sessionId, cwd })}
-                actions={actions}
-                onNewTab={onNewTab}
-                renderTab={renderTab}
-                getTabIcon={tabIconOf}
-              />
-            )}
+          <Workbench
+            state={state}
+            newTabOptions={buildNewTabOptions(state, ctx, { sessionId, cwd })}
+            actions={actions}
+            onNewTab={onNewTab}
+            renderTab={renderTab}
+            getTabIcon={tabIconOf}
+          />
         </div>
       </div>
       {/*

@@ -1,4 +1,4 @@
-# 移动端（窄视口 <1024px）侧边栏布局设计
+# 移动端（窄视口 <768px）侧边栏布局设计
 
 **日期**：2026-08-12
 **状态**：已实施（本文档含实施偏差记录）
@@ -6,68 +6,72 @@
 
 ## 1. 目标
 
-按**视口宽度**（<1024px，与 DSH 宿主 `SIDEBAR_AUTO_COLLAPSE` 一致）切换移动端侧边栏体验：
+按**视口宽度**（<768px——"真正的移动端宽度"，刻意不对齐宿主 1024 断点）切换移动端侧边栏体验：
 
 1. 移动端**不提供底部面板按钮**（右上角按钮簇只剩一枚右侧面板开关）。
-2. **底部面板与右侧面板合并显示**：右侧面板成为全屏抽屉，内部上下堆叠两个工作台——上 = 原右侧栏工作台（`state.splits`），下 = 原底部面板工作台（`state.bottomSplits`），中间可拖分隔条。底部面板浮层（关闭按钮 / 顶部拖动条 / 共享拐角）在移动端整体不渲染。
+2. **合并显示 = 只显示右侧栏**：进入窄屏时底部面板的标签页**直接并入右侧栏**（一次性状态迁移），右侧栏成为全宽抽屉，底部面板浮层整体不存在。
 3. 附带移动端优化：新会话默认收起抽屉、文件/外链打开自动展开、宽度拖动条禁用、布局不挤压（抽屉悬浮）、窄屏标签收窄。
 
 ## 2. 非目标
 
-- 不改持久化 schema：`bottomOpen` / `bottomHeight` / 两棵树字段原样保留，跨断点不迁移状态。
-- 不改桌面行为：≥1024px 时双面板布局与之前完全一致（含布局挤压、拐角、底部首展自动终端）。
+- 不改持久化 schema：`bottomOpen` / `bottomHeight` / `bottomSplits` 字段原样保留。
+- 不改桌面行为：≥768px 时双面板布局与之前完全一致（含布局挤压、拐角、底部首展自动终端）。
 - 不改公开服务 API、PrefsSchema、host 半。
 - 不处理 DSH 详情栏（宿主让步链在 <~996px 自动关闭详情栏，与本改动无交互）。
 
 ## 3. 现状回顾
 
 - `Sidebar.tsx` 渲染两个独立浮层：右侧面板（全高、宽度可拖、布局挤压 `--dsh-sidebar-width`）与底部面板（只挤中间列、高度可拖、右上角按钮簇双按钮、共享拐角）。
-- 底部面板状态字段：`bottomOpen` / `bottomHeight`（钳制 `[BOTTOM_MIN, innerHeight-PANEL_MIN]`）/ `bottomOpenedOnce` / `bottomSplits`。
+- 底部面板状态字段：`bottomOpen` / `bottomHeight`（钳制 `[BOTTOM_MIN, innerHeight-PANEL_MIN]`）/ `bottomOpenedOnce` / `bottomSplits`（独立 split 树，pane/tab id 全局唯一）。
 - 首次展开底部面板自动开终端（`bottomPanelAutoTerminal` pref）。
 
 ## 4. 设计
 
 ### 4.1 断点模块（新 `src/client/breakpoints.ts`）
 
-- `NARROW_MAX_WIDTH = 1024`；`isNarrowWidth(width)` 纯函数；`useNarrowViewport()` hook（初始读 `window.innerWidth`，resize + rAF 节流，`typeof window` 守卫；不用 matchMedia——jsdom 未实现）。
-- CSS 侧配对 `@media (max-width: 1023px)`（1023 ≡ <1024），两端注释互指。
+- `NARROW_MAX_WIDTH = 768`；`isNarrowWidth(width)` 纯函数；`useNarrowViewport()` hook（初始读 `window.innerWidth`，resize + rAF 节流，`typeof window` 守卫；不用 matchMedia——jsdom 未实现）。
+- CSS 侧配对 `@media (max-width: 767px)`（767 ≡ <768），两端注释互指。
+- 刻意**不对齐**宿主 `SIDEBAR_AUTO_COLLAPSE = 1024`：1024px 窗口（小笔记本、分屏）保留桌面双面板；只有手机/竖屏平板才进移动布局。
 
-### 4.2 合并布局（`Sidebar.tsx` + `split-pane.tsx` `MobileWorkbench`）
+### 4.2 合并 = 底部标签并入右侧栏（状态迁移）
 
-- 窄屏下：面板宽度 `100vw`（全屏抽屉）；`--dsh-sidebar-*` 布局变量恒 0（抽屉悬浮覆盖，不挤压 AppFrame）；宽度拖动条、底部浮层、`bottomClose`、拐角、底部面板按钮全部不渲染。
-- `MobileWorkbench`：column flex → 上区 `Workbench(state.splits)`（flex:1）→ 分隔条（复用 `.dividerCol` 命中区 + hairline）→ 下区 `Workbench(state.bottomSplits)`（高度 = `state.bottomHeight`，`flex:none`）。
-- **下区高度复用 `bottomHeight`**：桌面底部面板高度语义延续到移动端；移动端拖分隔条写回同一字段并持久化，回桌面后一致。
-- 分隔条拖动：镜像现有面板拖动模式（pointer capture + rAF 批处理 DOM 直写 + 松手一次 `setBottomHeight` commit），避免终端/编辑器逐帧重渲染。
-- 两个工作台**始终渲染**（空底部树显示欢迎卡片）；跨工作台拖 Tab 由既有跨树 `moveTabToEdge` / `moveTab` 支持。
-- 底部树 tab 的 `visible` 在窄屏 = `panelOpen && active`（抽屉开合决定），不再看 `bottomOpen`。
+- **新 reducer `migrateBottomTabs(state)`**（`state.ts`）：
+  - 底部树所有标签按深度优先序**追加到右侧树第一个 leaf**（`firstLeaf(splits)`）的标签条；
+  - 底部树清空（结构保留——桌面端回显欢迎卡片）、`bottomOpen=false`、`activePane` 指向右侧树第一个 leaf（保证迁移后新开的标签落在可见面板）；
+  - 幂等：底部无标签且面板已关且 activePane 不在底部树时返回同一引用。
+- **Sidebar 触发 effect**：`narrow && sessionId 已定义` 时执行（覆盖：窄屏挂载、会话切换、桌面→窄屏过渡）；幂等性保证其自然收敛，不循环。
+- 迁移是**永久**的（符合"直接丢到右侧栏中"）：回桌面后标签仍留在右侧树，底部面板为空（欢迎卡片）；用户可在桌面重新往底部面板开标签，再进窄屏会再次迁移。
+- 迁移后右侧栏用**现有 `Workbench` 原样渲染**——零视图层特判、零 action 路由修补（标签真实住在右侧树，close/activate/drag 全部走原路径）。
 
-### 4.3 行为修正
+### 4.3 窄屏渲染（`Sidebar.tsx`）
+
+- 面板宽度 `100vw`（全宽抽屉）；`--dsh-sidebar-*` 布局变量恒 0（抽屉悬浮，不挤压 AppFrame）；宽度拖动条、底部浮层、`bottomClose`、拐角、底部面板按钮全部不渲染。
+- `visible` 语义回到原始：底部树只在桌面底部面板场景（`bottomOpen && active`）——窄屏下底部树为空且不渲染。
+- 底部首展自动终端 effect 加 `narrow` 守卫。
+
+### 4.4 行为修正
 
 - `state.ts` `loadState`：窄屏新会话默认 `panelOpen=false`（首开才生效；用户手动展开后照常持久化）。
 - `service.ts` `openTab`：窄屏且 seed 带 `path`/`url` 且面板收起 → 自动展开抽屉（dedupe-focus 分支同样生效）；纯类型打开不展开；宽屏行为不变。
-- 底部首展自动终端 effect 加 `narrow` 守卫（桌面专属行为）。
-- 子代理自动展开 / jump-back 不动（展开 `panelOpen` = 展开抽屉，语义正确）。
 
-### 4.4 样式（`sidebar.module.css`）
+### 4.5 样式（`sidebar.module.css`）
 
-- `@media (max-width: 1023px)`：开放面板标签条预留宽度 72px → 40px（按钮簇只剩一枚）；`.tab` min/max 宽收窄（48/128px）。
-- 新增 `.mobileWorkbench` / `.mobilePane` / `.mobilePaneBottom`；分隔条复用 `.dividerCol`。
+- `@media (max-width: 767px)`：开放面板标签条预留宽度 72px → 40px（按钮簇只剩一枚）；`.tab` min/max 宽收窄（48/128px）。
 
-### 4.5 测试
+### 4.6 测试
 
-- `tests/breakpoints.spec.ts`：断点边界。
-- `tests/service.spec.ts`：窄屏 auto-expand 5 例（path/url 展开、类型不展开、宽屏不展开、dedupe 聚焦仍展开）。
-- `tests/unit.spec.ts`：窄屏新会话默认收起（stub `window.innerWidth=390`，try/finally 还原）。
-- `tests/mobile-workbench.spec.tsx`：双树并显 + 分隔条 + 底部高度（renderToString 结构断言）。
-- 分隔条拖动 = 指针捕获逻辑，人工验证（与桌面拖动同策略）；store 钳制由既有 `setBottomHeight` 测试覆盖。
+- `tests/breakpoints.spec.ts`：断点边界（767 窄 / 768 宽；1024 明确为宽）。
+- `tests/unit.spec.ts`：`migrateBottomTabs` 4 例（并入第一 leaf 且底部清空/面板关/activePane 重指、右树为 split 时并入最左 leaf、幂等性、空底部树但 activePane 在底部树时重指）+ 窄屏新会话默认收起（stub `window.innerWidth=390`）。
+- `tests/service.spec.ts`：窄屏 auto-expand 5 例（390 < 768 仍窄）。
 
 ## 5. 边界情况
 
-- 跨断点往返：状态零迁移；桌面 `bottomOpen=false` 但底部树有标签的会话，移动端仍显示（合并语义），回桌面仍隐藏。
-- 底部高度越界：渲染直接用 `state.bottomHeight`（store 写入已钳制）；拖动中按面板体高度钳制，松手再走 store 钳制。
+- 迁移触发：窄屏挂载 / 会话切换 / 桌面→窄屏过渡，均由同一 effect 覆盖；幂等保证收敛。
+- 迁移后新开标签：`activePane` 已重指右侧树第一 leaf，`openTabInActivePane` 必落在可见面板（含"空底部树但 activePane 指向它"的陈旧指针场景）。
+- 跨断点往返：迁移永久；桌面底部面板空显欢迎卡片；`bottomHeight` 不受影响。
 - jsdom 兼容：hook 不用 matchMedia；既有测试 stub `innerWidth=1024` 自动走桌面路径，零行为变化。
 
 ## 6. 实施偏差记录
 
-- 计划时考虑过「空底部树隐藏 + 拖 Tab 创建」方案，最终采用**始终渲染两工作台**（用户确认的选项语义：上下并显 + 可调分隔；空底部树显示欢迎卡片，发现性更好）。
-- 计划时考虑过 matchMedia 方案，最终用 resize + rAF（jsdom 兼容，仓库既有拖动模式同款）。
+- **v1（已提交 b391ebf，用户反馈推翻）**：合并 = 单面板内上下堆叠两个工作台（`MobileWorkbench` + 可拖分隔条，高度复用 `bottomHeight`），断点 1024（对齐宿主）。用户明确：合并 = 只显示右侧栏、底部标签直接丢进右侧栏；窄屏 = 真窄屏、不对齐 1024。
+- **v2（本文档，最终形态）**：删除 `MobileWorkbench`（组件 + CSS + spec），改为 `migrateBottomTabs` 状态迁移 + 现有 `Workbench` 渲染；断点 768。`bottomHeight` 不再参与移动端布局（仅桌面底部面板使用）。

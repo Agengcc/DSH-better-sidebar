@@ -206,6 +206,44 @@ export function firstLeaf(node: SplitNode): SidebarLeaf {
   return firstLeaf(node.children[0]!)
 }
 
+/** Empty every leaf of a tree (the bottom tree after its tabs migrate out). */
+function clearAllTabs(node: SplitNode): SplitNode {
+  if (node.kind === 'leaf') return { ...node, tabs: [], active: null }
+  return { ...node, children: node.children.map(clearAllTabs) }
+}
+
+/**
+ * Narrow-viewport migration: the bottom panel's tabs are thrown INTO the
+ * right sidebar — the "merged display" on mobile is the right panel alone,
+ * whose tab strips now carry the bottom tree's tabs (depth-first order,
+ * appended to the right tree's FIRST leaf). The bottom tree is emptied (its
+ * structure stays — the desktop bottom panel re-renders its welcome cards)
+ * and the panel closes. The active pane moves to the right tree's first
+ * leaf so every new tab lands in the visible panel.
+ *
+ * Idempotent: a bottom tree with no tabs and a closed panel returns the
+ * same reference. Runs when the viewport enters narrow (see the Sidebar
+ * shell); migrating is permanent for the session — the tabs now live in the
+ * right tree, exactly like the user "threw them in".
+ */
+export function migrateBottomTabs(state: SidebarState): SidebarState {
+  const bottomTabs = allLeaves(state.bottomSplits).flatMap(leaf => leaf.tabs)
+  const activeInBottom = state.activePane !== null && treeHasId(state.bottomSplits, state.activePane)
+  if (bottomTabs.length === 0 && !state.bottomOpen && !activeInBottom) return state
+  const target = firstLeaf(state.splits)
+  return {
+    ...state,
+    activePane: target.id,
+    bottomOpen: false,
+    splits: bottomTabs.length > 0
+      ? mapLeaf(state.splits, target.id, leaf => {
+        leaf.tabs = [...leaf.tabs, ...bottomTabs]
+      })
+      : state.splits,
+    bottomSplits: bottomTabs.length > 0 ? clearAllTabs(state.bottomSplits) : state.bottomSplits,
+  }
+}
+
 /** Find the leaf containing a tab id, if any. */
 export function leafWithTab(node: SplitNode, tabId: string): SidebarLeaf | undefined {
   if (node.kind === 'leaf') {
