@@ -48,7 +48,15 @@ export interface SidebarSessionHeader {
 
 /** The host session store face (`ctx.sessions.get(id)` returns the live session). */
 export interface SidebarSessionStore {
-  get(id: string): { header: SidebarSessionHeader } | undefined
+  get(id: string): {
+    header: SidebarSessionHeader
+    /**
+     * The live session's append-only event log (immutable snapshot; absent
+     * on sessions the runtime has not hydrated). Read-only access — the
+     * tasks.output route replays `task_output` tool/result rows from it.
+     */
+    events?: readonly SidebarSessionEvent[]
+  } | undefined
 }
 
 /** One loader entry's options slice (the connection row's resolved config). */
@@ -176,14 +184,6 @@ export interface SidebarTaskView {
 
 /** The host tasks registry face the sidebar routes touch (structural mirror of `TaskService`). */
 export interface SidebarTasksService {
-  /**
-   * Non-consuming full-output read (never advances the model's read cursor,
-   * never marks the task reported). Throws for an unknown or foreign task.
-   */
-  peek(id: string, caller?: SidebarAgent): {
-    text: string
-    snapshot: { status: SidebarTaskStatus; detail?: string }
-  }
   /** Request cancellation; throws for an unknown or foreign task. */
   kill(id: string, caller?: SidebarAgent, reason?: string): 'requested' | 'already-finished'
 }

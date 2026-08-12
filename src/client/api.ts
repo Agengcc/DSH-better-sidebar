@@ -8,7 +8,6 @@
  */
 import { encodeHtmlUrl } from '../html-route.ts'
 import type { BrowserProbeResult } from './browser.ts'
-import type { SidebarTaskStatus } from '../context-types.ts'
 
 /** One wire failure. */
 export class SidebarApiError extends Error {
@@ -61,13 +60,19 @@ export interface FsTextResult { kind: 'text'; content: string; truncated: boolea
  *  `head` carries the first bytes (base64) for viewer detect sniffing. */
 export interface FsBinaryResult { kind: 'binary'; size: number; truncated: boolean; head: string }
 
-/** One tasks.output response: the peeked full text (capped) plus the wire status. */
+/**
+ * One tasks.output response: the output the MODEL has read so far for the
+ * task (replayed from the owner session's event log — the model's
+ * task_output cursor is never touched, so the pane can never steal the
+ * agent's bytes). `read` is false until the model actually called
+ * task_output for the task.
+ */
 export interface TaskOutputResult {
   text: string
   /** True when the host capped the text at its output limit. */
   truncated: boolean
-  status: SidebarTaskStatus
-  detail?: string
+  /** Whether the model has read the task at least once. */
+  read: boolean
 }
 
 async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
@@ -156,10 +161,9 @@ export const api = {
   agentPtyClose: (uuid: string) =>
     call<{ ok: true }>('agent-pty.close', { uuid }),
   /**
-   * Full accumulated output of one background task (the host's NON-CONSUMING
-   * peek — the model's task_output cursor and report bit are untouched, so a
-   * human watching a stream never steals the agent's bytes). The scope MUST
-   * be the task's OWNER session (the tasks registry fences by session id).
+   * The output the model has read so far for one background task (replayed
+   * from the owner session's event log — never the model's task_output
+   * cursor). The scope MUST be the task's OWNER session.
    */
   taskOutput: (scope: SessionScope, id: string, signal?: AbortSignal) =>
     call<TaskOutputResult>('tasks.output', scopePayload(scope, { id }), signal),

@@ -1,50 +1,87 @@
 /**
  * Background-task routes of the /sidebar JSON API ('tasks.output' /
- * 'tasks.kill'). The task LIST itself needs no route: it arrives through the
+ * 'tasks.kill'). The task LIST needs no route: it arrives through the
  * harness's `session/tasks` push mirror (`tasksBySession` in the sessions
- * list feed). These routes only:
+ * list feed). The routes:
  *
- * - READ OUTPUT — a NON-CONSUMING peek (`ctx.tasks.peek`) that never advances
- *   the model's `task_output` cursor nor claims the completion report, so a
- *   human watching a stream cannot steal the agent's bytes;
- * - KILL tasks (`ctx.tasks.kill`) with a forwarded reason.
- *
- * Both are fenced by the owning session: the caller Agent is resolved live
- * from the requested sessionId (`ctx.agents.get`) and the tasks registry
- * refuses anything that session does not own. Registry errors map to a 404
- * `task-error` (unknown/foreign ids), so the client cannot distinguish
- * existence — matching the api-proxy's task-view secrecy.
+ * - 'tasks.output' — REPLAYS the output the MODEL has read so far from the
+ *   owner session's OWN event log: `tool/call` rows of `task_output` name
+ *   the task via `arguments.task_id`, and the paired `tool/result` rows
+ *   carry the finalized content the model actually received. This touches
+ *   NO DSH source (no peek seam, no consuming read): the model's
+ *   `task_output` cursor is untouched by construction, and the pane stays
+ *   empty until the agent reads the task.
+ * - 'tasks.kill' — the registry's stock `kill` (a pristine DSH API),
+ *   fenced by the owning session via the live agent caller. Absent registry
+ *   → 503, mirroring the settings routes' optional-service downgrade.
  */
-import type { Context, SidebarTaskStatus } from './context-types.ts'
+import type { Context } from './context-types.ts'
 import { requireString, SidebarError } from './wire.ts'
 
 /** The two background-task routes of the sidebar API. */
 export interface SidebarTasksRoutes {
-  /** Full accumulated output of one task (non-consuming peek, capped). */
-  output(payload: unknown): {
-    text: string
-    truncated: boolean
-    status: SidebarTaskStatus
-    detail?: string
-  }
+  /** The output the model has read so far for one task (event replay, capped). */
+  output(payload: unknown): { text: string; truncated: boolean; read: boolean }
   /** Request cancellation of one task (live tasks flip to stopping). */
   kill(payload: unknown): { ok: true; outcome: 'requested' | 'already-finished' }
 }
 
+/** The 'tool/result' message envelope inside a session event's data. */
+interface ToolResultMessageLike {
+  source?: { kind?: unknown; callId?: unknown }
+  content?: unknown
+}
+
+/** One 'tool-result' content block (the inner blocks carry the text). */
+interface ToolResultBlockLike {
+  type?: unknown
+  content?: unknown
+  isError?: unknown
+}
+
 /**
- * Build the tasks routes bound to the plugin context. Returns undefined when
- * the deployment lacks the background-task registry (`ctx.tasks`) — the
- * calling route then reports a 503, mirroring the settings routes' optional
- * service downgrade.
- * @param ctx - host plugin context (tasks/agents read lazily at call time).
- * @param outputLimit - response cap for one output read in bytes; longer
+ * Extract the plain text of a finalized tool result: the text blocks inside
+ * the 'tool-result' block, joined with newlines. Error results and
+ * non-text blocks contribute nothing.
+ */
+function resultText(message: ToolResultMessageLike): string | undefined {
+  if (!Array.isArray(message.content)) return undefined
+  const parts: string[] = []
+  for (const block of message.content) {
+    if (block === null || typeof block !== 'object') continue
+    const candidate = block as ToolResultBlockLike
+    if (candidate.type !== 'tool-result' || candidate.isError === true) continue
+    const inner = candidate.content
+    if (!Array.isArray(inner)) continue
+    for (const item of inner) {
+      if (item === null || typeof item !== 'object') continue
+      const textItem = item as { type?: unknown; text?: unknown }
+      if (textItem.type === 'text' && typeof textItem.text === 'string') {
+        parts.push(textItem.text)
+      }
+    }
+  }
+  return parts.length > 0 ? parts.join('\n') : undefined
+}
+
+/** Whether a task_output result carries no new output — the controller's
+ *  model-facing "(no new output)" body, noise for the human pane. */
+function isNoNewOutput(text: string): boolean {
+  return text.startsWith('(no new output)')
+}
+
+/**
+ * Build the tasks routes bound to the plugin context. `output` reads only
+ * the session store; `kill` reads the tasks/agents services lazily and
+ * degrades to a 503 when the deployment lacks the registry.
+ * @param ctx - host plugin context.
+ * @param outputLimit - response cap for one output replay in bytes; longer
  *   texts are sliced and flagged `truncated` (mirrors the fs.read cap).
  */
-export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRoutes | undefined {
+export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRoutes {
   const tasks = ctx.get('tasks')
-  if (tasks === undefined) return undefined
   const agents = ctx.get('agents')
-  /** The live caller whose session id the fence compares against (absent → unowned only). */
+  /** The live caller whose session id the registry fence compares against. */
   const callerOf = (sessionId: string) => agents?.get(sessionId)
   /** Registry refusals become a 404 task-error; unknown and foreign ids are indistinguishable. */
   const registryError = (error: unknown): SidebarError =>
@@ -53,20 +90,45 @@ export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRo
     output(payload) {
       const sessionId = requireString(payload, 'sessionId')
       const id = requireString(payload, 'id')
-      try {
-        const read = tasks.peek(id, callerOf(sessionId))
-        const text = read.text
-        return {
-          text: text.length > outputLimit ? text.slice(0, outputLimit) : text,
-          truncated: text.length > outputLimit,
-          status: read.snapshot.status,
-          ...read.snapshot.detail !== undefined ? { detail: read.snapshot.detail } : {},
+      // One pass over the owner session's event log: tool/call rows first
+      // map callId → task_id (a call always precedes its result), then each
+      // matching tool/result contributes the finalized text the model saw.
+      const session = ctx.sessions.get(sessionId)
+      const taskOf = new Map<string, string>()
+      const parts: string[] = []
+      let read = false
+      for (const event of session?.events ?? []) {
+        if (event.type === 'tool/call') {
+          const data = event.data as { name?: unknown; callId?: unknown; arguments?: unknown }
+          if (data.name !== 'task_output' || typeof data.callId !== 'string') continue
+          try {
+            const args = JSON.parse(typeof data.arguments === 'string' ? data.arguments : '') as { task_id?: unknown }
+            if (typeof args.task_id === 'string') taskOf.set(data.callId, args.task_id)
+          } catch {
+            // Malformed model arguments: not a task_output pair.
+          }
+        } else if (event.type === 'tool/result') {
+          const message = (event.data as { message?: unknown }).message as ToolResultMessageLike | undefined
+          if (message === undefined) continue
+          const callId = message.source?.callId
+          if (typeof callId !== 'string') continue
+          if (taskOf.get(callId) !== id) continue
+          read = true
+          const text = resultText(message)
+          if (text !== undefined && !isNoNewOutput(text)) parts.push(text)
         }
-      } catch (error) {
-        throw registryError(error)
+      }
+      const text = parts.join('\n')
+      return {
+        text: text.length > outputLimit ? text.slice(0, outputLimit) : text,
+        truncated: text.length > outputLimit,
+        read,
       }
     },
     kill(payload) {
+      if (tasks === undefined) {
+        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
+      }
       const sessionId = requireString(payload, 'sessionId')
       const id = requireString(payload, 'id')
       const record = payload as { reason?: unknown } | null

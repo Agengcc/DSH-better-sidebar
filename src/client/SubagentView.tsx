@@ -359,13 +359,13 @@ function CatalogRows({
 
 /**
  * The shared output dock of the tasks section: ONE pane at the bottom of the
- * sidebar body (sticky, terminal-like) shows the SELECTED task's FULL
- * accumulated output via the host's NON-CONSUMING peek (`tasks.output`),
- * refreshed every {@link TASK_POLL_MS} while the task runs and the page is
- * visible. The model's own `task_output` cursor is never touched, so
- * watching a stream cannot steal the agent's bytes. A single dock — not a
- * panel per row — keeps the task list compact and stable when many tasks
- * are running.
+ * sidebar body (sticky, terminal-like) shows the SELECTED task's output as
+ * the MODEL has read it so far (replayed from the owner session's event
+ * log), refreshed every {@link TASK_POLL_MS} while the task runs and the
+ * page is visible. The model's `task_output` cursor is never touched — the
+ * pane can never steal the agent's bytes, and it stays empty until the
+ * agent reads the task. A single dock — not a panel per row — keeps the
+ * task list compact and stable when many tasks are running.
  */
 function TaskOutputPane(props: {
   ownerSessionId: string
@@ -437,7 +437,9 @@ function TaskOutputPane(props: {
         <>
           {state.text.length > 0
             ? <pre ref={preRef} className={css.tasksPanePre}>{state.text}</pre>
-            : <div className={css.tasksPaneHint}>{t('taskNoOutput')}</div>}
+            : state.read
+              ? <div className={css.tasksPaneHint}>{t('taskNoOutput')}</div>
+              : <div className={css.tasksPaneHint}>{t('taskNotReadYet')}</div>}
           {state.truncated && <div className={css.tasksPaneHint}>{t('taskOutputTruncated')}</div>}
         </>
       )}
@@ -448,9 +450,10 @@ function TaskOutputPane(props: {
 /**
  * The background-task section of the Subagent page: every task of the whole
  * current tree (main agent + subagents, owner-labeled), fed by the harness
- * `session/tasks` push mirror. Clicking a row feeds its output to the shared
- * bottom dock (non-consuming peek); live rows carry a two-click-confirm
- * kill button. Renders nothing while the tree has no tasks.
+ * `session/tasks` push mirror. Clicking a row feeds its model-read output to
+ * the shared bottom dock (event replay — never the model's cursor); live
+ * rows carry a two-click-confirm kill button. Renders nothing while the
+ * tree has no tasks.
  */
 function TasksSection(props: {
   byId: SidebarSessionList['byId']

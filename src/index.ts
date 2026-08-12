@@ -200,10 +200,11 @@ function buildApi(
     return { sessionId, cwd: sessionCwdOf(ctx, sessionId, clientCwd) }
   }
   // Background tasks: the LIST rides the harness's `session/tasks` push
-  // mirror, so these routes only read output (a non-consuming peek — the
-  // model's task_output cursor is never touched) and kill. A deployment
-  // without the tasks registry downgrades to a 503, like the settings routes.
-  const tasksApi: SidebarTasksRoutes | undefined = buildTasksApi(ctx, resolved.readLimit)
+  // mirror, so these routes only replay output the model has read (from the
+  // session's own event log — no DSH source is touched, the model's
+  // task_output cursor is never consumed) and kill (the registry's stock
+  // API). A deployment without the tasks registry downgrades kill to a 503.
+  const tasksApi: SidebarTasksRoutes = buildTasksApi(ctx, resolved.readLimit)
   return {
     'session.cwd': (payload) => {
       const { sessionId, cwd } = cwdOf(payload)
@@ -333,24 +334,14 @@ function buildApi(
       agentPtyRegistry.close(uuid)
       return { ok: true }
     },
-    // Background tasks: read one task's FULL output (a non-consuming peek —
-    // the model's task_output cursor and report bit are untouched, so a
-    // human watching a stream never steals the agent's bytes), and kill one
-    // task. The task LIST itself arrives through the harness's session/tasks
-    // push mirror, so no list route exists. Access is fenced to the owning
-    // session by the tasks registry (the caller resolves from sessionId).
-    'tasks.output': (payload) => {
-      if (tasksApi === undefined) {
-        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
-      }
-      return tasksApi.output(payload)
-    },
-    'tasks.kill': (payload) => {
-      if (tasksApi === undefined) {
-        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
-      }
-      return tasksApi.kill(payload)
-    },
+    // Background tasks: read one task's output (a REPLAY of what the model
+    // has read so far, from the owner session's event log — the model's
+    // task_output cursor is never touched, so the human pane can never steal
+    // the agent's bytes), and kill one task. The task LIST itself arrives
+    // through the harness's session/tasks push mirror, so no list route
+    // exists. Kill is fenced to the owning session by the tasks registry.
+    'tasks.output': (payload) => tasksApi.output(payload),
+    'tasks.kill': (payload) => tasksApi.kill(payload),
     // The side card preferences. The settings service is optional in the
     // composition; while absent the routes report undefined and the client
     // keeps the schema defaults. Writes are revision-guarded: a stale editor

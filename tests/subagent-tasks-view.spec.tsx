@@ -99,7 +99,15 @@ beforeEach(() => {
     const body = JSON.parse(String(init?.body)) as { sessionId: string; id: string }
     if (method === 'tasks.output') {
       outputCalls.push({ sessionId: body.sessionId, id: body.id })
-      return jsonResponse({ ok: true, value: { text: `output-of-${body.id}`, truncated: false, status: 'running' } })
+      // bash-9 stands for a task the model never read (read:false).
+      return jsonResponse({
+        ok: true,
+        value: {
+          text: body.id === 'bash-9' ? '' : `output-of-${body.id}`,
+          truncated: false,
+          read: body.id !== 'bash-9',
+        },
+      })
     }
     if (method === 'tasks.kill') {
       killCalls.push({ sessionId: body.sessionId, id: body.id })
@@ -192,7 +200,7 @@ describe('SubagentView background tasks', () => {
     expect(container.textContent).toContain('output-of-bash-1')
     const second = container.querySelector('button[aria-label*="echo hi"]') as HTMLButtonElement
     await act(async () => { second.click() })
-    // One dock, now fed by the second task (its owner session scopes the peek).
+    // One dock, now fed by the second task (its owner session scopes the replay).
     expect(outputCalls).toEqual([
       { sessionId: 'root', id: 'bash-1' },
       { sessionId: 'child', id: 'bash-2' },
@@ -200,6 +208,26 @@ describe('SubagentView background tasks', () => {
     expect(container.querySelectorAll('[role="region"]')).toHaveLength(1)
     expect(container.textContent).not.toContain('output-of-bash-1')
     expect(container.textContent).toContain('output-of-bash-2')
+    unmount()
+  })
+
+  it('explains when the model has not read the task yet', async () => {
+    const snapshot = baseSnapshot()
+    snapshot.tasksBySession = {
+      root: [
+        ...(snapshot.tasksBySession?.root ?? []),
+        { id: 'bash-9', kind: 'bash', label: 'unread cmd', status: 'running', startedAt: 9_000 },
+      ],
+    }
+    const store = makeStore(snapshot)
+    const { container, unmount } = mount(
+      createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
+    )
+    const row = container.querySelector('button[aria-label*="unread cmd"]') as HTMLButtonElement
+    await act(async () => { row.click() })
+    // read:false → the pane explains the model has not read it (never the
+    // model's cursor, so there is nothing to steal yet).
+    expect(container.textContent).toContain('模型尚未读取该任务的输出')
     unmount()
   })
 
