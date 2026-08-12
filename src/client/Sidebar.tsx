@@ -294,29 +294,77 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     ctx.betterSidebar?.openTab({ type: 'subagent', title: t('subagent') })
   }, [sessionId, store, ctx])
 
-  // The app shell's own columns: the bottom panel spans ONLY the center
-  // column ("squeezes the agent output area") — it starts at the app
-  // sidebar's right edge and ends at the details column's left edge (the
-  // details column sits between the center and the right panel). Measured
-  // from the AppFrame's DOM (the plugin already couples to #root in
-  // layout.css); a missing frame degrades to 0 (full width).
-  const [appSidebarWidth, setAppSidebarWidth] = useState(0)
-  const [detailsWidth, setDetailsWidth] = useState(0)
-  useEffect(() => {
-    const frame = document.querySelector('#root > div')
-    const sidebarCol = frame?.children[0] as HTMLElement | undefined
-    const detailsCol = frame?.children[2] as HTMLElement | undefined
-    if (sidebarCol === undefined || detailsCol === undefined) return
-    const measure = (): void => {
-      setAppSidebarWidth(sidebarCol.getBoundingClientRect().width)
-      setDetailsWidth(detailsCol.getBoundingClientRect().width)
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(sidebarCol)
-    observer.observe(detailsCol)
-    return () => { observer.disconnect() }
+  // The app shell's center column: the bottom panel spans ONLY that column
+  // ("squeezes the agent output area") — it starts at the app sidebar's
+  // right edge and ends at the details column's left edge (the details
+  // column sits between the center and the right panel). Measured directly
+  // from the AppFrame's center column DOM (children[1], the layout.css
+  // nth-child(2) column) so the bottom panel tracks the column's real
+  // horizontal edges — including the animated margin-right push while the
+  // right panel opens/closes; a frame that never appears keeps the initial
+  // zero-size fallback (the panel renders at 0 width until measured).
+  const [centerRect, setCenterRect] = useState({ left: 0, right: 0 })
+  // Refs keep the measure step stable across renders and let it skip work
+  // mid-drag: during a width/corner drag the layout push resizes the center
+  // column every frame, and reacting (setCenterRect → re-render) would
+  // re-introduce the drag lag this shell deliberately avoids. applyDrag
+  // writes the bottom panel's edges directly, so measurement pauses then.
+  const centerColRef = useRef<HTMLElement | null>(null)
+  const draggingRef = useRef(false)
+  const measureCenter = useCallback((): void => {
+    if (draggingRef.current) return
+    const col = centerColRef.current
+    if (col === null) return
+    const rect = col.getBoundingClientRect()
+    // The bottom panel only cares about the horizontal edges: a pure height
+    // change (the bottom panel itself opening/closing) must not re-render,
+    // so keep the previous object when left/right are unchanged.
+    setCenterRect(prev =>
+      prev.left === rect.left && prev.right === rect.right
+        ? prev
+        : { left: rect.left, right: rect.right })
   }, [])
+  useEffect(() => {
+    let disposed = false
+    let observer: ResizeObserver | undefined
+    // Locate the AppFrame's center column (children[1] of the frame div —
+    // layout.css's nth-child(2)). The shell swaps the boot page for the
+    // AppFrame only AFTER boot settles, so the first query may miss it.
+    // Never give up: watch #root's children (the swap mutates them) and
+    // re-run this locator — querying once and bailing would strand the
+    // panel at the zero-size fallback forever (observed: a 1px sliver at
+    // the viewport's left edge).
+    const locate = (): void => {
+      if (disposed) return
+      const frame = document.querySelector('#root > div')
+      const col = frame?.children[1] as HTMLElement | undefined
+      if (col === undefined) {
+        if (centerColRef.current !== null) {
+          centerColRef.current = null
+          observer?.disconnect()
+          observer = undefined
+        }
+        return
+      }
+      if (centerColRef.current !== col) {
+        centerColRef.current = col
+        observer?.disconnect()
+        observer = new ResizeObserver(measureCenter)
+        observer.observe(col)
+      }
+      measureCenter()
+    }
+    locate()
+    const watcher = new MutationObserver(locate)
+    const root = document.getElementById('root')
+    if (root !== null) watcher.observe(root, { childList: true })
+    return () => {
+      disposed = true
+      observer?.disconnect()
+      watcher.disconnect()
+      centerColRef.current = null
+    }
+  }, [measureCenter])
 
   /**
    * Bottom-panel first-expansion auto terminal: the FIRST time the user
@@ -366,6 +414,15 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const [draggingCorner, setDraggingCorner] = useState(false)
   const anyDragging = draggingWidth || draggingBottom || draggingCorner
 
+  // Pause center-column measurement while dragging, and re-measure once the
+  // drag settles at its committed size. The store commit lands on release and
+  // the final width equals the last drag width, so no ResizeObserver event
+  // fires to refresh centerRect — this explicit re-measure covers that gap.
+  useEffect(() => {
+    draggingRef.current = anyDragging
+    if (!anyDragging) measureCenter()
+  }, [anyDragging, measureCenter])
+
   // Clamp mirrors of setWidth/setBottomHeight for mid-drag values (the store
   // re-clamps on commit; these keep the panels from overshooting mid-drag).
   const clampWidth = (width: number): number =>
@@ -380,7 +437,11 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const applyDrag = (width: number, height: number): void => {
     panelRef.current?.style.setProperty('width', `${width}px`)
     bottomRef.current?.style.setProperty('height', `${height}px`)
-    bottomRef.current?.style.setProperty('right', `${width + detailsWidth}px`)
+    // centerRect.right is the center column's right edge at the committed
+    // width (innerWidth - state.width - detailsWidth), so this equals
+    // `width + detailsWidth` — derived from the measured column, keeping the
+    // drag write-only (no React re-render mid-drag).
+    bottomRef.current?.style.setProperty('right', `${(window.innerWidth - centerRect.right) + (width - (state?.width ?? 0))}px`)
     document.documentElement.style.setProperty('--dsh-sidebar-width', `${width}px`)
     document.documentElement.style.setProperty('--dsh-sidebar-height', `${height}px`)
     if (cornerRef.current !== null) {
@@ -684,11 +745,13 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
         className={clsx(css.bottomPanel, !state.bottomOpen && css.bottomPanelHidden)}
         style={{
           height: Math.min(state.bottomHeight, window.innerHeight),
-          left: appSidebarWidth,
-          // Ends at the details column's left edge (the details column sits
-          // between the center and the right panel) plus the right panel's
-          // own width — the bottom panel squeezes ONLY the center column.
-          right: detailsWidth + (state.panelOpen ? Math.min(state.width, window.innerWidth) : 0),
+          left: centerRect.left,
+          // Direct from the center column's measured right edge: the bottom
+          // panel spans ONLY the center column, ending exactly at the
+          // details column's left edge (the details column sits between the
+          // center and the right panel, and the right panel's margin-right
+          // push is already baked into centerRect.right).
+          right: window.innerWidth - centerRect.right,
           // The seam against the open right panel needs its own hairline
           // (the right panel's border-left alone is covered by this panel's
           // fill — without it the corner looks cut off).
