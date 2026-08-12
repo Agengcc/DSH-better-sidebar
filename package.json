@@ -51,11 +51,11 @@
     "src"
   ],
   "scripts": {
-    "build": "rm -rf lib && tsc -p tsconfig.build.json && tsdown && node scripts/apply-ime-guard.mjs",
+    "build": "rm -rf lib && tsc -p tsconfig.build.json && tsdown",
     "typecheck": "tsc --noEmit",
-    "bundle": "tsdown && node scripts/apply-ime-guard.mjs",
+    "bundle": "tsdown",
     "watch": "tsdown --watch",
-    "prepare": "tsdown && node scripts/apply-ime-guard.mjs",
+    "prepare": "tsdown",
     "test": "vitest run"
   },
   "license": "MIT",
