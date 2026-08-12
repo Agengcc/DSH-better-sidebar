@@ -13,13 +13,40 @@ import { t } from '../locales.ts'
 import { openSidebarFile } from '../intercept.tsx'
 import { ExplorerView } from '../ExplorerView.tsx'
 import { EditorHost } from '../EditorHost.tsx'
-import { TerminalView } from '../TerminalView.tsx'
+import { lazyChunkComponent } from '../lazy-chunk.tsx'
 import { GitView } from '../GitView.tsx'
 import { DiffTab } from '../DiffTab.tsx'
 import { SubagentView } from '../SubagentView.tsx'
 import { BrowserView } from '../BrowserView.tsx'
 import { IconTerminalOutline16, IconDiffOutline16, IconGlobeOutline16 } from '../icons.tsx'
+import type { ComponentType } from 'react'
+import type { SessionScope } from '../api.ts'
+import type { SidebarStore } from '../state.ts'
 import type { TabDescriptor } from '../service.ts'
+
+/**
+ * Lazy wrapper over the terminal view: xterm (and its stylesheet) is fetched
+ * only when a terminal tab is first opened (see chunk-loader.ts). The
+ * wrapper keeps the descriptor contract `(props) => ReactNode` — Sidebar
+ * calls it as a plain function.
+ *
+ * TerminalView's props are { scope, tabId, store } — `tabId` is NOT part of
+ * TabComponentProps (it carries `tab: SidebarTab` instead), so the
+ * descriptor maps it explicitly; a bare pass-through would leave tabId
+ * undefined and TerminalView's isAgentTabId(tabId) would crash on
+ * `undefined.startsWith` (regression-pinned in tests/lazy-chunk.spec.tsx).
+ */
+const LazyTerminal = lazyChunkComponent<TerminalViewProps>(
+  'terminal',
+  (mod) => mod.TerminalView as ComponentType<TerminalViewProps> | undefined,
+)
+
+/** The terminal view's props (mirror of TerminalView's own signature). */
+interface TerminalViewProps {
+  scope: SessionScope
+  tabId: string
+  store: SidebarStore
+}
 
 /** How many UI-owned terminals may be open at once (agent-owned ones are uncapped). */
 export const TERMINAL_LIMIT = 3
@@ -133,9 +160,7 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
           patch: { nextTerminal: state.nextTerminal + 1 },
         }
       },
-      component: ({ scope, tab, store }) => (
-        <TerminalView scope={scope} tabId={tab.id} store={store} />
-      ),
+      component: ({ tab, scope, store }) => <LazyTerminal scope={scope} store={store} tabId={tab.id} />,
     },
     {
       id: 'browser',

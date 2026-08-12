@@ -6,15 +6,21 @@
  * binaries and serves doc/xls/ppt by extension; `code` is the catch-all
  * (`exts: []`, lowest priority) that claims any file no other viewer did.
  *
+ * The heavy viewers (docx/xlsx/pptx and the CodeMirror-backed
+ * markdown/html/code) render through {@link lazyChunkComponent} wrappers —
+ * their libraries are fetched only when such a file is first opened (see
+ * chunk-loader.ts). The descriptor metadata (id/exts/priority/detect) is
+ * identical either way, so matching semantics and external-plugin
+ * overrides are unaffected; the `component` wrapper keeps the descriptor
+ * contract `(props) => ReactNode`.
+ *
  * Every viewer carries the declarative settings-surface fields — `title`
  * and `icon` — so the Side card settings page can render the enable/disable
  * inventory without hardcoding (eating our own dogfood).
  */
 import { IconCodeOutline16, IconDownloadOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DocxView, XlsxView } from '../office-view.tsx'
+import { lazyChunkComponent } from '../lazy-chunk.tsx'
 import { PdfView } from '../PdfView.tsx'
-import { PptxView } from '../PptxView.tsx'
-import { TextEditor } from '../TextEditor.tsx'
 import { BinaryDownload } from '../binary-download.tsx'
 import {
   IconImageOutline16,
@@ -25,9 +31,21 @@ import {
   IconPptxOutline16,
   IconHtmlOutline16,
 } from '../icons.tsx'
-import type { FileViewerDescriptor } from '../service.ts'
+import type { ComponentType } from 'react'
+import type { FileViewerDescriptor, FileViewerProps } from '../service.ts'
 import { t } from '../locales.ts'
 import css from '../sidebar.module.css'
+
+/**
+ * Lazy wrappers over the chunk-resident viewer components. The `pick`
+ * functions are module-level (stable identity — the wrapper effect depends
+ * on them); the cast bridges the chunk exports record to the descriptor
+ * prop shape (the views read only their own subset of FileViewerProps).
+ */
+const LazyDocx = lazyChunkComponent<FileViewerProps>('docx', (mod) => mod.DocxView as ComponentType<FileViewerProps> | undefined)
+const LazyXlsx = lazyChunkComponent<FileViewerProps>('xlsx', (mod) => mod.XlsxView as ComponentType<FileViewerProps> | undefined)
+const LazyPptx = lazyChunkComponent<FileViewerProps>('pptx', (mod) => mod.PptxView as ComponentType<FileViewerProps> | undefined)
+const LazyTextEditor = lazyChunkComponent<FileViewerProps>('editor', (mod) => mod.TextEditor as ComponentType<FileViewerProps> | undefined)
 
 /** The 9 built-in file viewer descriptors. */
 export function builtinViewers(): readonly FileViewerDescriptor[] {
@@ -60,9 +78,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconDocxOutline16 size={size} />,
       exts: ['docx'],
       fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <DocxView scope={scope} path={path} title={title} />
-      ),
+      component: (props) => <LazyDocx {...props} />,
     },
     {
       id: 'xlsx',
@@ -70,9 +86,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconXlsxOutline16 size={size} />,
       exts: ['xlsx'],
       fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <XlsxView scope={scope} path={path} title={title} />
-      ),
+      component: (props) => <LazyXlsx {...props} />,
     },
     {
       id: 'pptx',
@@ -80,9 +94,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconPptxOutline16 size={size} />,
       exts: ['pptx'],
       fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <PptxView scope={scope} path={path} title={title} />
-      ),
+      component: (props) => <LazyPptx {...props} />,
     },
     {
       id: 'markdown',
@@ -90,7 +102,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       icon: (size: number) => <IconMarkdownOutline16 size={size} />,
       exts: ['md', 'markdown'],
       fetchStrategy: 'fsRead',
-      component: (props) => <TextEditor {...props} />,
+      component: (props) => <LazyTextEditor {...props} />,
     },
     {
       id: 'html',
@@ -112,7 +124,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
           desc: () => t('settingsHtmlDefaultUnsafeDesc'),
         }],
       },
-      component: (props) => <TextEditor {...props} />,
+      component: (props) => <LazyTextEditor {...props} />,
     },
     {
       id: 'code',
@@ -121,7 +133,7 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       exts: [],
       priority: -100,
       fetchStrategy: 'fsRead',
-      component: (props) => <TextEditor {...props} />,
+      component: (props) => <LazyTextEditor {...props} />,
     },
     {
       id: 'binary-download',

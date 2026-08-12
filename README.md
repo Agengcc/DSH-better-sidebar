@@ -8,6 +8,7 @@
 
 - **🗂️ 资源管理器**：懒加载目录树（根 = 会话 cwd）、点击在侧边栏打开、行尾 `@文件` 引用到输入框、右键复制路径
 - **📝 编辑与预览**：CodeMirror 6 多语言高亮 + Ctrl/Cmd+S 原子保存；图片 / Markdown（预览/编辑切换）/ HTML（沙箱 iframe 预览，相对资源可加载）/ PDF / Word / Excel / PPT 内联预览，切换 Tab 不丢草稿
+- **⚡ 客户端懒加载**：Office / 终端 / 代码编辑器等重依赖按需分块加载——启动只拉 ~325KB 核心，打开 .xlsx 才拉 Univer（~20MB）、打开 .docx 只拉 docx 预览器、打开终端才拉 xterm；首次打开短暂 loading 后即用（详见 `docs/plans/2026-08-12-lazy-chunks-design.md`）
 - **🌐 浏览器**：内嵌网页浏览 tab（多开），后退/前进/刷新 +「在浏览器中打开」；页面在**沙箱 iframe** 中运行（不透明源：无法访问界面数据与本地文件，拒绝 localhost 等本机地址），界面实时显示沙箱状态、可临时解锁（关闭时红色警示）；被站点拒绝嵌入（X-Frame-Options）时显示原因面板；聊天/界面里的 http(s) 外链默认在侧边栏打开
 - **💻 终端**：xterm.js + node-pty 真实 shell（每会话 3 个 UI 上限）、Tab 保活重连回放；可选为模型注入 8 个 `terminal_*` 工具
 - **🌿 Git 面板**：真 diff + VSCode 式 diff tab、懒加载历史、右键暂存/放弃/提交/还原/捡取

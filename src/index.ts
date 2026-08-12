@@ -1,11 +1,12 @@
 /**
  * dsh-better-sidebar host half: the /sidebar JSON API (explorer listing, file
- * read/write, git), the /sidebar/file media route (images), and the terminal
- * WebSocket upgrade. Every route passes the same browser-trust fence as the
- * /api gateway — Host-header loopback or the connection row's `trustedHosts`
- * (the `dsh web` launcher derives LAN IP literals per boot) — with the
- * trustedHosts read live from the connection loader row so the fence never
- * drifts from the deployment's.
+ * read/write, git), the /sidebar/file media route (images), the /sidebar/html
+ * preview route, the /sidebar/bundle lazy-chunk route (client code splits),
+ * and the terminal WebSocket upgrade. Every route passes the same
+ * browser-trust fence as the /api gateway — Host-header loopback or the
+ * connection row's `trustedHosts` (the `dsh web` launcher derives LAN IP
+ * literals per boot) — with the trustedHosts read live from the connection
+ * loader row so the fence never drifts from the deployment's.
  *
  * All operations are conversation-scoped: requests carry a sessionId, the
  * session's authoritative cwd comes from the session store, and terminal
@@ -29,6 +30,7 @@ import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from '.
 import { decodeHtmlUrl } from './html-route.ts'
 import { extractFrameAncestors } from './browser-probe.ts'
 import { isTrustedApiRequest, isLoopbackHostname } from './trust-fence.ts'
+import { registerBundleRoute } from './bundle-route.ts'
 import * as git from './git.ts'
 import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
@@ -516,6 +518,12 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
       }
     },
   }), 'dsh-better-sidebar: /sidebar/api routes')
+
+  // ── Lazy chunk route (client bundle splits) ─────────────────────────────
+  // Serves the client half's split bundles (lib/client-<name>.js) so the
+  // heavy preview/terminal libraries load on first use, not at page start
+  // (see bundle-route.ts / src/client/chunk-loader.ts).
+  ctx.effect(() => registerBundleRoute(ctx, fence), 'dsh-better-sidebar: /sidebar/bundle chunk route')
 
   // ── Media route (images for the editor) ─────────────────────────────────
   ctx.effect(() => ctx.httpServer.register({

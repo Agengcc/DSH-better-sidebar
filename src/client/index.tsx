@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { Context } from '../context-types.ts'
 import { createSidebarStore } from './state.ts'
 import { createBetterSidebarService } from './service.ts'
+import { resetChunks } from './chunk-loader.ts'
 import { registerBuiltins } from './builtins/index.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { registerOpenPathInterception, registerTurnTailInterception } from './intercept.tsx'
@@ -103,6 +104,10 @@ export function apply(ctx: Context): void {
     }
   }
   try {
+    // Fresh chunk state for this activation: invalidate any chunk factories
+    // registered by a previous fiber (HMR) and drop the in-memory load cache
+    // so the next lazy open re-fetches the current chunk scripts.
+    resetChunks()
     ctx.effect(() => {
       let disposed = false
       let root: Root | undefined

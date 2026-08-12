@@ -64,6 +64,17 @@ function bundleId(file: string): string {
   return match[1]!
 }
 
+/** The lazy chunk bundle names (mirror of src/bundle-route.ts CHUNK_NAMES). */
+const CHUNK_FILES = ['docx', 'xlsx', 'pptx', 'terminal', 'editor'].map(name => `lib/client-${name}.js`)
+
+/** The global registry slot a built chunk script assigns (its factory key). */
+function chunkSlot(file: string): string {
+  const source = readFileSync(resolve(ROOT, file), 'utf8')
+  const match = /globalThis\.__dshChunks__\["([a-z0-9-]+)"\]/.exec(source)
+  if (match === null) throw new Error(`${file} assigns no globalThis.__dshChunks__ slot — run \`pnpm build\` first`)
+  return match[1]!
+}
+
 describe('registry manifest consistency (dsh.plugin.json)', () => {
   it('id is a valid two-segment registry id (native form)', () => {
     expect(manifest.id).toMatch(ID_PATTERN)
@@ -86,13 +97,20 @@ describe('registry manifest consistency (dsh.plugin.json)', () => {
     expect(registryId).not.toBe(pkg.name)
   })
 
+  it('the lazy chunk bundles exist and assign their global registry slots (served by /sidebar/bundle)', () => {
+    for (const file of CHUNK_FILES) {
+      expect(existsSync(resolve(ROOT, file)), file).toBe(true)
+      expect(chunkSlot(file), file).toBe(file.slice('lib/client-'.length, -'.js'.length))
+    }
+  })
+
   it('client bundles require only frozen module-table entries', () => {
-    for (const file of ['lib/client.js', manifest.client!.main!]) {
+    for (const file of ['lib/client.js', manifest.client!.main!, ...CHUNK_FILES]) {
       const source = readFileSync(resolve(ROOT, file), 'utf8')
       // Exclude method calls such as `freeModule.require("util")`; only the
       // loader factory's lexical require() is constrained by the module table.
       const required = [...source.matchAll(/(^|[^.$\w])require\("([^"]+)"\)/gm)].map(match => match[2]!)
-      expect([...new Set(required)].filter(id => !CLIENT_REQUIRE_ALLOWED.has(id))).toEqual([])
+      expect([...new Set(required)].filter(id => !CLIENT_REQUIRE_ALLOWED.has(id)), file).toEqual([])
     }
   })
 

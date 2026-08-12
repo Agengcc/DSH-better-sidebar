@@ -47,6 +47,12 @@
     "lib/index.js",
     "lib/invariant.js",
     "lib/client.js",
+    "lib/client-registry.js",
+    "lib/client-docx.js",
+    "lib/client-xlsx.js",
+    "lib/client-pptx.js",
+    "lib/client-terminal.js",
+    "lib/client-editor.js",
     "lib/types/**/*.d.ts",
     "src"
   ],

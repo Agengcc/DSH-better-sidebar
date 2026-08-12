@@ -12,6 +12,8 @@ if (g.self === undefined) g.self = globalThis
 
 const elementStub = (): Record<string, unknown> => ({
   style: {},
+  dataset: {},
+  textContent: '',
   classList: { add: () => {}, remove: () => {}, contains: () => false },
   setAttribute: () => {},
   getAttribute: () => null,
@@ -32,9 +34,12 @@ if (g.document === undefined) {
     removeEventListener: () => {},
     defaultView: globalThis,
     body: elementStub(),
-    // CodeMirror's view module probes the UA and injects styles at load.
+    // CodeMirror's view module probes the UA and injects styles at load;
+    // the plugin's css-inline prologue probes for existing style tags.
     documentElement: elementStub(),
     head: elementStub(),
+    querySelector: () => null,
+    querySelectorAll: () => [],
     styleSheets: [],
   }
 }
