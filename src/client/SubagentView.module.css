@@ -273,3 +273,275 @@
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
+
+/* ── Background-task section (below the topology tree) ────────────────── */
+
+.tasks {
+  margin-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  padding-top: 8px;
+}
+
+.tasksHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 2px;
+}
+
+.tasksTitle {
+  flex: 1;
+  min-width: 0;
+  font: var(--dsw-font-xxxs-strong-11);
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasksCount {
+  flex: none;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tasksList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One task row; the whole row lights up on hover, the expandable target
+   stays transparent (the kill button rides on the row's right edge). */
+.tasksRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+
+.tasksRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.tasksRowSettled {
+  opacity: 0.8;
+}
+
+/* The row whose output is shown in the bottom dock. */
+.tasksRowSelected,
+.tasksRowSelected:hover {
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+.tasksRowMain {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 6px 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: var(--dsw-font-s-14);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.tasksRowMain:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.tasksDot {
+  margin-top: 5px;
+}
+
+.tasksContent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+/* The command line: a kind badge followed by the command itself in the code
+   face, like the terminal's live lines. */
+.tasksLabelLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tasksKind {
+  flex: none;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  font: var(--dsw-font-xxxs-strong-11);
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tasksLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: var(--dsw-font-xxxs-11-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.tasksSecondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tasksKill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.tasksKill:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The armed (first-click) state: a filled confirm chip instead of the icon. */
+.tasksKillArmed,
+.tasksKillArmed:hover {
+  width: auto;
+  height: 20px;
+  padding: 0 8px;
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+  font: var(--dsw-font-xxxs-strong-11);
+  white-space: nowrap;
+}
+
+.tasksKill:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tasksKillError {
+  flex: none;
+  margin-right: 4px;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* ── The shared output dock (bottom of the page, sticky like a terminal) ── */
+
+/* Direct child of the scrolling body, so it docks at the scrollport's bottom
+   edge while the task list scrolls above it; a solid background keeps the
+   tree from showing through. */
+.tasksPane {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 -6px 12px -8px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.tasksPaneHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.tasksPaneDot {
+  flex: none;
+}
+
+.tasksPaneLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: var(--dsw-font-xxxs-11-line-height);
+  color: var(--dsw-alias-label-primary);
+}
+
+.tasksPaneStatus {
+  flex: none;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tasksPaneClose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.tasksPaneClose:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.tasksPanePre {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 6px 10px;
+  font-family: var(--ds-font-family-code);
+  font-size: var(--dsw-font-xxxs-11-font-size);
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tasksPaneHint {
+  padding: 8px 10px;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tasksPaneError {
+  color: var(--dsw-alias-state-error-primary);
+}

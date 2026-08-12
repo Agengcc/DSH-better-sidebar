@@ -150,6 +150,50 @@ export interface SidebarHistoryEntry {
   view?: unknown
 }
 
+/** Lifecycle status set of one background task (closed wire union). */
+export type SidebarTaskStatus = 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
+
+/**
+ * One background task as the client mirror sees it (wire `TaskView` shape:
+ * id/kind/label/status/detail?/startedAt/finishedAt?).
+ */
+export interface SidebarTaskView {
+  /** Registry-issued `<kind>-N` identity, stable for the task's whole life. */
+  id: string
+  /** Producer kind (`bash`, `pwsh`, `subagent`, …; open string by design). */
+  kind: string
+  /** Producer-supplied one-line label: the command, or the delegation description. */
+  label: string
+  /** Current lifecycle state. */
+  status: SidebarTaskStatus
+  /** Kind-specific status detail ('exit code: 3'), present once supplied. */
+  detail?: string
+  /** Epoch ms when the task was registered. */
+  startedAt: number
+  /** Epoch ms when the task settled; absent while live. */
+  finishedAt?: number
+}
+
+/** The host tasks registry face the sidebar routes touch (structural mirror of `TaskService`). */
+export interface SidebarTasksService {
+  /**
+   * Non-consuming full-output read (never advances the model's read cursor,
+   * never marks the task reported). Throws for an unknown or foreign task.
+   */
+  peek(id: string, caller?: SidebarAgent): {
+    text: string
+    snapshot: { status: SidebarTaskStatus; detail?: string }
+  }
+  /** Request cancellation; throws for an unknown or foreign task. */
+  kill(id: string, caller?: SidebarAgent, reason?: string): 'requested' | 'already-finished'
+}
+
+/** The host agent registry face (structural mirror of the runtime `ctx.agents`). */
+export interface SidebarAgentsService {
+  /** The live agent registered under a session id, or undefined when not live. */
+  get(id: string): SidebarAgent | undefined
+}
+
 /** RPC result slot mirror (`RpcResult<T>` on the wire). */
 export type SidebarRpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 
@@ -177,6 +221,12 @@ export interface SidebarSessionList {
   byId: Record<string, SidebarSessionSummary>
   /** Direct durable catalogs keyed by their selected parent address. */
   subagentsByParent?: Readonly<Record<string, SidebarSubagentCatalog>>
+  /**
+   * Background tasks per session, last-wins from the harness's `session/tasks`
+   * push (a missing key is an empty set). Absent on runtime snapshots older
+   * than the tasks mirror — the sidebar simply shows no task rows.
+   */
+  tasksBySession?: Readonly<Record<string, readonly SidebarTaskView[]>>
 }
 
 /** The client sessions service face (only the list feed is needed). */
@@ -322,6 +372,16 @@ declare module 'cordis' {
     settings: SidebarSettingsService
     invariants: SidebarInvariantsService
     tools: SidebarToolsService
+    /**
+     * The host background-task registry (`ctx.get('tasks')`; optional — the
+     * sidebar routes degrade to a 503 when the deployment lacks it).
+     */
+    tasks: SidebarTasksService
+    /**
+     * The host live-agent registry (`ctx.get('agents')`; optional — used to
+     * resolve the caller the tasks fence compares against).
+     */
+    agents: SidebarAgentsService
     /**
      * The client-side sidebar registry: external plugins register tab types
      * and file previewers here. Provided by the client half (see

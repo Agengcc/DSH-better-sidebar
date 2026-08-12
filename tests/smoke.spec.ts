@@ -27,6 +27,8 @@ interface FakeContext {
   /** The settings service never appears in the smoke context: the inject
    *  callback must never run (mirror of cordis' service-less inject). */
   inject: (deps: readonly string[], callback: (sctx: never) => void) => () => void
+  /** Optional services (tasks/agents) are read lazily; absent → undefined. */
+  get: (key: string) => undefined
 }
 
 describe('host plugin smoke', () => {
@@ -56,6 +58,8 @@ describe('host plugin smoke', () => {
       // No settings service in the smoke context: the registration callback
       // never runs (cordis' service-less inject behaves the same).
       inject: () => () => {},
+      // No tasks/agents services: the tasks routes degrade to a 503.
+      get: () => undefined,
     }
     apply(ctx as never)
     expect(routes.map(route => route.path)).toEqual(['/sidebar/api', '/sidebar/bundle', '/sidebar/file', '/sidebar/html'])
@@ -315,6 +319,8 @@ describe('session cwd resolution over the API route', () => {
       effect: (fn: () => void | (() => void)) => { fn() },
       // No settings service: the namespace registration never runs.
       inject: () => () => {},
+      // No tasks/agents services in the smoke context: the routes degrade.
+      get: () => undefined,
     }
     apply(ctx as never)
     return routes.find(route => route.path === '/sidebar/api')!
@@ -464,6 +470,8 @@ describe('side card settings routes', () => {
         if (deps.includes('settings') && settings !== undefined) callback({ settings })
         return () => {}
       },
+      // No tasks/agents services: the tasks routes degrade to a 503.
+      get: () => undefined,
     }
     apply(ctx as never)
     return routes.find(route => route.path === '/sidebar/api')!
@@ -647,6 +655,8 @@ describe('agent terminal tool gating', () => {
         if (deps.includes('settings')) callback({ settings })
         return () => {}
       },
+      // No tasks/agents services: the tasks routes degrade to a 503.
+      get: () => undefined,
     }
     apply(ctx as never)
     // Default off: no tools are registered even though the settings service is mounted.

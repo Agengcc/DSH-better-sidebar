@@ -8,6 +8,7 @@
  */
 import { encodeHtmlUrl } from '../html-route.ts'
 import type { BrowserProbeResult } from './browser.ts'
+import type { SidebarTaskStatus } from '../context-types.ts'
 
 /** One wire failure. */
 export class SidebarApiError extends Error {
@@ -59,6 +60,15 @@ export interface FsTextResult { kind: 'text'; content: string; truncated: boolea
 /** Binary read result (no content; images load through the media route).
  *  `head` carries the first bytes (base64) for viewer detect sniffing. */
 export interface FsBinaryResult { kind: 'binary'; size: number; truncated: boolean; head: string }
+
+/** One tasks.output response: the peeked full text (capped) plus the wire status. */
+export interface TaskOutputResult {
+  text: string
+  /** True when the host capped the text at its output limit. */
+  truncated: boolean
+  status: SidebarTaskStatus
+  detail?: string
+}
 
 async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   let response: Response
@@ -145,6 +155,20 @@ export const api = {
   /** Release an agent terminal by uuid (tab closed while WS was down). */
   agentPtyClose: (uuid: string) =>
     call<{ ok: true }>('agent-pty.close', { uuid }),
+  /**
+   * Full accumulated output of one background task (the host's NON-CONSUMING
+   * peek — the model's task_output cursor and report bit are untouched, so a
+   * human watching a stream never steals the agent's bytes). The scope MUST
+   * be the task's OWNER session (the tasks registry fences by session id).
+   */
+  taskOutput: (scope: SessionScope, id: string, signal?: AbortSignal) =>
+    call<TaskOutputResult>('tasks.output', scopePayload(scope, { id }), signal),
+  /** Request cancellation of one background task (live tasks flip to stopping). */
+  taskKill: (scope: SessionScope, id: string, reason?: string) =>
+    call<{ ok: true; outcome: 'requested' | 'already-finished' }>('tasks.kill', scopePayload(scope, {
+      id,
+      ...(reason !== undefined ? { reason } : {}),
+    })),
   /** Read the side card preferences (plugin-global, no session scope). */
   settingsGet: () =>
     call<{ value?: unknown; revision?: number }>('settings.get', {}),

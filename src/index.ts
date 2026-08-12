@@ -36,6 +36,7 @@ import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 import { AgentPtyRegistry, clampDims, type AgentTerminalHandle } from './agent-pty.ts'
 import { registerTools } from './tools.ts'
+import { buildTasksApi, type SidebarTasksRoutes } from './tasks-routes.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
 export { Config }
@@ -198,6 +199,11 @@ function buildApi(
     const clientCwd = typeof record?.cwd === 'string' && record.cwd !== '' ? record.cwd : undefined
     return { sessionId, cwd: sessionCwdOf(ctx, sessionId, clientCwd) }
   }
+  // Background tasks: the LIST rides the harness's `session/tasks` push
+  // mirror, so these routes only read output (a non-consuming peek — the
+  // model's task_output cursor is never touched) and kill. A deployment
+  // without the tasks registry downgrades to a 503, like the settings routes.
+  const tasksApi: SidebarTasksRoutes | undefined = buildTasksApi(ctx, resolved.readLimit)
   return {
     'session.cwd': (payload) => {
       const { sessionId, cwd } = cwdOf(payload)
@@ -326,6 +332,24 @@ function buildApi(
       const uuid = requireString(payload, 'uuid')
       agentPtyRegistry.close(uuid)
       return { ok: true }
+    },
+    // Background tasks: read one task's FULL output (a non-consuming peek —
+    // the model's task_output cursor and report bit are untouched, so a
+    // human watching a stream never steals the agent's bytes), and kill one
+    // task. The task LIST itself arrives through the harness's session/tasks
+    // push mirror, so no list route exists. Access is fenced to the owning
+    // session by the tasks registry (the caller resolves from sessionId).
+    'tasks.output': (payload) => {
+      if (tasksApi === undefined) {
+        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
+      }
+      return tasksApi.output(payload)
+    },
+    'tasks.kill': (payload) => {
+      if (tasksApi === undefined) {
+        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
+      }
+      return tasksApi.kill(payload)
     },
     // The side card preferences. The settings service is optional in the
     // composition; while absent the routes report undefined and the client

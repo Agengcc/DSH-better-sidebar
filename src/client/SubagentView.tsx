@@ -27,11 +27,13 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   Context,
+  SidebarSessionList,
   SidebarSessionSummary,
   SidebarSubagentAddress,
   SidebarSubagentCatalog,
   SidebarSubagentChildEntry,
   SidebarSubagentDiagnosticEntry,
+  SidebarTaskView,
 } from '../context-types.ts'
 import {
   collectBranchIds,
@@ -39,6 +41,17 @@ import {
   rootAncestor,
 } from './subagent-detect.ts'
 import { lastActivity } from './subagent-activity.ts'
+import {
+  collectTreeTasks,
+  formatTaskDuration,
+  isTaskLive,
+  orderTasks,
+  taskDotState,
+  taskStatusLabel,
+  type TreeTask,
+} from './subagent-tasks.ts'
+import { api, type TaskOutputResult } from './api.ts'
+import { IconStopOutline16 } from './icons.tsx'
 import { t } from './locales.ts'
 import css from './SubagentView.module.css'
 
@@ -46,6 +59,10 @@ import css from './SubagentView.module.css'
 const POLL_MS = 3000
 /** Preview cap of one tool-call argument line. */
 const ARGS_PREVIEW = 60
+/** Refresh cadence of an expanded task-output panel while its task runs. */
+const TASK_POLL_MS = 2000
+/** How long the kill button stays armed before it needs re-confirming. */
+const TASK_KILL_ARM_MS = 3000
 
 /** The direct subagent children of one parent (durable `origin` rows). */
 function directChildren(
@@ -341,6 +358,259 @@ function CatalogRows({
 }
 
 /**
+ * The shared output dock of the tasks section: ONE pane at the bottom of the
+ * sidebar body (sticky, terminal-like) shows the SELECTED task's FULL
+ * accumulated output via the host's NON-CONSUMING peek (`tasks.output`),
+ * refreshed every {@link TASK_POLL_MS} while the task runs and the page is
+ * visible. The model's own `task_output` cursor is never touched, so
+ * watching a stream cannot steal the agent's bytes. A single dock — not a
+ * panel per row — keeps the task list compact and stable when many tasks
+ * are running.
+ */
+function TaskOutputPane(props: {
+  ownerSessionId: string
+  task: SidebarTaskView
+  /** The page is visible (active tab + open panel): skip polling otherwise. */
+  active: boolean
+  onClose: () => void
+}) {
+  const { ownerSessionId, task, active, onClose } = props
+  const [state, setState] = useState<'loading' | TaskOutputResult | 'error'>('loading')
+  const controllerRef = useRef<AbortController | undefined>(undefined)
+  const preRef = useRef<HTMLPreElement>(null)
+
+  const load = useCallback(async (): Promise<void> => {
+    controllerRef.current?.abort()
+    const controller = new AbortController()
+    controllerRef.current = controller
+    try {
+      const result = await api.taskOutput({ sessionId: ownerSessionId }, task.id, controller.signal)
+      setState(result)
+    } catch {
+      // A newer pull aborted this one, or the wire failed: keep the last
+      // known output; only a dock that never loaded anything shows an error.
+      setState(current => (current === 'loading' ? 'error' : current))
+    }
+  }, [ownerSessionId, task.id])
+
+  useEffect(() => {
+    void load()
+    if (!active || !isTaskLive(task)) return
+    const timer = window.setInterval(() => { void load() }, TASK_POLL_MS)
+    return () => { window.clearInterval(timer) }
+  }, [load, active, task.status])
+
+  useEffect(() => () => { controllerRef.current?.abort() }, [])
+
+  // Terminal-tail behavior: while the task runs, each refresh pins the view
+  // to the newest output; a settled dock leaves scrolling to the reader.
+  useEffect(() => {
+    if (!isTaskLive(task) || typeof state !== 'object' || state.text.length === 0) return
+    const pre = preRef.current
+    if (pre !== null) pre.scrollTop = pre.scrollHeight
+  }, [state, task.status])
+
+  return (
+    <div className={css.tasksPane} role="region" aria-label={`${task.label} ${t('tasks')}`}>
+      <div className={css.tasksPaneHeader}>
+        <StateDot state={taskDotState(task.status)} className={css.tasksPaneDot} />
+        <span className={css.tasksPaneLabel} title={task.label}>{task.label}</span>
+        <span className={css.tasksPaneStatus}>
+          {taskStatusLabel(task.status, t)}
+          {task.detail !== undefined && task.detail !== '' ? ` · ${task.detail}` : ''}
+        </span>
+        <button
+          type="button"
+          className={css.tasksPaneClose}
+          aria-label={t('close')}
+          title={t('close')}
+          onClick={onClose}
+        >
+          <IconStopOutline16 size={10} />
+        </button>
+      </div>
+      {state === 'loading' && <div className={css.tasksPaneHint}>{t('loading')}</div>}
+      {state === 'error' && (
+        <div className={`${css.tasksPaneHint} ${css.tasksPaneError}`}>{t('taskOutputError')}</div>
+      )}
+      {typeof state === 'object' && (
+        <>
+          {state.text.length > 0
+            ? <pre ref={preRef} className={css.tasksPanePre}>{state.text}</pre>
+            : <div className={css.tasksPaneHint}>{t('taskNoOutput')}</div>}
+          {state.truncated && <div className={css.tasksPaneHint}>{t('taskOutputTruncated')}</div>}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The background-task section of the Subagent page: every task of the whole
+ * current tree (main agent + subagents, owner-labeled), fed by the harness
+ * `session/tasks` push mirror. Clicking a row feeds its output to the shared
+ * bottom dock (non-consuming peek); live rows carry a two-click-confirm
+ * kill button. Renders nothing while the tree has no tasks.
+ */
+function TasksSection(props: {
+  byId: SidebarSessionList['byId']
+  tasksBySession: SidebarSessionList['tasksBySession']
+  rootId: string | undefined
+  /** The page is visible (active tab + open panel): skip polling otherwise. */
+  active: boolean
+}) {
+  const { byId, tasksBySession, rootId, active } = props
+  const rows = useMemo(
+    () => orderTasks(collectTreeTasks(byId, tasksBySession, rootId)),
+    [byId, tasksBySession, rootId],
+  )
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
+  const [armedId, setArmedId] = useState<string | undefined>(undefined)
+  const [killingId, setKillingId] = useState<string | undefined>(undefined)
+  const [killErrorId, setKillErrorId] = useState<string | undefined>(undefined)
+  // The duration clock only runs while a live row is on screen.
+  const [now, setNow] = useState(() => Date.now())
+
+  const selectedRow = useMemo(
+    () => (selectedId === undefined ? undefined : rows.find(row => row.task.id === selectedId)),
+    [rows, selectedId],
+  )
+
+  const liveCount = useMemo(
+    () => rows.reduce((count, row) => count + (isTaskLive(row.task) ? 1 : 0), 0),
+    [rows],
+  )
+  const multiOwner = useMemo(
+    () => new Set(rows.map(row => row.ownerSessionId)).size > 1,
+    [rows],
+  )
+
+  // The kill button stays armed only briefly; a stray click must never kill.
+  useEffect(() => {
+    if (armedId === undefined) return
+    const timer = window.setTimeout(() => { setArmedId(undefined) }, TASK_KILL_ARM_MS)
+    return () => { window.clearTimeout(timer) }
+  }, [armedId])
+
+  useEffect(() => {
+    if (liveCount === 0) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => { setNow(Date.now()) }, 1_000)
+    return () => { window.clearInterval(timer) }
+  }, [liveCount])
+
+  // The docked output pane follows its task: when the selected task leaves
+  // the mirror (settled and dropped, or the tree switched), close the dock.
+  useEffect(() => {
+    if (selectedId !== undefined && selectedRow === undefined) setSelectedId(undefined)
+  }, [selectedId, selectedRow])
+
+  // NOTE: every hook must live ABOVE the empty-state return — a hook below it
+  // would flip this component's hook count when the mirror empties and crash
+  // React with "Rendered fewer hooks than expected" (the #300 regression).
+  const kill = useCallback(async (row: TreeTask): Promise<void> => {
+    setKillingId(row.task.id)
+    setKillErrorId(undefined)
+    try {
+      await api.taskKill({ sessionId: row.ownerSessionId }, row.task.id)
+    } catch {
+      setKillErrorId(row.task.id)
+    } finally {
+      setKillingId(undefined)
+      setArmedId(undefined)
+    }
+  }, [])
+
+  if (rows.length === 0) return null
+
+  const countLabel = liveCount > 0
+    ? t('tasksCountRunning', { count: rows.length, running: liveCount })
+    : t('tasksCount', { count: rows.length })
+
+  return (
+    <>
+      <section className={css.tasks} aria-label={t('tasks')}>
+        <div className={css.tasksHeader}>
+          <span className={css.tasksTitle}>{t('tasks')}</span>
+          <span className={css.tasksCount}>{countLabel}</span>
+        </div>
+        <ul className={css.tasksList} aria-label={t('tasks')}>
+          {rows.map((row) => {
+            const { task } = row
+            const live = isTaskLive(task)
+            const selected = selectedId === task.id
+            const armed = armedId === task.id
+            const killing = killingId === task.id
+            const killFailed = killErrorId === task.id
+            const elapsed = live
+              ? now - task.startedAt
+              : (task.finishedAt ?? task.startedAt) - task.startedAt
+            const secondary = [
+              ...(multiOwner ? [row.ownerTitle] : []),
+              taskStatusLabel(task.status, t),
+              ...(task.detail !== undefined && task.detail !== '' ? [task.detail] : []),
+              formatTaskDuration(elapsed, t),
+            ].filter(Boolean).join(' · ')
+            return (
+              <li
+                key={task.id}
+                className={clsx(
+                  css.tasksRow,
+                  !live && css.tasksRowSettled,
+                  selected && css.tasksRowSelected,
+                )}
+              >
+                <button
+                  type="button"
+                  className={css.tasksRowMain}
+                  aria-pressed={selected}
+                  aria-label={`${task.label} ${secondary}`}
+                  onClick={() => { setSelectedId(selected ? undefined : task.id) }}
+                >
+                  <StateDot state={taskDotState(task.status)} className={css.tasksDot} />
+                  <span className={css.tasksContent}>
+                    <span className={css.tasksLabelLine}>
+                      <span className={css.tasksKind}>{task.kind}</span>
+                      <span className={css.tasksLabel} title={task.label}>{task.label}</span>
+                    </span>
+                    <span className={css.tasksSecondary}>{secondary}</span>
+                  </span>
+                </button>
+                {task.status === 'running' && (
+                  <button
+                    type="button"
+                    className={armed ? `${css.tasksKill} ${css.tasksKillArmed}` : css.tasksKill}
+                    aria-label={armed ? t('taskKillConfirm') : t('taskKill')}
+                    title={armed ? t('taskKillConfirm') : t('taskKill')}
+                    disabled={killing}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (armed) void kill(row)
+                      else setArmedId(task.id)
+                    }}
+                  >
+                    {armed ? t('taskKillConfirm') : <IconStopOutline16 size={12} />}
+                  </button>
+                )}
+                {killFailed && <span className={css.tasksKillError}>{t('taskKillError')}</span>}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+      {selectedRow !== undefined && (
+        <TaskOutputPane
+          ownerSessionId={selectedRow.ownerSessionId}
+          task={selectedRow.task}
+          active={active}
+          onClose={() => { setSelectedId(undefined) }}
+        />
+      )}
+    </>
+  )
+}
+
+/**
  * The sidebar's Subagent topology page.
  * @param props - current session id, whether the page is actually visible
  *   (active tab + open panel), the client context, and an optional
@@ -515,69 +785,78 @@ export function SubagentView(props: {
       <div
         ref={bodyRef}
         className={css.subagentBody}
-        role="tree"
-        aria-label={t('subagent')}
-        aria-busy={summaryBackedLoading || undefined}
         onKeyDown={onTreeKeyDown}
       >
-        {rootId !== undefined && rootSummary !== undefined && (
-          <div
-            role="treeitem"
-            tabIndex={0}
-            aria-level={0}
-            aria-label={`${rootSummary.displayTitle !== '' ? rootSummary.displayTitle : t('subagentMainAgent')} ${t('subagentMainAgent')}`}
-            aria-current={rootId === sessionId ? 'true' : undefined}
-            className={clsx(css.subagentRow, rootId === sessionId && css.subagentRowActive)}
-            onClick={openMain}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                event.stopPropagation()
-                openMain()
-              }
-            }}
-          >
-            <StateDot
-              state={rootSummary.running === true ? 'ongoing' : 'done'}
-              className={css.subagentDot}
-            />
-            <span className={css.subagentContent}>
-              <span className={css.subagentLabel}>
-                {rootSummary.displayTitle !== '' ? rootSummary.displayTitle : t('subagentMainAgent')}
-              </span>
-              <span className={css.subagentSecondary}>
-                {`${t('subagentMainAgent')} · ${rootSummary.running === true ? t('subagentRunning') : t('subagentInactive')}`}
-              </span>
-            </span>
-          </div>
-        )}
-        {rootId !== undefined && (
-          <div className={css.subagentChildren} role="group" aria-busy={summaryBackedLoading || undefined}>
-            {summaryBackedLoading && (
-              <CatalogLoadingRows parentSessionId={rootId} byId={byId} level={1} />
-            )}
-            {!summaryBackedLoading && (
-              <CatalogRows
-                parentSessionId={rootId}
-                catalog={rootCatalog}
-                catalogs={catalogs}
-                byId={byId}
-                level={1}
-                currentSessionId={sessionId}
-                active={active}
-                ctx={ctx}
-                openChild={openChild}
-                refresh={refresh}
+        <div
+          role="tree"
+          aria-label={t('subagent')}
+          aria-busy={summaryBackedLoading || undefined}
+        >
+          {rootId !== undefined && rootSummary !== undefined && (
+            <div
+              role="treeitem"
+              tabIndex={0}
+              aria-level={0}
+              aria-label={`${rootSummary.displayTitle !== '' ? rootSummary.displayTitle : t('subagentMainAgent')} ${t('subagentMainAgent')}`}
+              aria-current={rootId === sessionId ? 'true' : undefined}
+              className={clsx(css.subagentRow, rootId === sessionId && css.subagentRowActive)}
+              onClick={openMain}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  openMain()
+                }
+              }}
+            >
+              <StateDot
+                state={rootSummary.running === true ? 'ongoing' : 'done'}
+                className={css.subagentDot}
               />
-            )}
-          </div>
-        )}
-        {readyEmpty && (
-          <div className={css.subagentEmpty}>
-            <div>{t('subagentEmpty')}</div>
-            <div className={css.subagentEmptyHint}>{t('subagentEmptyDesc')}</div>
-          </div>
-        )}
+              <span className={css.subagentContent}>
+                <span className={css.subagentLabel}>
+                  {rootSummary.displayTitle !== '' ? rootSummary.displayTitle : t('subagentMainAgent')}
+                </span>
+                <span className={css.subagentSecondary}>
+                  {`${t('subagentMainAgent')} · ${rootSummary.running === true ? t('subagentRunning') : t('subagentInactive')}`}
+                </span>
+              </span>
+            </div>
+          )}
+          {rootId !== undefined && (
+            <div className={css.subagentChildren} role="group" aria-busy={summaryBackedLoading || undefined}>
+              {summaryBackedLoading && (
+                <CatalogLoadingRows parentSessionId={rootId} byId={byId} level={1} />
+              )}
+              {!summaryBackedLoading && (
+                <CatalogRows
+                  parentSessionId={rootId}
+                  catalog={rootCatalog}
+                  catalogs={catalogs}
+                  byId={byId}
+                  level={1}
+                  currentSessionId={sessionId}
+                  active={active}
+                  ctx={ctx}
+                  openChild={openChild}
+                  refresh={refresh}
+                />
+              )}
+            </div>
+          )}
+          {readyEmpty && (
+            <div className={css.subagentEmpty}>
+              <div>{t('subagentEmpty')}</div>
+              <div className={css.subagentEmptyHint}>{t('subagentEmptyDesc')}</div>
+            </div>
+          )}
+        </div>
+        <TasksSection
+          byId={byId}
+          tasksBySession={list.tasksBySession}
+          rootId={rootId}
+          active={active}
+        />
       </div>
     </div>
   )
