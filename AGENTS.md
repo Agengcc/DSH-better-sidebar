@@ -269,7 +269,7 @@ interface FileViewerProps {
 |---|---|---|---|
 | `none` | 不需要字节 | （无） | 自渲染（如纯 UI） |
 | `fsRead` | `/sidebar/api` 的 `fs.read` | `content`, `truncated` | 文本类（CSV/JSON/XML） |
-| `mediaUrl` | `/sidebar/file` 媒体路由 URL | `mediaUrl` | 图片/PDF/Office（viewer 自己 fetch 字节） |
+| `mediaUrl` | `/sidebar/file` 媒体路由 URL | `mediaUrl` | 图片/PDF（viewer 自己 fetch 字节）；Office 由 `dsh-better-sidebar-plugin-office` 提供 |
 | `custom` | viewer 的 `load()` 函数 | `customData` | 自定义协议（如远程拉取） |
 | `binary-download` | 不预览，显示下载按钮 | （无） | 无客户端渲染器的二进制格式 |
 
@@ -284,7 +284,8 @@ interface FileViewerProps {
 
 > **head 字节从哪来**：第一次匹配（纯扩展名）没有 head。`fsRead` 策略读取后若文件为二进制，host 的 `fs.read` 响应会带 `head` 字段（base64，前 4KB），编辑器会用它对 `detect` viewer **重匹配一次**——所以 detect 型 viewer 的实际触发场景是"扩展名匹配落空/二进制文件"。文本文件的 detect 嗅探不在内置流程内（用 `exts` 或 `custom` 策略替代）。
 
-> **内置 viewer**（不可重复注册，全部 9 个）：image(0) / pdf(0) / docx(0) / xlsx(0) / pptx(0) / markdown(0, fsRead) / html(0, fsRead, 沙箱 iframe 预览) / code(-100, catch-all, fsRead) / binary-download(-50, exts doc/xls/ppt + NUL detect)。
+> **内置 viewer**（不可重复注册，全部 6 个）：image(0) / pdf(0) / markdown(0, fsRead) / html(0, fsRead, 沙箱 iframe 预览) / code(-100, catch-all, fsRead) / binary-download(-50, exts doc/xls/ppt + NUL detect)。
+> 内置不注册 Office 扩展名：`.docx/.xlsx/.pptx` 由独立插件 `dsh-better-sidebar-plugin-office` 以 `docx`/`xlsx`/`pptx` viewer id 注册（mediaUrl，priority 0），与内置 viewer 同套 API。
 > code 是兜底 viewer：任何其他 viewer 未认领的文件都会落到 code（CodeMirror 文本编辑）；二进制文件经 head 重匹配被 binary-download 的 NUL detect 认领（下载按钮）。外部 viewer 注册同扩展名 + 更高 priority 即可覆盖。
 
 ### 4.5 注册示例
@@ -479,11 +480,11 @@ function parseCsv(text: string): string[][] { /* ... */ }
 
 better-sidebar 自己的内置 tab 和 viewer 就是参考实现（"吃狗粮"）：
 
-- **`src/client/builtins/`**：7 个内置 tab（explorer/git/subagent/terminal/browser/editor/diff）+ 9 个内置 viewer（image/pdf/docx/xlsx/pptx/markdown/html/code/binary-download）的注册代码（tabs.tsx / viewers.tsx / index.ts）
+- **`src/client/builtins/`**：7 个内置 tab（explorer/git/subagent/terminal/browser/editor/diff）+ 6 个内置 viewer（image/pdf/markdown/html/code/binary-download）的注册代码（tabs.tsx / viewers.tsx / index.ts）。Office 三件套（docx/xlsx/pptx）注册已移至独立插件 `dsh-better-sidebar-plugin-office`
 - **`src/client/service.ts`**：`BetterSidebarService` 接口 + `createBetterSidebarService` 工厂实现
 - **`src/client/SideCardSection.tsx`**：声明式设置页（注册表驱动清单 + `settings.toggles` 嵌套开关 + 开关持久化）
 - **`tests/service.spec.ts`**：注册表生命周期 / 匹配算法 / dedupe / createTab / 启用态 gating 测试
-- **`tests/builtins.spec.ts`**：内置注册清单断言（7 tab + 9 viewer + 声明式元数据）
+- **`tests/builtins.spec.ts`**：内置注册清单断言（7 tab + 6 viewer + 声明式元数据）
 - **`docs/plans/2026-08-11-service-registry-design.md`** / **`docs/plans/2026-08-11-declarative-sidebar-settings-design.md`**：设计文档（含实施偏差记录）
 
 调试时直接读这些文件即可看到所有 API 的真实用法。

@@ -1,35 +1,33 @@
 /**
- * The 9 built-in file viewer descriptors: every preview surface is a
- * registered viewer (image / pdf / docx / xlsx / pptx / markdown / html /
- * code / binary-download), exactly like external plugins register theirs.
- * The `binary-download` viewer sniffs NUL bytes via `detect` for unknown
- * binaries and serves doc/xls/ppt by extension; `code` is the catch-all
- * (`exts: []`, lowest priority) that claims any file no other viewer did.
+ * The 6 built-in file viewer descriptors: every preview surface is a
+ * registered viewer (image / pdf / markdown / html / code /
+ * binary-download), exactly like external plugins register theirs. Office
+ * files (.docx/.xlsx/.pptx) preview through the separate
+ * `dsh-better-sidebar-plugin-office` plugin, which registers its viewers the
+ * same way. The `binary-download` viewer sniffs NUL bytes via `detect` for
+ * unknown binaries and serves doc/xls/ppt by extension; `code` is the
+ * catch-all (`exts: []`, lowest priority) that claims any file no other
+ * viewer did.
  *
  * Every viewer carries the declarative settings-surface fields — `title`
  * and `icon` — so the Side card settings page can render the enable/disable
  * inventory without hardcoding (eating our own dogfood).
  */
 import { IconCodeOutline16, IconDownloadOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { DocxView, XlsxView } from '../office-view.tsx'
 import { PdfView } from '../PdfView.tsx'
-import { PptxView } from '../PptxView.tsx'
 import { TextEditor } from '../TextEditor.tsx'
 import { BinaryDownload } from '../binary-download.tsx'
 import {
   IconImageOutline16,
   IconMarkdownOutline16,
   IconPdfOutline16,
-  IconDocxOutline16,
-  IconXlsxOutline16,
-  IconPptxOutline16,
   IconHtmlOutline16,
 } from '../icons.tsx'
 import type { FileViewerDescriptor } from '../service.ts'
 import { t } from '../locales.ts'
 import css from '../sidebar.module.css'
 
-/** The 9 built-in file viewer descriptors. */
+/** The 6 built-in file viewer descriptors. */
 export function builtinViewers(): readonly FileViewerDescriptor[] {
   return [
     {
@@ -52,36 +50,6 @@ export function builtinViewers(): readonly FileViewerDescriptor[] {
       fetchStrategy: 'mediaUrl',
       component: ({ scope, path, title }) => (
         <PdfView scope={scope} path={path} title={title} />
-      ),
-    },
-    {
-      id: 'docx',
-      title: () => t('viewerDocx'),
-      icon: (size: number) => <IconDocxOutline16 size={size} />,
-      exts: ['docx'],
-      fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <DocxView scope={scope} path={path} title={title} />
-      ),
-    },
-    {
-      id: 'xlsx',
-      title: () => t('viewerXlsx'),
-      icon: (size: number) => <IconXlsxOutline16 size={size} />,
-      exts: ['xlsx'],
-      fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <XlsxView scope={scope} path={path} title={title} />
-      ),
-    },
-    {
-      id: 'pptx',
-      title: () => t('viewerPptx'),
-      icon: (size: number) => <IconPptxOutline16 size={size} />,
-      exts: ['pptx'],
-      fetchStrategy: 'mediaUrl',
-      component: ({ scope, path, title }) => (
-        <PptxView scope={scope} path={path} title={title} />
       ),
     },
     {

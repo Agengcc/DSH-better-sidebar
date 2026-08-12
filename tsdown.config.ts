@@ -44,22 +44,6 @@ const NODE_BUILTINS = new Set([
   ...builtinModules.map(id => `node:${id}`),
 ])
 
-/**
- * Browser-only standalone entries for dependencies whose package `browser`
- * remaps Rolldown does not currently honor after CJS lowering. Without these
- * aliases nanoid/SheetJS/JSZip leave Node builtin require() calls in the
- * client factory, which the DSH module table correctly refuses.
- */
-const DOCX_PREVIEW_ENTRY = require.resolve('docx-preview')
-const JSZIP_BROWSER_ENTRY = resolvePath(
-  dirname(require.resolve('jszip/package.json', { paths: [dirname(DOCX_PREVIEW_ENTRY)] })),
-  'dist/jszip.min.js',
-)
-const XLSX_BROWSER_ENTRY = resolvePath(
-  dirname(require.resolve('xlsx/package.json')),
-  'dist/xlsx.full.min.js',
-)
-
 /** Module specifiers the web shell shares into the frozen module table (the official PLATFORM_MODULES list, plus the runtime/client exemption). */
 const CLIENT_EXTERNALS = [
   'react',
@@ -136,18 +120,11 @@ function clientBundle(pluginId: string, entryFile: string): UserConfig {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
-      // pptx-renderer only uses this to auto-discover its optional PDF.js
-      // fallback. PptxView passes pdfjs:false, so browser CJS has no resolver.
-      'import.meta.resolve': 'undefined',
     },
-    alias: {
-      jszip: JSZIP_BROWSER_ENTRY,
-      xlsx: XLSX_BROWSER_ENTRY,
-    },
-    // CJS output otherwise makes some transitive packages (notably nanoid
-    // through Univer Core) resolve their Node entry even though this bundle
-    // runs in the browser. Keep browser conditional exports authoritative for
-    // both source import() and generated require() edges.
+    // CJS output otherwise makes some transitive packages resolve their Node
+    // entry even though this bundle runs in the browser. Keep browser
+    // conditional exports authoritative for both source import() and
+    // generated require() edges.
     inputOptions: {
       resolve: {
         conditionNames: ['browser', 'import', 'require', 'default'],
@@ -229,8 +206,7 @@ function clientBundle(pluginId: string, entryFile: string): UserConfig {
       // The CJS wrapper factory's `require` only resolves module-table entries
       // (react, cordis, ...); it cannot load relative chunk URLs in the browser.
       // Disable code splitting so dynamic import() inlines into the single
-      // factory chunk (Office preview libs — docx-preview, Univer — pull in
-      // several MB but only when first opened, the trade-off for wrapper safety).
+      // factory chunk (the trade-off for wrapper safety).
       codeSplitting: false,
     },
   }

@@ -16,7 +16,7 @@
  * phase on `document` — the outermost node — it fires BEFORE React's
  * delegated handlers (attached at the root container) and before any native
  * target/bubble listener, so an inlined third-party component (e.g. the
- * Univer office UI bundled into this plugin) can never intercept
+ * Univer office UI of dsh-better-sidebar-plugin-office) can never intercept
  * composition keys. The browser's native IME processing is untouched:
  * stopPropagation only silences page JS, not the default action.
  *

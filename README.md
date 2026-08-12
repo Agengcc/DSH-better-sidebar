@@ -113,7 +113,7 @@ pnpm watch        # tsdown --watch
 
 - Git 无 push/pull/fetch；无文件 watcher（手动刷新）；工具行内文件打开按钮不可拦截
 - 终端 Tab 拖到另一分栏会重挂载（shell 重开）
-- `.xlsx` 预览不保留单元格样式（SheetJS 社区版限制）；Office/PPTX 预览内联进 client bundle（约 23MB），首次加载较慢
+- `.docx/.xlsx/.pptx` 预览由独立插件 `dsh-better-sidebar-plugin-office` 提供（本仓库不再内联 Office 渲染库）
 - 浏览器沙箱无登录态/第三方 Cookie 受限，部分站点登录需走弹窗；被 `X-Frame-Options`/`frame-ancestors` 拒绝嵌入的站点（如 arxiv.org）显示原因面板（含「在浏览器中打开」）；iframe 内部跳转不进后退栈
 - HTML 预览渲染的是已保存文件（不反映未保存草稿）
 

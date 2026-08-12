@@ -186,11 +186,12 @@ export function apply(ctx: Context): void {
 
     // The IME guard: composition keys (candidate arrows, confirm, cancel)
     // belong to the input method, never to page JS. Inlined third-party UI
-    // (Univer's office controls) has shipped unguarded keydown handlers that
-    // hijack ArrowUp/ArrowDown and break Chinese input (#562 regression); the
-    // document-capture guard neutralizes the whole class before React or any
-    // native listener sees the event. Registered as early as possible so no
-    // other capture-phase listener can win the ordering race.
+    // (e.g. the Univer office controls of dsh-better-sidebar-plugin-office)
+    // has shipped unguarded keydown handlers that hijack ArrowUp/ArrowDown
+    // and break Chinese input (#562 regression); the document-capture guard
+    // neutralizes the whole class before React or any native listener sees
+    // the event. Registered as early as possible so no other capture-phase
+    // listener can win the ordering race.
     ctx.effect(
       () => {
         try {

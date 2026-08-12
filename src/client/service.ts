@@ -116,7 +116,7 @@ export interface TabDescriptor {
 
 /** How the host loads a file's bytes for one viewer. */
 export type FileFetchStrategy =
-  | 'none'               // no bytes needed (image/pdf/office fetch through mediaUrl themselves)
+  | 'none'               // no bytes needed (image/pdf fetch through mediaUrl themselves)
   | 'fsRead'             // text read through /sidebar/api fs.read
   | 'mediaUrl'           // the viewer gets a media URL string
   | 'custom'             // the viewer's load() fetches its own bytes
