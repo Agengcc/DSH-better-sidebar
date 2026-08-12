@@ -1,11 +1,16 @@
 /**
- * Minimal zh/en copy for the sidebar. The plugin renders outside the slot
- * system's locale seat, so it reads the browser language directly (the DSH
- * locale preference and the browser language agree in practice; both default
- * from navigator.language anyway).
+ * Minimal zh/en copy for the sidebar. The copy follows the DSH i18n system:
+ * the client apply attaches the locale service (`ctx.locale`, provided by
+ * `@deepseek-ai/dsh-client-locale`) through {@link attachLocale}, and
+ * `t()`/`isZh()` resolve the active locale from it — the Host-backed
+ * `locale.preference` wins over the raw browser language and switches live.
+ * Without an attached service (standalone/test compositions) the browser
+ * language is used, matching the previous behavior. The dictionaries are
+ * also registered into the DSH locale registry under {@link LOCALE_NS}.
  */
 
-const zh = {
+/** The zh dictionary (also registered into the DSH locale registry under {@link LOCALE_NS}). */
+export const zh = {
   explorer: '资源管理器',
   git: '源代码管理',
   terminal: '终端',
@@ -204,7 +209,8 @@ const zh = {
   taskKillError: '终止失败',
 }
 
-const en: Record<keyof typeof zh, string> = {
+/** The en dictionary (key-set-equal to zh, enforced by the type annotation). */
+export const en: Record<keyof typeof zh, string> = {
   explorer: 'Explorer',
   git: 'Source Control',
   terminal: 'Terminal',
@@ -403,13 +409,42 @@ const en: Record<keyof typeof zh, string> = {
   taskKillError: 'Kill failed',
 }
 
-/** Translate a copy key in the browser's language (zh → zh, else en). */
+/**
+ * The dictionary namespace this plugin owns in the DSH locale registry
+ * (`'sidebar'` is taken by DSH's own ui-sidebar, hence this distinct name).
+ */
+export const LOCALE_NS = 'betterSidebar'
+
+/** The DSH locale service attached by the client apply (absent → browser detection). */
+let localeService: { getSnapshot(): { active: string } } | undefined
+
+/**
+ * Attach (or detach, with undefined) the DSH locale service. The sidebar
+ * mounts its own React root outside the slot system's locale seat, so the
+ * service rides this module-level holder: components keep calling the plain
+ * `t()` function, and the Sidebar root's locale subscription re-renders the
+ * whole tree on switches.
+ */
+export function attachLocale(service: { getSnapshot(): { active: string } } | undefined): void {
+  localeService = service
+}
+
+/**
+ * The active locale id ('zh' | 'en'): the DSH locale service's snapshot when
+ * attached, else the browser language.
+ */
+function activeLocale(): string {
+  return localeService?.getSnapshot().active
+    ?? (typeof navigator !== 'undefined' ? navigator.language : '')
+    ?? 'en'
+}
+
+/** Translate a copy key in the active locale (zh → zh, else en). */
 export type CopyKey = keyof typeof zh
 
 /** Translate a copy key; `{name}` placeholders interpolate from `params`. */
 export function t(key: CopyKey, params?: Record<string, string | number>): string {
-  const lang = typeof navigator !== 'undefined' ? navigator.language : 'en'
-  const dict = lang.toLowerCase().startsWith('zh') ? zh : en
+  const dict = activeLocale().toLowerCase().startsWith('zh') ? zh : en
   let text = dict[key]
   if (params !== undefined) {
     for (const [name, value] of Object.entries(params)) {
@@ -419,9 +454,9 @@ export function t(key: CopyKey, params?: Record<string, string | number>): strin
   return text
 }
 
-/** Whether the browser language is Chinese (used for selectors). */
+/** Whether the active locale is Chinese (used for selectors). */
 export function isZh(): boolean {
-  return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh')
+  return activeLocale().toLowerCase().startsWith('zh')
 }
 
 /** Format an ISO 8601 author date relative to now (刚刚 / N 分钟前 / N 小时前 / 昨天 / date). */

@@ -265,6 +265,23 @@ export interface SidebarSessionsService {
   refreshSubagents?(parentSessionId: string): Promise<void>
 }
 
+/**
+ * The client locale service face (mirror of @deepseek-ai/dsh-client-locale's
+ * LocaleService — only the slices the sidebar touches). The sidebar follows
+ * the DSH i18n system: the active locale is the Host-backed preference
+ * (`locale.preference` in settings.yaml) rather than the raw browser
+ * language, and the sidebar's zh/en dictionaries register into the service's
+ * namespace registry under `betterSidebar`.
+ */
+export interface SidebarLocaleService {
+  /** Current immutable locale snapshot (uSES-safe; `active` is 'zh' | 'en' today). */
+  getSnapshot(): { active: string }
+  /** Subscribe to snapshot changes (locale switch or dictionary registration). */
+  subscribe(fn: () => void): () => void
+  /** Register one locale's dictionary for a namespace; returns the disposer. */
+  register(ns: string, locale: string, dict: Record<string, string>): () => void
+}
+
 /** The composer draft face the sidebar reaches through `ctx.conversation.input`. */
 export interface SidebarSessionInput {
   /** The live input store (draft read for append). */
@@ -372,6 +389,12 @@ declare module 'cordis' {
     settings: SidebarSettingsService
     invariants: SidebarInvariantsService
     tools: SidebarToolsService
+    /**
+     * The client locale service (`@deepseek-ai/dsh-client-locale`): the
+     * sidebar's copy follows its active locale and registers its
+     * dictionaries under the `betterSidebar` namespace. Client side only.
+     */
+    locale: SidebarLocaleService
     /**
      * The host background-task registry (`ctx.get('tasks')`; optional — the
      * sidebar routes degrade to a 503 when the deployment lacks it).

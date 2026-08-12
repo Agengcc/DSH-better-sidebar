@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { mediaUrl } from './api.ts'
-import { t } from './locales.ts'
+import { isZh, t } from './locales.ts'
 import { BinaryFallback, type LoadState, type OfficeViewProps } from './office-shared.tsx'
 import { xlsxWorkbookToUniver } from './xlsx-to-univer.ts'
 import css from './sidebar.module.css'
@@ -54,14 +54,14 @@ export function XlsxView(props: OfficeViewProps): JSX.Element {
         const XLSX = await import('xlsx')
         const { createUniver, LocaleType, mergeLocales } = await import('@univerjs/presets')
         const { UniverSheetsCorePreset } = await import('@univerjs/preset-sheets-core')
-        // Locales pick the browser language; falls back to en-US.
-        const isZh = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh')
-        const localePack = await (isZh
+        // Locales follow the DSH i18n system (the active locale); falls
+        // back to the browser language, then en-US.
+        const localePack = await (isZh()
           ? import('@univerjs/preset-sheets-core/locales/zh-CN').then(m => m.default).catch(() => null)
           : import('@univerjs/preset-sheets-core/locales/en-US').then(m => m.default).catch(() => null))
 
         const wb = XLSX.read(buf, { type: 'array' })
-        const locale = isZh ? LocaleType.ZH_CN : LocaleType.EN_US
+        const locale = isZh() ? LocaleType.ZH_CN : LocaleType.EN_US
         const workbookData = xlsxWorkbookToUniver(wb, '0.25.1', locale)
 
         if (cancelled) return

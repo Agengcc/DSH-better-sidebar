@@ -22,12 +22,13 @@ import { registerImeGuard } from './ime-guard.ts'
 import { loadPrefs } from './prefs.ts'
 import { SideCardSection } from './SideCardSection.tsx'
 import { api } from './api.ts'
-import { t } from './locales.ts'
+import { LOCALE_NS, attachLocale, t, zh, en } from './locales.ts'
 import css from './sidebar.module.css'
 import './layout.css'
 
-/** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'sessions', 'connection', 'workspaces']
+/** Services required before mounting (provided by the client runtime; the
+ *  locale service backs the sidebar's copy — see locales.ts). */
+export const inject = ['slots', 'sessions', 'connection', 'workspaces', 'locale']
 
 /**
  * Error boundary over the sidebar tree: a render error must never blank the
@@ -69,6 +70,17 @@ class SidebarBoundary extends Component<{ children: ReactNode }, { error: string
  * @param ctx - the client cordis context (slots, sessions).
  */
 export function apply(ctx: Context): void {
+  // The sidebar follows the DSH i18n system: attach the locale service so
+  // the module-level t()/isZh() resolve the Host-backed language preference
+  // (and switch live — the Sidebar root subscribes to it), and register the
+  // plugin's dictionaries into the shared locale registry. The disposers
+  // run on fiber disposal, so re-activation (HMR) re-registers cleanly.
+  attachLocale(ctx.locale)
+  ctx.effect(() => {
+    const offZh = ctx.locale.register(LOCALE_NS, 'zh', zh)
+    const offEn = ctx.locale.register(LOCALE_NS, 'en', en)
+    return () => { offZh(); offEn() }
+  }, 'dsh-better-sidebar: dictionaries')
   // One store instance per activation: production code creates it only here,
   // then hands it to the mounted panel and closes over it in the slot
   // registrations (the official createXXXStore() factory rule — no

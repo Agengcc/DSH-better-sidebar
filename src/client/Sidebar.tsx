@@ -104,6 +104,15 @@ function buildNewTabOptions(state: SidebarState, ctx: Context, scope: SessionSco
 export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const { ctx, store } = props
 
+  // Copy freshness: re-render the whole tree when the DSH locale switches.
+  // The module-level t() reads the active locale at call time, so a root
+  // re-render alone re-localizes every panel (no memo barriers below).
+  const localeRevision = useSyncExternalStore(
+    useMemo(() => (callback: () => void) => ctx.locale.subscribe(callback), [ctx]),
+    useCallback(() => ctx.locale.getSnapshot().active, [ctx]),
+  )
+  void localeRevision
+
   // Narrow (mobile) viewports collapse the two panels into one: the right
   // panel becomes a full-width drawer holding BOTH workbenches, the bottom
   // panel (and its toggle button) disappears, and the layout push is
