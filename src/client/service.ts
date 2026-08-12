@@ -22,7 +22,7 @@
 import type { ReactNode } from 'react'
 import type { Context } from '../context-types.ts'
 import {
-  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane, patchTab, togglePanel,
+  activateTab, allLeaves, closeTab as closeTabReducer, openTabInActivePane, patchTab, togglePanel, treeOf,
   type SidebarState, type SidebarStore, type SidebarTab,
 } from './state.ts'
 import { isNarrowWidth } from './breakpoints.ts'
@@ -199,6 +199,13 @@ export interface BetterSidebarService {
    * pre-set to the URL (the browser tab's navigation seed; the caller
    * usually pairs it with a hostname `title`). A disabled tab type is a
    * no-op.
+   *
+   * A CONTENT open (a `path` or `url` seed) must land in sight: when the
+   * panel hosting the landing pane is collapsed, it is expanded
+   * automatically (the right panel by default, the bottom panel when the
+   * active pane lives there; on narrow viewports the merged drawer opens).
+   * Type-only opens (the + menu, agent-terminal auto-tabs) never expand —
+   * the panel behavior is their caller's business.
    */
   openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string; url?: string }): void
   /** Close a tab by id. */
@@ -345,18 +352,30 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       } else {
         landed = next
       }
-      // Narrow-viewport drawer: a CONTENT open (file / browser) must be
-      // visible — expand the collapsed drawer so the open lands in sight.
-      // Type-only opens (+ menu, agent-terminal auto-tabs) never expand; on
-      // wide viewports nothing here changes (the panel behavior is the
-      // caller's business).
+      // A CONTENT open (file / browser) must land in sight: when the panel
+      // hosting the landing pane is collapsed, expand it. On narrow
+      // viewports the two workbenches merge into one drawer, so the drawer
+      // (panelOpen) is the only lever; on wide viewports the landing pane's
+      // own panel opens — the bottom panel when the active pane lives in the
+      // bottom tree, else the right panel. Type-only opens (+ menu,
+      // agent-terminal auto-tabs) never expand (the panel behavior is their
+      // caller's business). The check runs on the post-dedupe state, so a
+      // content open that merely FOCUSES an existing tab expands the panel
+      // too — the open must never land out of sight.
       if (
         typeof window !== 'undefined'
-        && isNarrowWidth(window.innerWidth)
         && (seed.path !== undefined || seed.url !== undefined)
-        && !landed.panelOpen
       ) {
-        return togglePanel(landed)
+        if (isNarrowWidth(window.innerWidth)) {
+          if (!landed.panelOpen) return togglePanel(landed)
+        } else {
+          const hostKey = treeOf(landed, landed.activePane ?? '')
+          if (hostKey === 'bottomSplits') {
+            if (!landed.bottomOpen) return { ...landed, bottomOpen: true }
+          } else if (!landed.panelOpen) {
+            return togglePanel(landed)
+          }
+        }
       }
       return landed
     })

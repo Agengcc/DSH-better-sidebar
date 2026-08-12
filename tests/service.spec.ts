@@ -466,10 +466,14 @@ describe('service.openTab across the two panels', () => {
   })
 })
 
-describe('service.openTab narrow-viewport auto-expand', () => {
+describe('service.openTab auto-expand for content opens', () => {
   /** The window stub is a plain object (see the file header), so the width is writable. */
   const setWidth = (width: number): void => {
     ;(g.window as { innerWidth: number }).innerWidth = width
+  }
+  /** Collapse the right panel (the store defaults it open). */
+  const collapseRightPanel = (store: ReturnType<typeof createSidebarStore>): void => {
+    store.reduce(s => ({ ...s, panelOpen: false }))
   }
 
   it('expands the collapsed drawer for a path (file) open on a narrow viewport', () => {
@@ -517,13 +521,50 @@ describe('service.openTab narrow-viewport auto-expand', () => {
     }
   })
 
-  it('never expands on a wide viewport (path open keeps the caller’s choice)', () => {
+  it('expands the collapsed right panel for a path (file) open on a wide viewport', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
     service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
     store.setSession('s1')
-    store.reduce(s => ({ ...s, panelOpen: false }))
+    collapseRightPanel(store)
     service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    const state = store.getSnapshot().state!
+    expect(state.panelOpen).toBe(true)
+    expect(allLeaves(state.splits).flatMap(l => l.tabs).some(t => t.type === 'editor')).toBe(true)
+  })
+
+  it('expands the collapsed right panel for a URL (browser) open on a wide viewport', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'browser', title: 'Browser', component: () => null })
+    store.setSession('s1')
+    collapseRightPanel(store)
+    service.openTab({ type: 'browser', url: 'https://example.com', title: 'example.com' })
+    expect(store.getSnapshot().state!.panelOpen).toBe(true)
+  })
+
+  it('a wide-viewport path open landing in the bottom tree expands the bottom panel instead', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+    store.setSession('s1')
+    // The last-touched pane lives in the bottom tree and BOTH panels are
+    // collapsed: the open must surface the bottom panel, not the right one.
+    store.reduce(s => ({ ...s, activePane: (s.bottomSplits as { id: string }).id, panelOpen: false, bottomOpen: false }))
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    const state = store.getSnapshot().state!
+    expect(state.bottomOpen).toBe(true)
+    expect(state.panelOpen).toBe(false)
+    expect(allLeaves(state.bottomSplits).flatMap(l => l.tabs).some(t => t.type === 'editor')).toBe(true)
+  })
+
+  it('keeps a collapsed panel for a type-only open on a wide viewport', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'explorer', title: 'Explorer', component: () => null })
+    store.setSession('s1')
+    collapseRightPanel(store)
+    service.openTab({ type: 'explorer', title: 'Explorer' })
     expect(store.getSnapshot().state?.panelOpen).toBe(false)
   })
 
@@ -541,5 +582,18 @@ describe('service.openTab narrow-viewport auto-expand', () => {
     } finally {
       setWidth(1024)
     }
+  })
+
+  it('expands on a wide viewport even when the open focuses an existing tab (id dedupe)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+    store.setSession('s1')
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    collapseRightPanel(store)
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' })
+    const state = store.getSnapshot().state!
+    expect(state.panelOpen).toBe(true)
+    expect(allLeaves(state.splits).flatMap(l => l.tabs).filter(t => t.type === 'editor')).toHaveLength(1)
   })
 })

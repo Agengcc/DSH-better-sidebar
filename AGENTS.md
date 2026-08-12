@@ -364,6 +364,9 @@ interface BetterSidebarService {
    * url 可选：落地后把 tab 的 path 预填为 URL（侧边栏浏览器导航种子，
    * 通常配合 hostname title；对 createTab 铸造的 tab 同样生效）。
    * 被设置禁用的类型是 no-op（console.warn 提示）。
+   * 内容型打开（带 path/url seed）必须落在视野内：承载落点 pane 的面板
+   * 折叠时自动展开（右侧面板；落点 pane 在底部树则展开底部面板；窄视口
+   * 展开合并抽屉）；类型型打开（+ 菜单、agent 终端自动补 tab）不展开。
    */
   openTab(seed: { type: string; title?: string; path?: string; diff?: SidebarTab['diff']; id?: string; url?: string }): void
   /** 关闭一个 tab */
