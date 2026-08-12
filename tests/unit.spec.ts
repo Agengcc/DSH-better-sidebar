@@ -3,8 +3,8 @@ import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
 import {
-  activateTab, allLeaves, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
-  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, patchTab, reconcileAgentTerminals, resizeSplit, sanitizeState, splitPane, tabOpenIn, toggleExpanded,
+  activateTab, allLeaves, BOTTOM_DEFAULT, BOTTOM_MIN, closeTab, createSidebarStore, defaultWidthFor, insertLeafAt, makeDefaultState,
+  moveTab, moveTabToEdge, openDiffTab, openTabInActivePane, patchTab, reconcileAgentTerminals, resizeSplit, resizeSplitIn, sanitizeState, setBottomHeight, splitPane, tabOpenIn, toggleBottomPanel, toggleExpanded, togglePanel,
   type SidebarState, type SidebarTab, type SplitNode,
 } from '../src/client/state.ts'
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
@@ -520,6 +520,203 @@ describe('sidebar state', () => {
     s = openTabInActivePane(s, { id: 'terminal:9', type: 'terminal', title: 'Terminal 9' })
     expect(tabOpenIn(s, 'terminal:9')).toBe(true)
   })
+
+  // ── Bottom panel (the second, independent workbench) ───────────────────
+
+  it('toggleBottomPanel flips the bottom panel independently of the right panel', () => {
+    let s = state()
+    expect(s.bottomOpen).toBe(false)
+    s = toggleBottomPanel(s)
+    expect(s.bottomOpen).toBe(true)
+    // Collapsing the right panel leaves the bottom panel open (independent toggles).
+    s = togglePanel(s)
+    expect(s.panelOpen).toBe(false)
+    expect(s.bottomOpen).toBe(true)
+  })
+
+  it('setBottomHeight clamps to the contract range', () => {
+    expect(setBottomHeight(state(), 50).bottomHeight).toBe(BOTTOM_MIN)
+    const g = globalThis as Record<string, unknown>
+    const previous = g.window
+    g.window = { innerHeight: 800 }
+    try {
+      // The bottom panel must leave the center column at least PANEL_MIN
+      // tall (800 - 280), regardless of the right panel's open state.
+      expect(setBottomHeight(state(), 9999).bottomHeight).toBe(800 - 280)
+      expect(setBottomHeight({ ...state(), panelOpen: false }, 9999).bottomHeight).toBe(800 - 280)
+    } finally {
+      if (previous === undefined) delete g.window
+      else g.window = previous
+    }
+  })
+
+  it('openTabInActivePane lands in the bottom tree when the active pane lives there', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = { ...s, activePane: bottomPane }
+    const tab = { id: 'git', type: 'git' as const, title: 'Git' }
+    s = openTabInActivePane(s, tab)
+    expect((s.bottomSplits as { tabs: SidebarTab[] }).tabs.map(t => t.id)).toContain('git')
+    // The right tree is untouched.
+    expect((s.splits as { tabs: SidebarTab[] }).tabs.map(t => t.type)).toEqual(['explorer'])
+    expect(s.activePane).toBe(bottomPane)
+    // The id safety net works across trees: reopening the same id focuses it.
+    const after = openTabInActivePane(s, tab)
+    expect((after.bottomSplits as { tabs: SidebarTab[] }).tabs.map(t => t.id)).toEqual(['git'])
+  })
+
+  it('openTabInActivePane falls back to the right tree when the active pane is stale', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    s = { ...s, activePane: 'pane:gone' }
+    const after = openTabInActivePane(s, { id: 'git', type: 'git' as const, title: 'Git' })
+    expect((after.splits as { tabs: SidebarTab[] }).tabs.map(t => t.type)).toContain('git')
+  })
+
+  it('closeTab routes to the bottom tree', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = openTabInActivePane({ ...s, activePane: bottomPane }, { id: 'terminal:1', type: 'terminal', title: 'T1' })
+    expect(tabOpenIn(s, 'terminal:1')).toBe(true)
+    s = closeTab(s, bottomPane, 'terminal:1')
+    expect(tabOpenIn(s, 'terminal:1')).toBe(false)
+    // The right tree is untouched.
+    expect(tabOpenIn(s, (s.splits as { tabs: { id: string }[] }).tabs[0]!.id)).toBe(true)
+  })
+
+  it('moveTabToEdge splits within the bottom tree', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = openTabInActivePane({ ...s, activePane: bottomPane }, { id: 'terminal:1', type: 'terminal', title: 'T1' })
+    s = moveTabToEdge(s, bottomPane, 'terminal:1', bottomPane, 'right')
+    expect(s.bottomSplits.kind).toBe('split')
+    expect(s.splits.kind).toBe('leaf')
+    expect(tabOpenIn(s, 'terminal:1')).toBe(true)
+    // The fresh leaf (the drop's active pane) differs from the source pane.
+    expect(s.activePane).not.toBe(bottomPane)
+  })
+
+  it('resizeSplitIn routes a divider to its own tree', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = splitPane({ ...s, activePane: bottomPane }, 'row')
+    const split = s.bottomSplits as Extract<SplitNode, { kind: 'split' }>
+    s = resizeSplitIn(s, split.id, 0, 0.1)
+    const next = s.bottomSplits as Extract<SplitNode, { kind: 'split' }>
+    expect(next.sizes[0]).toBeCloseTo(0.6)
+    expect(s.splits.kind).toBe('leaf')
+  })
+
+  it('sanitize defaults the bottom fields for older persisted states and repairs a broken bottom tree', () => {
+    const base = {
+      panelOpen: true,
+      width: 400,
+      nextTerminal: 1,
+      activePane: 'pane:1',
+      expanded: [],
+      splits: {
+        kind: 'leaf',
+        id: 'pane:1',
+        active: null,
+        tabs: [{ id: 't', type: 'explorer', title: 'Explorer' }],
+      },
+    }
+    // Older persisted states lack the bottom fields: defaults, state kept.
+    const s = sanitizeState(base)
+    expect(s?.bottomOpen).toBe(false)
+    expect(s?.bottomHeight).toBe(BOTTOM_DEFAULT)
+    expect(s?.bottomSplits.kind).toBe('leaf')
+    expect((s?.bottomSplits as { tabs: SidebarTab[] }).tabs).toHaveLength(0)
+    // A malformed bottom tree is replaced with a fresh empty pane.
+    const broken = sanitizeState({ ...base, bottomSplits: 'junk' })
+    expect(broken?.splits).toBeDefined()
+    expect(broken?.bottomSplits.kind).toBe('leaf')
+    // A valid persisted bottom tree survives.
+    const withBottom = sanitizeState({
+      ...base,
+      bottomOpen: true,
+      bottomHeight: 300,
+      bottomSplits: {
+        kind: 'leaf',
+        id: 'pane:9',
+        active: 'b1',
+        tabs: [{ id: 'b1', type: 'terminal', title: 'T' }],
+      },
+    })
+    expect(withBottom?.bottomOpen).toBe(true)
+    expect(withBottom?.bottomHeight).toBe(300)
+    expect((withBottom?.bottomSplits as { tabs: SidebarTab[] }).tabs.map(t => t.id)).toEqual(['b1'])
+    // Heights are clamped to the contract range.
+    expect(sanitizeState({ ...base, bottomHeight: 10 })?.bottomHeight).toBe(BOTTOM_MIN)
+    // A stale full-height bottom panel must not squeeze the center column
+    // (the agent output area) to zero: the cap leaves it at least PANEL_MIN
+    // tall, regardless of the right panel's open state.
+    const g = globalThis as Record<string, unknown>
+    const previous = g.window
+    g.window = { innerHeight: 800 }
+    try {
+      expect(sanitizeState({ ...base, panelOpen: true, bottomHeight: 9999 })?.bottomHeight).toBe(800 - 280)
+      expect(sanitizeState({ ...base, panelOpen: false, bottomHeight: 9999 })?.bottomHeight).toBe(800 - 280)
+    } finally {
+      if (previous === undefined) delete g.window
+      else g.window = previous
+    }
+  })
+
+  it('tabOpenIn and patchTab see tabs in the bottom tree', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = openTabInActivePane(
+      { ...s, activePane: bottomPane },
+      { id: 'browser:1', type: 'browser', title: 'example.com', path: 'https://example.com' },
+    )
+    expect(tabOpenIn(s, 'browser:1')).toBe(true)
+    s = patchTab(s, 'browser:1', { title: 'other.com', path: 'https://other.com' })
+    const tab = allLeaves(s.bottomSplits).flatMap(leaf => leaf.tabs).find(t => t.id === 'browser:1')
+    expect(tab?.title).toBe('other.com')
+  })
+
+  it('moves a tab across panels (center merge into the other tree)', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const rightPane = (s.splits as { id: string }).id
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    const explorerId = (s.splits as { tabs: { id: string }[] }).tabs[0]!.id
+    // Drag the explorer tab from the right panel into the bottom panel (center).
+    s = moveTabToEdge(s, rightPane, explorerId, bottomPane, 'center')
+    expect((s.bottomSplits as { tabs: SidebarTab[] }).tabs.map(t => t.id)).toContain(explorerId)
+    expect((s.splits as { tabs: SidebarTab[] }).tabs).toHaveLength(0)
+    expect(s.activePane).toBe(bottomPane)
+    // And back, inserted at an index.
+    s = moveTab(s, bottomPane, explorerId, rightPane, 0)
+    expect((s.splits as { tabs: SidebarTab[] }).tabs[0]!.id).toBe(explorerId)
+    expect((s.bottomSplits as { tabs: SidebarTab[] }).tabs).toHaveLength(0)
+  })
+
+  it('moves a tab across panels by splitting the target pane (edge drop)', () => {
+    let s = state()
+    s = toggleBottomPanel(s)
+    const rightPane = (s.splits as { id: string }).id
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    const explorerId = (s.splits as { tabs: { id: string }[] }).tabs[0]!.id
+    s = moveTabToEdge(s, rightPane, explorerId, bottomPane, 'right')
+    // The source tree empties back to a leaf; the target tree splits.
+    expect(s.splits.kind).toBe('leaf')
+    expect((s.splits as { tabs: SidebarTab[] }).tabs).toHaveLength(0)
+    expect(s.bottomSplits.kind).toBe('split')
+    expect(tabOpenIn(s, explorerId)).toBe(true)
+    const split = s.bottomSplits as Extract<SplitNode, { kind: 'split' }>
+    expect(split.children.some(
+      child => child.kind === 'leaf' && (child as { tabs: SidebarTab[] }).tabs.some(t => t.id === explorerId),
+    )).toBe(true)
+    // The fresh leaf (the drop's active pane) differs from the source pane.
+    expect(s.activePane).not.toBe(rightPane)
+  })
 })
 
 describe('agent terminal reconciliation', () => {
@@ -575,6 +772,17 @@ describe('agent terminal reconciliation', () => {
     s = reconcileAgentTerminals(s, [])
     expect(tabOpenIn(s, 'agent:aaa-111')).toBe(false)
     expect(tabOpenIn(s, 'agent:bbb-222')).toBe(false)
+  })
+
+  it('lands new agent terminals in the active tree (bottom panel pane)', () => {
+    let s = makeDefaultState(400, true)
+    s = toggleBottomPanel(s)
+    const bottomPane = (s.bottomSplits as { id: string }).id
+    s = { ...s, activePane: bottomPane }
+    s = reconcileAgentTerminals(s, [{ uuid: 'aaa-111', title: 'dev server' }])
+    expect(tabOpenIn(s, 'agent:aaa-111')).toBe(true)
+    expect(allLeaves(s.bottomSplits).flatMap(l => l.tabs).some(t => t.id === 'agent:aaa-111')).toBe(true)
+    expect(allLeaves(s.splits).flatMap(l => l.tabs).some(t => t.id === 'agent:aaa-111')).toBe(false)
   })
 })
 
@@ -883,6 +1091,7 @@ describe('side card preferences', () => {
         defaultWidthPercent: 60,
         autoOpenSubagent: false,
         agentTerminalTools: true,
+        bottomPanelAutoTerminal: true,
         interceptOpenPath: true,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,
@@ -900,6 +1109,7 @@ describe('side card preferences', () => {
         defaultWidthPercent: 33,
         autoOpenSubagent: true,
         agentTerminalTools: false,
+        bottomPanelAutoTerminal: true,
         interceptOpenPath: true,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,
@@ -917,6 +1127,7 @@ describe('side card preferences', () => {
         defaultWidthPercent: 40,
         autoOpenSubagent: true,
         agentTerminalTools: false,
+        bottomPanelAutoTerminal: true,
         interceptOpenPath: true,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,
@@ -963,9 +1174,9 @@ describe('side card preferences', () => {
     const store = createSidebarStore()
     // Node environment: no window → the width falls back to PANEL_DEFAULT,
     // while the open flag still follows the preference.
-    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
+    store.setPrefs({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     store.setSession('fresh-session')
-    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
+    expect(store.getPrefs()).toEqual({ openByDefault: false, defaultWidthPercent: 45, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     const snapshot = store.getSnapshot()
     expect(snapshot.sessionId).toBe('fresh-session')
     expect(snapshot.state?.panelOpen).toBe(false)
@@ -978,7 +1189,7 @@ describe('side card preferences', () => {
 
   it('skips the default explorer tab when the explorer type is disabled', () => {
     const store = createSidebarStore()
-    store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: { explorer: false }, viewersEnabled: {} })
+    store.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: { explorer: false }, viewersEnabled: {} })
     store.setSession('no-explorer')
     const state = store.getSnapshot().state!
     const tabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
@@ -986,7 +1197,7 @@ describe('side card preferences', () => {
     expect(state.splits.kind).toBe('leaf')
     // Re-enabling seeds the explorer tab again.
     const openStore = createSidebarStore()
-    openStore.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
+    openStore.setPrefs({ openByDefault: true, defaultWidthPercent: 30, autoOpenSubagent: true, agentTerminalTools: false, bottomPanelAutoTerminal: true, interceptOpenPath: true, htmlViewerNoSandbox: false, htmlViewerDefaultUnsafe: false, browserNoSandbox: false, browserInterceptLinks: true, tabsEnabled: {}, viewersEnabled: {} })
     openStore.setSession('with-explorer')
     const openTabs = allLeaves(openStore.getSnapshot().state!.splits).flatMap(leaf => leaf.tabs)
     expect(openTabs.map(tab => tab.type)).toEqual(['explorer'])

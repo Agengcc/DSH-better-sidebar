@@ -106,14 +106,19 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       icon: (size: number) => <IconTerminalOutline16 size={size} />,
       order: 40,
       available: (_ctx, _scope, state) => uiTerminalCount(state) < TERMINAL_LIMIT,
-      // Declarative settings: the model-facing terminal tools switch renders
-      // under this row in the Side card settings page (the Terminal page's
-      // own related setting; the host gates the toolset on it independently).
+      // Declarative settings: the model-facing terminal tools switch and the
+      // bottom-panel first-expansion auto-terminal switch render under this
+      // row in the Side card settings page (the Terminal page's own related
+      // settings; the host gates the toolset on the tools one independently).
       settings: {
         toggles: [{
           key: 'agentTerminalTools',
           title: () => t('settingsToolsTitle'),
           desc: () => t('settingsToolsDesc'),
+        }, {
+          key: 'bottomPanelAutoTerminal',
+          title: () => t('settingsBottomTerminalTitle'),
+          desc: () => t('settingsBottomTerminalDesc'),
         }],
       },
       createTab: (state) => {

@@ -57,7 +57,9 @@ export type SplitNode = SidebarLeaf | SidebarSplit
 export interface SidebarState {
   panelOpen: boolean
   width: number
-  /** The pane receiving newly opened tabs (last pane the user touched). */
+  /** The pane receiving newly opened tabs (last pane the user touched).
+   *  Pane ids are globally unique across BOTH trees (shared uid counter), so
+   *  one field resolves into either tree — see {@link treeOf}. */
   activePane: string | null
   /** Monotonic terminal tab counter (ids survive reloads). */
   nextTerminal: number
@@ -65,13 +67,31 @@ export interface SidebarState {
   nextBrowser: number
   /** Explorer expansion set (absolute directory paths). */
   expanded: string[]
+  /** The right sidebar's split tree (the original workbench). */
   splits: SplitNode
+  /** Whether the bottom panel (a second, independent workbench) is open. */
+  bottomOpen: boolean
+  /** The bottom panel's height (clamped to the contract range). */
+  bottomHeight: number
+  /**
+   * Whether the bottom panel has been expanded at least once in this
+   * session — the FIRST expansion tries to auto-open a terminal tab (gated
+   * on the bottomPanelAutoTerminal pref); later expansions never do.
+   */
+  bottomOpenedOnce: boolean
+  /** The bottom panel's own split tree (panes/tabs live only in ONE tree;
+   *  tabs never cross panels — the two panels only share panel-size drags). */
+  bottomSplits: SplitNode
 }
 
 export const PANEL_MIN = 280
 export const PANEL_MAX = 640
 export const PANEL_DEFAULT = 400
 export const TAB_MAX_WIDTH = 160
+/** Bottom panel geometry contract (mirrors the width contract; the upper
+ * bound is the viewport, enforced by {@link setBottomHeight}). */
+export const BOTTOM_MIN = 120
+export const BOTTOM_DEFAULT = 220
 
 let nextIdCounter = 0
 /** Unique pane/tab id within one state instance. */
@@ -110,6 +130,7 @@ function maxCounterId(parsed: unknown): number {
     }
   }
   walk((parsed as Record<string, unknown> | null)?.splits)
+  walk((parsed as Record<string, unknown> | null)?.bottomSplits)
   return max
 }
 
@@ -126,6 +147,9 @@ export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true, seedEx
     leaf.tabs = [{ id: uid('tab'), type: 'explorer', title: 'Explorer' }]
     leaf.active = leaf.tabs[0]!.id
   }
+  // The bottom panel starts closed with an empty pane (its welcome cards
+  // offer the openable types on first use).
+  const bottomLeaf: SidebarLeaf = { kind: 'leaf', id: uid('pane'), tabs: [], active: null }
   return {
     panelOpen,
     width,
@@ -134,7 +158,27 @@ export function makeDefaultState(width = PANEL_DEFAULT, panelOpen = true, seedEx
     nextBrowser: 1,
     expanded: [],
     splits: leaf,
+    bottomOpen: false,
+    bottomHeight: BOTTOM_DEFAULT,
+    bottomOpenedOnce: false,
+    bottomSplits: bottomLeaf,
   }
+}
+
+/** Whether a tree node (or any descendant) carries the given pane/split id. */
+function treeHasId(node: SplitNode, id: string): boolean {
+  if (node.id === id) return true
+  if (node.kind === 'split') return node.children.some(child => treeHasId(child, id))
+  return false
+}
+
+/** Which tree owns a pane/split id: 'bottomSplits' when the id lives in the
+ *  bottom panel's tree, else 'splits' (the right panel's tree). Ids are
+ *  globally unique (the shared uid counter), so an id in neither tree falls
+ *  back to the right tree, where tree operations no-op on a missing node —
+ *  the pre-bottom-panel behavior. */
+export function treeOf(state: SidebarState, id: string): 'splits' | 'bottomSplits' {
+  return treeHasId(state.bottomSplits, id) ? 'bottomSplits' : 'splits'
 }
 
 /** Walk the tree and apply `visit` to the leaf with the given id. */
@@ -179,9 +223,10 @@ export function allLeaves(node: SplitNode): SidebarLeaf[] {
   return node.children.flatMap(allLeaves)
 }
 
-/** Whether a tab exists anywhere in a state tree (any pane). */
+/** Whether a tab exists anywhere in a state (either tree, any pane). */
 export function tabOpenIn(state: SidebarState, tabId: string): boolean {
   return allLeaves(state.splits).some(leaf => leaf.tabs.some(tab => tab.id === tabId))
+    || allLeaves(state.bottomSplits).some(leaf => leaf.tabs.some(tab => tab.id === tabId))
 }
 
 /** Replace a leaf with a split of it plus a fresh empty leaf. */
@@ -237,6 +282,9 @@ export type DropZone = 'left' | 'right' | 'up' | 'down' | 'center'
  * The VSCode drag gesture: move a tab out of its pane and either merge it
  * into the target pane (center) or split the target pane with the tab in a
  * fresh leaf (edge). The source pane collapses when it empties.
+ *
+ * The panes may live in DIFFERENT trees (dragging a tab between the two
+ * panels): the tab then leaves its own tree and lands in the other one.
  */
 export function moveTabToEdge(
   state: SidebarState,
@@ -249,11 +297,43 @@ export function moveTabToEdge(
     // Dropped back onto its own pane's center: reorder to the end.
     return moveTab(state, fromPane, tabId, toPane, -1)
   }
-  const source = leafWithTab(state.splits, tabId)
+  const key = treeOf(state, fromPane)
+  const toKey = treeOf(state, toPane)
+  if (key !== toKey) {
+    // Cross-panel drop: remove the tab from its own tree, then merge (center)
+    // or split (edge) a pane of the OTHER tree with the tab.
+    const source = leafWithTab(state[key], tabId)
+    if (source === undefined) return state
+    const tab = source.tabs.find(candidate => candidate.id === tabId)!
+    let emptied = false
+    let sourceNode = mapLeaf(state[key], source.id, (leaf) => {
+      leaf.tabs = leaf.tabs.filter(candidate => candidate.id !== tabId)
+      if (leaf.active === tabId) leaf.active = leaf.tabs[leaf.tabs.length - 1]?.id ?? null
+      if (leaf.tabs.length === 0) emptied = true
+    })
+    if (emptied) sourceNode = removeLeafAt(sourceNode, source.id)
+    let targetNode = state[toKey]
+    let activePane: string
+    if (zone === 'center') {
+      targetNode = mapLeaf(targetNode, toPane, (leaf) => {
+        leaf.tabs = [...leaf.tabs, tab]
+        leaf.active = tab.id
+      })
+      activePane = toPane
+    } else {
+      const dir = zone === 'left' || zone === 'right' ? 'row' : 'col'
+      const result = insertLeafAt(targetNode, toPane, dir, tab, zone === 'left' || zone === 'up')
+      targetNode = result.node
+      activePane = result.leafId
+    }
+    return { ...state, [key]: sourceNode, [toKey]: targetNode, activePane }
+  }
+  const node = state[key]
+  const source = leafWithTab(node, tabId)
   if (source === undefined) return state
   const tab = source.tabs.find(candidate => candidate.id === tabId)!
   let emptied = false
-  let splits = mapLeaf(state.splits, source.id, (leaf) => {
+  let splits = mapLeaf(node, source.id, (leaf) => {
     leaf.tabs = leaf.tabs.filter(candidate => candidate.id !== tabId)
     if (leaf.active === tabId) leaf.active = leaf.tabs[leaf.tabs.length - 1]?.id ?? null
     if (leaf.tabs.length === 0) emptied = true
@@ -264,11 +344,11 @@ export function moveTabToEdge(
       leaf.tabs = [...leaf.tabs, tab]
       leaf.active = tab.id
     })
-    return { ...state, splits, activePane: toPane }
+    return { ...state, [key]: splits, activePane: toPane }
   }
   const dir = zone === 'left' || zone === 'right' ? 'row' : 'col'
   const result = insertLeafAt(splits, toPane, dir, tab, zone === 'left' || zone === 'up')
-  return { ...state, splits: result.node, activePane: result.leafId }
+  return { ...state, [key]: result.node, activePane: result.leafId }
 }
 
 /**
@@ -291,21 +371,23 @@ export function removeLeafAt(node: SplitNode, paneId: string): SplitNode {
 
 /** Close a tab; an emptied leaf is removed (unless it is the only pane). */
 export function closeTab(state: SidebarState, paneId: string, tabId: string): SidebarState {
+  const key = treeOf(state, paneId)
   let emptied = false
-  const splits = mapLeaf(state.splits, paneId, (leaf) => {
+  const splits = mapLeaf(state[key], paneId, (leaf) => {
     leaf.tabs = leaf.tabs.filter(tab => tab.id !== tabId)
     if (leaf.active === tabId) leaf.active = leaf.tabs[leaf.tabs.length - 1]?.id ?? null
     if (leaf.tabs.length === 0) emptied = true
   })
-  return { ...state, splits: emptied ? removeLeafAt(splits, paneId) : splits }
+  return { ...state, [key]: emptied ? removeLeafAt(splits, paneId) : splits }
 }
 
-/** Activate a tab in its pane. */
+/** Activate a tab in its pane (the pane's own tree). */
 export function activateTab(state: SidebarState, paneId: string, tabId: string): SidebarState {
+  const key = treeOf(state, paneId)
   return {
     ...state,
     activePane: paneId,
-    splits: mapLeaf(state.splits, paneId, (leaf) => {
+    [key]: mapLeaf(state[key], paneId, (leaf) => {
       if (leaf.tabs.some(tab => tab.id === tabId)) leaf.active = tabId
     }),
   }
@@ -314,7 +396,7 @@ export function activateTab(state: SidebarState, paneId: string, tabId: string):
 /** Update the display fields of one open tab (title / path) without
  *  re-opening it. The browser tab persists its current URL and hostname
  *  title through this reducer so a reload restores the visited page. A
- *  missing tab id is a no-op. */
+ *  missing tab id is a no-op. The tab may live in either tree. */
 export function patchTab(
   state: SidebarState,
   tabId: string,
@@ -338,7 +420,8 @@ export function patchTab(
     return children === node.children ? node : { ...node, children }
   }
   const splits = walk(state.splits)
-  return changed ? { ...state, splits } : state
+  const bottomSplits = walk(state.bottomSplits)
+  return changed ? { ...state, splits, bottomSplits } : state
 }
 
 /**
@@ -349,34 +432,68 @@ export function patchTab(
  * openDiffTab already check existence before calling) and the landing
  * itself — the service's dedupe path delegates here after its dedupeKey
  * check misses.
+ *
+ * The active pane may live in EITHER tree (pane ids are globally unique):
+ * a stale id that survives in neither tree falls back to the right tree's
+ * first pane instead of swallowing the open.
  */
 export function openTabInActivePane(state: SidebarState, tab: SidebarTab): SidebarState {
   let targetId = state.activePane ?? firstLeaf(state.splits).id
   // A stale activePane (its pane was closed since) must not swallow the
-  // open: fall back to the first pane instead of dropping the tab.
-  if (!allLeaves(state.splits).some(leaf => leaf.id === targetId)) {
+  // open: fall back to the first pane of the right tree instead of dropping
+  // the tab.
+  if (!allLeaves(state[treeOf(state, targetId)]).some(leaf => leaf.id === targetId)) {
     targetId = firstLeaf(state.splits).id
   }
+  const targetKey = treeOf(state, targetId)
   // Id-based safety net: if a tab with the same id exists, focus it.
-  for (const leaf of allLeaves(state.splits)) {
+  for (const leaf of allLeaves(state.splits).concat(allLeaves(state.bottomSplits))) {
     const existing = leaf.tabs.find(candidate => candidate.id === tab.id)
     if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
   }
   return {
     ...state,
     activePane: targetId,
-    splits: mapLeaf(state.splits, targetId, (leaf) => {
+    [targetKey]: mapLeaf(state[targetKey], targetId, (leaf) => {
       leaf.tabs = [...leaf.tabs, tab]
       leaf.active = tab.id
     }),
   }
 }
 
-/** Move a tab from one pane to another (insert at index; -1 appends). */
+/** Move a tab from one pane to another (insert at index; -1 appends).
+ *  The panes may live in DIFFERENT trees — dragging a tab between the two
+ *  panels removes it from its own tree and lands it in the other one. */
 export function moveTab(state: SidebarState, fromPane: string, tabId: string, toPane: string, index = -1): SidebarState {
+  const fromKey = treeOf(state, fromPane)
+  const toKey = treeOf(state, toPane)
+  if (fromKey !== toKey) {
+    let moved: SidebarTab | undefined
+    let emptied = false
+    const source = mapLeaf(state[fromKey], fromPane, (leaf) => {
+      const found = leaf.tabs.find(tab => tab.id === tabId)
+      if (found === undefined) return
+      moved = found
+      leaf.tabs = leaf.tabs.filter(tab => tab.id !== tabId)
+      if (leaf.active === tabId) leaf.active = leaf.tabs[leaf.tabs.length - 1]?.id ?? null
+      if (leaf.tabs.length === 0) emptied = true
+    })
+    if (moved === undefined) return state
+    const target = mapLeaf(state[toKey], toPane, (leaf) => {
+      const insertAt = index >= 0 && index <= leaf.tabs.length ? index : leaf.tabs.length
+      leaf.tabs = [...leaf.tabs.slice(0, insertAt), moved!, ...leaf.tabs.slice(insertAt)]
+      leaf.active = moved!.id
+    })
+    return {
+      ...state,
+      [fromKey]: emptied ? removeLeafAt(source, fromPane) : source,
+      [toKey]: target,
+      activePane: toPane,
+    }
+  }
   let moved: SidebarTab | undefined
   let emptied = false
-  let splits = mapLeaf(state.splits, fromPane, (leaf) => {
+  let splits = mapLeaf(state[fromKey], fromPane, (leaf) => {
     const found = leaf.tabs.find(tab => tab.id === tabId)
     if (found === undefined) return
     moved = found
@@ -391,13 +508,14 @@ export function moveTab(state: SidebarState, fromPane: string, tabId: string, to
     leaf.tabs = [...leaf.tabs.slice(0, insertAt), moved!, ...leaf.tabs.slice(insertAt)]
     leaf.active = moved!.id
   })
-  return { ...state, splits, activePane: toPane }
+  return { ...state, [fromKey]: splits, activePane: toPane }
 }
 
 /** Split the active pane (or the pane containing the active tab). */
 export function splitPane(state: SidebarState, dir: 'row' | 'col'): SidebarState {
   const paneId = state.activePane ?? firstLeaf(state.splits).id
-  return { ...state, splits: splitLeafAt(state.splits, paneId, dir) }
+  const key = treeOf(state, paneId)
+  return { ...state, [key]: splitLeafAt(state[key], paneId, dir) }
 }
 
 /**
@@ -443,11 +561,26 @@ export function togglePanel(state: SidebarState): SidebarState {
   return { ...state, panelOpen: !state.panelOpen }
 }
 
+/** Toggle the bottom panel open/closed (independent of the right panel). */
+export function toggleBottomPanel(state: SidebarState): SidebarState {
+  return { ...state, bottomOpen: !state.bottomOpen }
+}
+
 /** Set the panel width (clamped to the contract range; the upper bound is
  * the viewport so the fullscreen expansion can fill the window). */
 export function setWidth(state: SidebarState, width: number): SidebarState {
   const max = typeof window !== 'undefined' ? Math.max(PANEL_MIN, window.innerWidth) : PANEL_MAX
   return { ...state, width: Math.min(max, Math.max(PANEL_MIN, Math.round(width))) }
+}
+
+/** Set the bottom panel height (clamped to the contract range). The upper
+ * bound leaves the center column (the agent output area) at least PANEL_MIN
+ * tall — without the cap the bottom panel could swallow the whole viewport
+ * and squeeze the conversation to zero height. */
+export function setBottomHeight(state: SidebarState, height: number): SidebarState {
+  const viewport = typeof window !== 'undefined' ? window.innerHeight : Infinity
+  const max = Math.max(BOTTOM_MIN, viewport - PANEL_MIN)
+  return { ...state, bottomHeight: Math.min(max, Math.max(BOTTOM_MIN, Math.round(height))) }
 }
 
 /** Toggle a directory in the explorer expansion set. */
@@ -474,6 +607,13 @@ export function resizeSplit(node: SplitNode, splitId: string, index: number, del
     sizes: [...node.sizes],
     children: node.children.map(child => resizeSplit(child, splitId, index, delta)),
   }
+}
+
+/** State-level {@link resizeSplit} route: the divider may live in either
+ *  tree (split ids are globally unique). */
+export function resizeSplitIn(state: SidebarState, splitId: string, index: number, delta: number): SidebarState {
+  const key = treeOf(state, splitId)
+  return { ...state, [key]: resizeSplit(state[key], splitId, index, delta) }
 }
 
 /** Prefix marking a tab id as an agent-owned terminal (suffix is the uuid). */
@@ -510,7 +650,7 @@ export function reconcileAgentTerminals(
   state: SidebarState,
   agentTerminals: ReadonlyArray<{ uuid: string; title: string }>,
 ): SidebarState {
-  const existingTabs = allLeaves(state.splits).flatMap(leaf => leaf.tabs)
+  const existingTabs = allLeaves(state.splits).concat(allLeaves(state.bottomSplits)).flatMap(leaf => leaf.tabs)
   const existingAgentTabs = existingTabs.filter(tab => isAgentTabId(tab.id))
   const existingUuids = new Set(existingAgentTabs.map(tab => agentUuidOf(tab.id)))
   const serverUuids = new Set(agentTerminals.map(t => t.uuid))
@@ -613,9 +753,29 @@ export function sanitizeState(parsed: unknown): SidebarState | undefined {
     : 1
   if (typeof record.activePane !== 'string' && record.activePane !== null) return undefined
   if (!Array.isArray(record.expanded) || record.expanded.some(item => typeof item !== 'string')) return undefined
+  // The seen/reid maps are SHARED across both trees: pane/split ids must be
+  // globally unique (the runtime uid counter is shared too), so a duplicate
+  // seen first in the right tree gets a fresh id when it reappears in the
+  // bottom tree.
+  const seen = new Set<string>()
   const reid = new Map<string, string>()
-  const splits = sanitizeNode(record.splits, new Set(), reid)
+  const splits = sanitizeNode(record.splits, seen, reid)
   if (splits === undefined) return undefined
+  // Bottom-panel fields arrived in a later build: a missing or malformed
+  // value on an OLDER persisted state defaults (closed / default height /
+  // empty pane) so existing layouts keep loading, like nextBrowser.
+  const bottomOpen = record.bottomOpen === true
+  // Cap the persisted height so the center column (the agent output area)
+  // keeps at least PANEL_MIN tall (a stale full-height bottom panel from an
+  // older build must never squeeze the conversation to zero).
+  const maxHeight = typeof window !== 'undefined' ? window.innerHeight : Infinity
+  const bottomCap = Math.max(BOTTOM_MIN, maxHeight - PANEL_MIN)
+  const rawHeight = typeof record.bottomHeight === 'number' && Number.isFinite(record.bottomHeight)
+    ? record.bottomHeight
+    : BOTTOM_DEFAULT
+  const bottomHeight = Math.min(bottomCap, Math.max(BOTTOM_MIN, Math.round(rawHeight)))
+  const bottomSplits = sanitizeNode(record.bottomSplits, seen, reid)
+    ?? { kind: 'leaf' as const, id: uid('pane'), tabs: [], active: null }
   const maxWidth = typeof window !== 'undefined' ? window.innerWidth : Infinity
   return {
     panelOpen: record.panelOpen,
@@ -627,6 +787,13 @@ export function sanitizeState(parsed: unknown): SidebarState | undefined {
     nextBrowser,
     expanded: record.expanded as string[],
     splits,
+    bottomOpen,
+    bottomHeight,
+    // An older persisted state never expanded the bottom panel (the field
+    // arrived later): defaulting to false gives it the first-expansion
+    // auto-terminal exactly once after the upgrade.
+    bottomOpenedOnce: record.bottomOpenedOnce === true,
+    bottomSplits,
   }
 }
 

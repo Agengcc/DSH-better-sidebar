@@ -43,6 +43,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     agentTerminalTools: typeof record.agentTerminalTools === 'boolean'
       ? record.agentTerminalTools
       : SIDEBAR_PREFS_DEFAULTS.agentTerminalTools,
+    bottomPanelAutoTerminal: typeof record.bottomPanelAutoTerminal === 'boolean'
+      ? record.bottomPanelAutoTerminal
+      : SIDEBAR_PREFS_DEFAULTS.bottomPanelAutoTerminal,
     interceptOpenPath: typeof record.interceptOpenPath === 'boolean'
       ? record.interceptOpenPath
       : SIDEBAR_PREFS_DEFAULTS.interceptOpenPath,

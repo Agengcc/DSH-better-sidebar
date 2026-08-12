@@ -50,7 +50,7 @@ describe('built-in tab registrations', () => {
   it('the terminal tab declares the model terminal-tools related setting', () => {
     const { service } = setup()
     const toggles = service.getTab('terminal')?.settings?.toggles ?? []
-    expect(toggles.map(t => t.key)).toEqual(['agentTerminalTools'])
+    expect(toggles.map(t => t.key)).toEqual(['agentTerminalTools', 'bottomPanelAutoTerminal'])
   })
 
   it('the browser tab declares its sandbox and link-takeover related settings', () => {

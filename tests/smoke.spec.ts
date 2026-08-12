@@ -507,6 +507,7 @@ describe('side card settings routes', () => {
         defaultWidthPercent: 30,
         autoOpenSubagent: true,
         agentTerminalTools: false,
+        bottomPanelAutoTerminal: true,
         interceptOpenPath: true,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,

@@ -262,20 +262,24 @@ function NodeView(props: {
   )
 }
 
-/** The workbench: the split tree filling the sidebar body. */
+/** The workbench: the split tree filling the sidebar body. `tree` selects
+ *  which tree renders (the right panel's by default; the bottom panel passes
+ *  `state.bottomSplits` — the actions route by pane id, so one action set
+ *  serves both). */
 export function Workbench(props: {
   state: SidebarState
+  tree?: SplitNode
   newTabOptions: NewTabOption[]
   actions: WorkbenchActions
   onNewTab: (optionId: string) => void
   renderTab: (tab: SidebarTab, active: boolean, paneId: string) => ReactNode
   getTabIcon?: (tab: SidebarTab) => ReactNode
 }) {
-  const { state, newTabOptions, actions, onNewTab, renderTab, getTabIcon } = props
+  const { state, tree, newTabOptions, actions, onNewTab, renderTab, getTabIcon } = props
   return (
     <div className={css.workbench}>
       <NodeView
-        node={state.splits}
+        node={tree ?? state.splits}
         state={state}
         newTabOptions={newTabOptions}
         actions={actions}

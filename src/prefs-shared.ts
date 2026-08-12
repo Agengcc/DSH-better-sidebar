@@ -28,6 +28,13 @@ export interface SidebarPrefs {
    */
   agentTerminalTools: boolean
   /**
+   * Whether expanding the bottom panel for the FIRST time in a session tries
+   * to open a fresh terminal tab there (the terminal quota/type still gates
+   * the attempt). On by default; the switch lives under the terminal tab's
+   * row in the Side card settings.
+   */
+  bottomPanelAutoTerminal: boolean
+  /**
    * Whether chat-side file opens (tool-row path links, the produced-files
    * row, prose file mentions — every path that funnels through the client
    * runtime's `ctx.workspaces.openPath`) open in the sidebar editor instead
@@ -97,6 +104,7 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   defaultWidthPercent: WIDTH_PERCENT_DEFAULT,
   autoOpenSubagent: true,
   agentTerminalTools: false,
+  bottomPanelAutoTerminal: true,
   interceptOpenPath: true,
   htmlViewerNoSandbox: false,
   htmlViewerDefaultUnsafe: false,

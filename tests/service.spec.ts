@@ -414,3 +414,54 @@ describe('service.openTab dedupe', () => {
     expect(tabs).toHaveLength(1)
   })
 })
+
+describe('service.openTab across the two panels', () => {
+  it('openTab lands in the bottom tree when the active pane lives there', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'git', title: 'Git', component: () => null })
+    store.setSession('s1')
+    store.reduce(s => ({ ...s, activePane: (s.bottomSplits as { id: string }).id }))
+    service.openTab({ type: 'git', title: 'Git' })
+    const state = store.getSnapshot().state!
+    expect(allLeaves(state.bottomSplits).flatMap(l => l.tabs).some(t => t.type === 'git')).toBe(true)
+    expect(allLeaves(state.splits).flatMap(l => l.tabs).some(t => t.type === 'git')).toBe(false)
+  })
+
+  it('dedupeKey focuses an existing instance in the OTHER tree (single-instance across panels)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'singleton',
+      title: 'Singleton',
+      single: true,
+      component: () => null,
+    })
+    store.setSession('s1')
+    // Open in the right tree first.
+    service.openTab({ type: 'singleton', title: 'Singleton' })
+    // Switch the active pane to the bottom tree and open again: the dedupe
+    // scan covers both trees, so the existing instance is focused, not
+    // duplicated in the bottom panel.
+    store.reduce(s => ({ ...s, activePane: (s.bottomSplits as { id: string }).id }))
+    service.openTab({ type: 'singleton', title: 'Singleton' })
+    const state = store.getSnapshot().state!
+    const total = allLeaves(state.splits).concat(allLeaves(state.bottomSplits))
+      .flatMap(l => l.tabs).filter(t => t.type === 'singleton')
+    expect(total).toHaveLength(1)
+  })
+
+  it('closeTab by id closes a tab living in the bottom tree', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'git', title: 'Git', component: () => null })
+    store.setSession('s1')
+    store.reduce(s => ({ ...s, activePane: (s.bottomSplits as { id: string }).id }))
+    service.openTab({ type: 'git', title: 'Git' })
+    const state = store.getSnapshot().state!
+    const gitTab = allLeaves(state.bottomSplits).flatMap(l => l.tabs).find(t => t.type === 'git')!
+    service.closeTab(gitTab.id)
+    const after = store.getSnapshot().state!
+    expect(allLeaves(after.bottomSplits).flatMap(l => l.tabs).some(t => t.id === gitTab.id)).toBe(false)
+  })
+})

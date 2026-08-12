@@ -379,7 +379,9 @@ function applyDedupe(state: SidebarState, tab: SidebarTab, descriptor: TabDescri
   const dedupeKey = descriptor.dedupeKey ?? (descriptor.single === true ? () => descriptor.id : undefined)
   const key = dedupeKey?.(tab)
   if (key !== undefined) {
-    for (const leaf of allLeaves(state.splits)) {
+    // The scan covers BOTH trees: opening a single-instance tab from the
+    // bottom panel focuses an existing instance wherever it lives.
+    for (const leaf of allLeaves(state.splits).concat(allLeaves(state.bottomSplits))) {
       const existing = leaf.tabs.find(t => t.type === tab.type && dedupeKey!(t) === key)
       if (existing !== undefined) return activateTab(state, leaf.id, existing.id)
     }
@@ -387,9 +389,9 @@ function applyDedupe(state: SidebarState, tab: SidebarTab, descriptor: TabDescri
   return openTabInActivePane(state, tab)
 }
 
-/** Find which pane hosts a tab id ('' if none). */
+/** Find which pane hosts a tab id ('' if none). Either tree is searched. */
 function findPaneIdOf(state: SidebarState, tabId: string): string {
-  for (const leaf of allLeaves(state.splits)) {
+  for (const leaf of allLeaves(state.splits).concat(allLeaves(state.bottomSplits))) {
     if (leaf.tabs.some(t => t.id === tabId)) return leaf.id
   }
   return state.activePane ?? ''

@@ -10,27 +10,39 @@
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
-.toggleRail {
+/* The persistent expand/collapse cluster at the top-right corner: two rail
+   controls side by side (bottom panel's glyph LEFT of the right panel's).
+   Always pinned to the viewport corner — inside the right panel's top-right
+   while it is open, sitting flush in the 34px tab strip (28px buttons at
+   top: 3) whose right end it really squeezes. */
+.toggleCluster {
   position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 3px;
+  right: 10px;
   z-index: 55;
   display: flex;
-  align-items: center;
-  /* Native rail inset: the 36px control sits 10px off the column edge. */
-  padding: 0 10px;
+  flex-direction: row;
+  gap: 4px;
 }
 
-/* The closed-state affordance is the native rail icon control: a plain 36px
-   circle, transparent fill, secondary ink; hover raises the fill. No border,
-   no shadow — the icon alone is the affordance (SidebarRoot .iconButton). */
+/* The tab strip of the OPEN right panel reserves the cluster's width at its
+   right end, so the tabs and the + menu genuinely yield space to the cluster
+   (never hiding under it). */
+.panel:not(.panelHidden) .tabBar {
+  padding-right: 72px;
+}
+
+/* The closed-state affordance is the native rail icon control: a plain
+   28px circle (the app's icon-button size — the cluster must stay inside
+   the 34px tab-strip band so it never covers the pane headers below),
+   transparent fill, secondary ink; hover raises the fill. No border, no
+   shadow — the icon alone is the affordance. */
 .toggleButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -55,6 +67,8 @@
   position: fixed;
   top: 0;
   right: 0;
+  /* Full height: the bottom panel squeezes only the center column, so the
+     right panel never gives up any vertical position. */
   bottom: 0;
   z-index: 50;
   display: flex;
@@ -100,30 +114,117 @@
   background: var(--dsw-alias-interactive-bg-hover-accent);
 }
 
-.panelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 36px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  flex: none;
-}
-
-.panelTitle {
-  font: var(--dsw-font-s-14);
-  color: var(--dsw-alias-label-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .panelBody {
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: flex;
+}
+
+/* ── Bottom panel ──────────────────────────────────────────────────────── */
+
+/* The bottom panel: an independent workbench at the bottom of the CENTER
+   column only (the Sidebar shell writes left/right inline: from the app's
+   own left sidebar to the right panel's left edge) — the sidebars never
+   give up any position. Same surface as the right panel, with a top
+   hairline instead of the left one. */
+.bottomPanel {
+  position: fixed;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--dsw-specific-sidebar-fill);
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  /* Expand/collapse slides the panel; height drags animate the height. */
+  transition:
+    transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    height var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* Collapsed: slid off-screen, interactive nothing, hidden after the slide. */
+.bottomPanelHidden {
+  transform: translateY(102%);
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    transform var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    height var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    visibility 0s linear var(--ds-transition-duration-slow);
+}
+
+/* Height drags write at pointer cadence; easing would detach the edge. */
+.bottomPanel[data-dragging] {
+  transition: none;
+}
+
+/* The bottom panel's height drag: the top edge strip (mirror of the right
+   panel's width strip). */
+.bottomResize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 8px;
+  cursor: row-resize;
+  z-index: 2;
+  touch-action: none;
+}
+
+.bottomResizeActive {
+  background: var(--dsw-alias-interactive-bg-hover-accent);
+}
+
+/* The bottom panel's close control: the app's icon-button pattern (28px
+   circle), pinned to the tab strip's right end — one tap collapses the
+   panel. The tab strips below reserve its width so the + menu never hides
+   under it. */
+.bottomClose {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  flex: none;
+}
+
+.bottomClose:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The bottom panel's tab strips reserve the close control's width at their
+   right end, so the + menu never hides under it. */
+.bottomPanel .tabBar {
+  padding-right: 40px;
+}
+
+/* The shared corner (both panels open): the intersection of the right
+   panel's left edge and the bottom panel's top edge. Horizontal drags
+   resize the width, vertical drags the height — the two panels drag
+   against each other. */
+.cornerHandle {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  z-index: 52;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.cornerHandle:hover,
+.cornerHandle[data-dragging] {
+  background: var(--dsw-alias-interactive-bg-hover-accent);
 }
 
 /* Icon button: the app's own icon-button pattern (ui-workspace) — a 28px
@@ -317,28 +418,35 @@
   display: none;
 }
 
+/* An empty pane's welcome cards: a responsive grid of compact cards — as
+   many per row as the pane width allows; rows that cannot fit the pane
+   height are clipped (never scrolled or squeezed smaller). */
 .paneEmptyCards {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-content: start;
   gap: 8px;
-  padding: 16px;
+  padding: 12px;
+  overflow: hidden;
 }
 
 .paneCard {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 8px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: var(--dsw-font-xxs-strong-12);
   cursor: pointer;
-  text-align: left;
+  text-align: center;
 }
 
 .paneCard:hover:not(:disabled) {
@@ -1713,6 +1821,7 @@
 /* Keyboard focus stays visible on every interactive control (the styling
    policy requires focus visibility; the accent token doubles as the ring). */
 .toggleButton:focus-visible,
+.bottomClose:focus-visible,
 .iconButton:focus-visible,
 .tab:focus-visible,
 .tabClose:focus-visible,
@@ -1739,6 +1848,9 @@
 @media (prefers-reduced-motion: reduce) {
   .panel,
   .panelHidden,
+  .bottomPanel,
+  .bottomPanelHidden,
+  .toggleCluster,
   .toggleButton,
   .tab,
   .tabBarPlus,
