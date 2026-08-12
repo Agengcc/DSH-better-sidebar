@@ -1,8 +1,14 @@
 # dsh-better-sidebar
 
-> DeepSeek Harness Web GUI 的 **VSCode 风格侧边栏**插件：文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、Subagent 页面——**右侧栏 + 底部面板双工作台**，一个插件全部搞定。
+> 一个插件，一套完整工作台：
+>
+> 文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、Subagent 页面——**右侧栏 + 底部面板双工作台**，一个插件全部搞定。
+>
+> 支持Tab窗口随意拖拽，支持三方拓展注册新Tab页面和文件预览
 
-<img width="4632" height="2720" alt="image" src="https://github.com/user-attachments/assets/39d86636-7654-412f-86ea-c60a2d5f20f0" />
+https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
+
+<img width="2630" height="1794" alt="6c4293e1bec2e935031bf0e986d6ec65" src="https://github.com/user-attachments/assets/dfdb875e-a1a8-4d4b-8340-353736b1708f" />
 
 ## ✨ 功能一览
 
