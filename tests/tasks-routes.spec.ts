@@ -19,6 +19,28 @@ function ctxWith(sessions: unknown, tasks: unknown, agents: unknown): Context {
   } as unknown as Context
 }
 
+/** A context that additionally captures the session/event listener (live mirror). */
+function ctxWithFeed(sessions: unknown): {
+  ctx: Context
+  emit: (session: unknown, event: SidebarSessionEvent) => void
+} {
+  let listener: ((session: unknown, event: SidebarSessionEvent) => void) | undefined
+  const base = ctxWith(sessions, undefined, undefined) as unknown as {
+    on: (event: string, fn: (session: unknown, event: SidebarSessionEvent) => void) => () => void
+    effect: (fn: () => void | (() => void)) => void
+  }
+  base.on = (_event: string, fn) => {
+    listener = fn
+    return () => { if (listener === fn) listener = undefined }
+  }
+  // The vendored cordis runs the registration effect immediately.
+  base.effect = (fn) => { fn() }
+  return {
+    ctx: base as unknown as Context,
+    emit: (session, event) => { listener?.(session, event) },
+  }
+}
+
 /** A stub live agent (the fence compares `id` only). */
 const agent = (id: string) => ({ id, session: { header: { cwd: '/p' } } })
 
@@ -95,6 +117,55 @@ describe('tasks.output route (event replay)', () => {
     expect(api.output({ sessionId: 's1', id: 'bash-1' })).toEqual({ text: '', truncated: false, read: false })
     // The replay never touches the registry — the model's cursor is safe by construction.
     expect(tasks.kill).not.toHaveBeenCalled()
+  })
+
+  it('mirrors live task_output events the store log misses (restart divergence)', () => {
+    // The store session is frozen at its rehydration boundary (no events);
+    // the read exists only on the live session/event feed.
+    const { ctx, emit } = ctxWithFeed({ get: () => session([]) })
+    const api = buildTasksApi(ctx, 512 * 1024)
+    expect(api.output({ sessionId: 's1', id: 'bash-1' })).toEqual({ text: '', truncated: false, read: false })
+
+    // The live feed delivers the task_output call and its result.
+    emit({ id: 's1' }, taskOutputCall(100, 'c-live', 'bash-1'))
+    emit({ id: 's1' }, taskOutputResult(101, 'c-live', 'live line\n[status: completed, exit code: 0]'))
+    expect(api.output({ sessionId: 's1', id: 'bash-1' })).toEqual({
+      text: 'live line\n[status: completed, exit code: 0]',
+      truncated: false,
+      read: true,
+    })
+
+    // Unrelated results are never cached (no task_output call paired them),
+    // and another session's feed does not leak into this one.
+    emit({ id: 's1' }, taskOutputResult(102, 'c-other', 'unpaired line'))
+    emit({ id: 's2' }, taskOutputCall(103, 'c-s2', 'bash-1'))
+    emit({ id: 's2' }, taskOutputResult(104, 'c-s2', 'other session line'))
+    expect(api.output({ sessionId: 's1', id: 'bash-1' })).toEqual({
+      text: 'live line\n[status: completed, exit code: 0]',
+      truncated: false,
+      read: true,
+    })
+    expect(api.output({ sessionId: 's2', id: 'bash-1' })).toEqual({
+      text: 'other session line',
+      truncated: false,
+      read: true,
+    })
+  })
+
+  it('merges store-log traces with live mirror traces without double-counting', () => {
+    // A seed read (seq 5) in the store log plus a live read (seq 106) that
+    // ALSO reached the store log would double-count — the seq dedupe keeps
+    // exactly one copy of each.
+    const events = [taskOutputCall(5, 'c-seed', 'bash-1'), taskOutputResult(6, 'c-seed', 'seed line')]
+    const { ctx, emit } = ctxWithFeed({ get: () => session(events) })
+    const api = buildTasksApi(ctx, 512 * 1024)
+    emit({ id: 's1' }, taskOutputCall(106, 'c-live', 'bash-1'))
+    emit({ id: 's1' }, taskOutputResult(107, 'c-live', 'live line'))
+    expect(api.output({ sessionId: 's1', id: 'bash-1' })).toEqual({
+      text: 'seed line\nlive line',
+      truncated: false,
+      read: true,
+    })
   })
 
   it('caps oversized replays with the truncated flag', () => {

@@ -389,6 +389,15 @@ declare module 'cordis' {
      */
     betterSidebar: BetterSidebarService
     /**
+     * Subscribe to the session append feed (mirror of the cordis event API):
+     * the listener receives every appended session event with the LIVE
+     * Session instance that appended it. The api-proxy pushes the same feed
+     * to browsers; the sidebar uses it to mirror task_output events the
+     * session store's own log can lag behind (restart divergence). Returns
+     * the disposer.
+     */
+    on(event: string, listener: (session: unknown, event: SidebarSessionEvent) => void): () => void
+    /**
      * Register a lifecycle callback (DSH-vendored cordis): runs at plugin
      * activation; its returned cleanup runs at disposal.
      */
