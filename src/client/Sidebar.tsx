@@ -29,7 +29,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import { IconCloseFill14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { Context, SidebarConversation, SidebarSessionList } from '../context-types.ts'
+import type { Context, SidebarSessionList } from '../context-types.ts'
+import { appendToDraft } from './conversation-draft.ts'
 import {
   BOTTOM_MIN, PANEL_MIN, agentUuidOf, closeTab, firstLeaf, isAgentTabId, leafWithTab, mapLeaf, migrateBottomTabs, moveTab, moveTabToEdge, openDiffTab,
   reconcileAgentTerminals,
@@ -563,18 +564,7 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
    */
   const referenceInChat = useCallback((path: string): void => {
     if (sessionId === undefined) return
-    try {
-      const actx = ctx.sessions.scope(sessionId)
-      if (actx === undefined) return
-      const conversation = ctx.get('conversation') as SidebarConversation | undefined
-      if (conversation === undefined) return
-      const input = conversation.input.for(actx)
-      const mention = `@${relativeTo(cwd ?? '', path)}`
-      const draft = input.state.getSnapshot().draft
-      input.setDraft(draft.trim() === '' ? mention : `${draft} ${mention}`)
-    } catch (error) {
-      console.warn('[dsh-better-sidebar] reference insert failed:', error)
-    }
+    appendToDraft(ctx, sessionId, `@${relativeTo(cwd ?? '', path)}`)
   }, [ctx, sessionId, cwd])
 
   if (state === undefined || sessionId === undefined) {
