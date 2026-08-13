@@ -40,9 +40,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     autoOpenSubagent: typeof record.autoOpenSubagent === 'boolean'
       ? record.autoOpenSubagent
       : SIDEBAR_PREFS_DEFAULTS.autoOpenSubagent,
-    autoOpenTasks: typeof record.autoOpenTasks === 'boolean'
-      ? record.autoOpenTasks
-      : SIDEBAR_PREFS_DEFAULTS.autoOpenTasks,
+    autoOpenJobs: typeof record.autoOpenJobs === 'boolean'
+      ? record.autoOpenJobs
+      : SIDEBAR_PREFS_DEFAULTS.autoOpenJobs,
     agentTerminalTools: typeof record.agentTerminalTools === 'boolean'
       ? record.agentTerminalTools
       : SIDEBAR_PREFS_DEFAULTS.agentTerminalTools,

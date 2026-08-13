@@ -52,7 +52,7 @@ export const IconDiffOutline16 = ({ size = 16, className }: IconProps) => (
 )
 
 /**
- * Stop glyph for the background-task kill button: a filled square in the
+ * Stop glyph for the background-job kill button: a filled square in the
  * app's outline scale (16), the universal "halt this work" mark.
  */
 export const IconStopOutline16 = ({ size = 16, className }: IconProps) => (

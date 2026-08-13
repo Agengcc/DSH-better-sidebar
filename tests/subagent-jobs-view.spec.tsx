@@ -1,7 +1,7 @@
 /**
- * Subagent page tests for the background-task section: rows render from the
- * `tasksBySession` mirror, clicking a row peeks its output through
- * `tasks.output` with the OWNER session scope, the kill button needs a
+ * Subagent page tests for the background-job section: rows render from the
+ * `jobsBySession` mirror, clicking a row peeks its output through
+ * `jobs.output` with the OWNER session scope, the kill button needs a
  * two-click confirm, settled rows offer no kill, and the output panel never
  * polls while the page is hidden.
  */
@@ -80,7 +80,7 @@ function baseSnapshot(): SidebarSessionList {
       child: { id: 'child', displayTitle: '子代理', origin: 'subagent', parentId: 'root', running: true },
     },
     subagentsByParent: {},
-    tasksBySession: {
+    jobsBySession: {
       root: [
         { id: 'bash-1', kind: 'bash', label: 'sleep 300', status: 'running', startedAt: 1_000 },
       ],
@@ -97,9 +97,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
     const method = String(url).split('/').pop()
     const body = JSON.parse(String(init?.body)) as { sessionId: string; id: string }
-    if (method === 'tasks.output') {
+    if (method === 'jobs.output') {
       outputCalls.push({ sessionId: body.sessionId, id: body.id })
-      // bash-9 stands for a task the model never read (read:false).
+      // bash-9 stands for a job the model never read (read:false).
       return jsonResponse({
         ok: true,
         value: {
@@ -109,7 +109,7 @@ beforeEach(() => {
         },
       })
     }
-    if (method === 'tasks.kill') {
+    if (method === 'jobs.kill') {
       killCalls.push({ sessionId: body.sessionId, id: body.id })
       return jsonResponse({ ok: true, value: { ok: true, outcome: 'requested' } })
     }
@@ -123,15 +123,15 @@ afterEach(() => {
   for (const el of document.querySelectorAll('body > div')) el.remove()
 })
 
-describe('SubagentView background tasks', () => {
-  it('renders the tree tasks with status, durations, and owner labels', () => {
+describe('SubagentView background jobs', () => {
+  it('renders the tree jobs with status, durations, and owner labels', () => {
     const store = makeStore(baseSnapshot())
     const { container, unmount } = mount(
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
     )
     const text = container.textContent ?? ''
-    expect(text).toContain('后台命令')
-    expect(text).toContain('2 个后台命令 · 1 运行中')
+    expect(text).toContain('后台任务')
+    expect(text).toContain('2 个后台任务 · 1 运行中')
     // Both rows of the whole tree, owner-labeled (the tree spans two sessions).
     expect(text).toContain('sleep 300')
     expect(text).toContain('echo hi')
@@ -142,12 +142,12 @@ describe('SubagentView background tasks', () => {
     unmount()
   })
 
-  it('renders nothing task-related when the mirror is empty', () => {
-    const store = makeStore({ current: 'root', byId: { root: { id: 'root', displayTitle: '主会话' } }, subagentsByParent: {}, tasksBySession: {} })
+  it('renders nothing job-related when the mirror is empty', () => {
+    const store = makeStore({ current: 'root', byId: { root: { id: 'root', displayTitle: '主会话' } }, subagentsByParent: {}, jobsBySession: {} })
     const { container, unmount } = mount(
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
     )
-    expect(container.textContent).not.toContain('后台命令')
+    expect(container.textContent).not.toContain('后台任务')
     unmount()
   })
 
@@ -157,19 +157,19 @@ describe('SubagentView background tasks', () => {
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
     )
     expect(container.textContent).toContain('sleep 300')
-    // The mirror empties (all tasks settled and dropped): the section must
+    // The mirror empties (all jobs settled and dropped): the section must
     // vanish WITHOUT reordering hooks — a hook below the empty-state return
     // would crash React with "Rendered fewer hooks than expected" (the
     // minified #300 the sidebar boundary surfaces with a retry button).
-    await act(async () => { store.set({ ...baseSnapshot(), tasksBySession: {} }) })
-    expect(container.textContent).not.toContain('后台命令')
-    // And returning tasks must work too, with the same hook order.
+    await act(async () => { store.set({ ...baseSnapshot(), jobsBySession: {} }) })
+    expect(container.textContent).not.toContain('后台任务')
+    // And returning jobs must work too, with the same hook order.
     await act(async () => { store.set(baseSnapshot()) })
     expect(container.textContent).toContain('sleep 300')
     unmount()
   })
 
-  it('shows the selected task output in the bottom dock, closeable', async () => {
+  it('shows the selected job output in the bottom dock, closeable', async () => {
     const store = makeStore(baseSnapshot())
     const { container, unmount } = mount(
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
@@ -200,7 +200,7 @@ describe('SubagentView background tasks', () => {
     expect(container.textContent).toContain('output-of-bash-1')
     const second = container.querySelector('button[aria-label*="echo hi"]') as HTMLButtonElement
     await act(async () => { second.click() })
-    // One dock, now fed by the second task (its owner session scopes the replay).
+    // One dock, now fed by the second job (its owner session scopes the replay).
     expect(outputCalls).toEqual([
       { sessionId: 'root', id: 'bash-1' },
       { sessionId: 'child', id: 'bash-2' },
@@ -211,11 +211,11 @@ describe('SubagentView background tasks', () => {
     unmount()
   })
 
-  it('explains when the model has not read the task yet', async () => {
+  it('explains when the model has not read the job yet', async () => {
     const snapshot = baseSnapshot()
-    snapshot.tasksBySession = {
+    snapshot.jobsBySession = {
       root: [
-        ...(snapshot.tasksBySession?.root ?? []),
+        ...(snapshot.jobsBySession?.root ?? []),
         { id: 'bash-9', kind: 'bash', label: 'unread cmd', status: 'running', startedAt: 9_000 },
       ],
     }
@@ -225,13 +225,13 @@ describe('SubagentView background tasks', () => {
     )
     const row = container.querySelector('button[aria-label*="unread cmd"]') as HTMLButtonElement
     await act(async () => { row.click() })
-    // read:false → the pane explains the output awaits the model's task_output
+    // read:false → the pane explains the output awaits the model's job_output
     // (never the model's cursor, so there is nothing to steal yet).
     expect(container.textContent).toContain('等待模型读取该任务的输出')
     unmount()
   })
 
-  it('stays compact and functional with many tasks', async () => {
+  it('stays compact and functional with many jobs', async () => {
     const many = Array.from({ length: 60 }, (_, index) => ({
       id: `bash-${index + 10}`,
       kind: 'bash' as const,
@@ -244,12 +244,12 @@ describe('SubagentView background tasks', () => {
       current: 'root',
       byId: { root: { id: 'root', displayTitle: '主会话' } },
       subagentsByParent: {},
-      tasksBySession: { root: many },
+      jobsBySession: { root: many },
     })
     const { container, unmount } = mount(
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),
     )
-    expect(container.textContent).toContain('60 个后台命令 · 30 运行中')
+    expect(container.textContent).toContain('60 个后台任务 · 30 运行中')
     expect(container.querySelectorAll('button[aria-label*="bulk cmd"]')).toHaveLength(60)
     // Clicking a row anywhere in the long list still feeds the single dock.
     const row = container.querySelector('button[aria-label*="bulk cmd 59"]') as HTMLButtonElement
@@ -259,7 +259,7 @@ describe('SubagentView background tasks', () => {
     unmount()
   })
 
-  it('kills a live task only after the two-click confirm', async () => {
+  it('kills a live job only after the two-click confirm', async () => {
     const store = makeStore(baseSnapshot())
     const { container, unmount } = mount(
       createElement(SubagentView, { sessionId: 'root', active: true, ctx: makeCtx(store) }),

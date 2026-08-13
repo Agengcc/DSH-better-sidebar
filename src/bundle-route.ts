@@ -122,7 +122,7 @@ export function createBundleRouteHandler(
 
 /** Register the /sidebar/bundle route (disposed with the fiber). */
 export function registerBundleRoute(ctx: Context, fence: (req: IncomingMessage) => boolean): () => void {
-  return ctx.httpServer.register({
+  return ctx.webServer.register({
     kind: 'prefix',
     path: '/sidebar/bundle',
     handler: createBundleRouteHandler(fence),

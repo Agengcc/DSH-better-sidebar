@@ -1,31 +1,31 @@
 /**
- * Background-task routes of the /sidebar JSON API ('tasks.output' /
- * 'tasks.kill'). The task LIST needs no route: it arrives through the
- * harness's `session/tasks` push mirror (`tasksBySession` in the sessions
+ * Background-job routes of the /sidebar JSON API ('jobs.output' /
+ * 'jobs.kill'). The job LIST needs no route: it arrives through the
+ * harness's `session/jobs` push mirror (`jobsBySession` in the sessions
  * list feed). The routes:
  *
- * - 'tasks.output' — REPLAYS the output the MODEL has read so far for one
- *   task. The source is the owner session's own event log: `tool/call` rows
- *   of `task_output` name the task via `arguments.task_id`, and the paired
+ * - 'jobs.output' — REPLAYS the output the MODEL has read so far for one
+ *   job. The source is the owner session's own event log: `tool/call` rows
+ *   of `job_output` name the job via `arguments.job_id`, and the paired
  *   `tool/result` rows carry the finalized content the model received.
  *   Because the session store's in-memory log can lag the live append feed
  *   after a host restart (the store session stays frozen at its
- *   rehydration boundary), the plugin ALSO mirrors task_output events from
+ *   rehydration boundary), the plugin ALSO mirrors job_output events from
  *   the live `session/event` feed and merges both sources (deduped by seq).
- *   This touches NO DSH source: the model's `task_output` cursor is never
- *   consumed, and the pane stays empty until the agent reads the task.
- * - 'tasks.kill' — the registry's stock `kill` (a pristine DSH API),
+ *   This touches NO DSH source: the model's `job_output` cursor is never
+ *   consumed, and the pane stays empty until the agent reads the job.
+ * - 'jobs.kill' — the registry's stock `kill` (a pristine DSH API),
  *   fenced by the owning session via the live agent caller. Absent registry
  *   → 503, mirroring the settings routes' optional-service downgrade.
  */
 import type { Context, SidebarSessionEvent } from './context-types.ts'
 import { requireString, SidebarError } from './wire.ts'
 
-/** The two background-task routes of the sidebar API. */
-export interface SidebarTasksRoutes {
-  /** The output the model has read so far for one task (event replay, capped). */
+/** The two background-job routes of the sidebar API. */
+export interface SidebarJobsRoutes {
+  /** The output the model has read so far for one job (event replay, capped). */
   output(payload: unknown): { text: string; truncated: boolean; read: boolean }
-  /** Request cancellation of one task (live tasks flip to stopping). */
+  /** Request cancellation of one job (live jobs flip to stopping). */
   kill(payload: unknown): { ok: true; outcome: 'requested' | 'already-finished' }
 }
 
@@ -77,40 +77,40 @@ function resultIsError(message: ToolResultMessageLike): boolean {
   })
 }
 
-/** Whether a task_output result carries no new output — the controller's
+/** Whether a job_output result carries no new output — the controller's
  *  model-facing "(no new output)" body, noise for the human pane. */
 function isNoNewOutput(text: string): boolean {
   return text.startsWith('(no new output)')
 }
 
-/** One compact task_output trace (a tool/call or its paired tool/result). */
-interface TaskOutputTrace {
+/** One compact job_output trace (a tool/call or its paired tool/result). */
+interface JobOutputTrace {
   seq: number
   kind: 'call' | 'result'
   /** The tool call identity pairing the two rows. */
   callId: string
-  /** tool/call: the task id parsed from the model arguments. */
-  taskId?: string
+  /** tool/call: the job id parsed from the model arguments. */
+  jobId?: string
   /** tool/result: the finalized text the model received. */
   text?: string
   /** tool/result: whether the result was an error (read counts, text skipped). */
   isError?: boolean
 }
 
-/** Extract the task_output trace of one raw session event (undefined = unrelated). */
-function traceOf(event: SidebarSessionEvent): TaskOutputTrace | undefined {
+/** Extract the job_output trace of one raw session event (undefined = unrelated). */
+function traceOf(event: SidebarSessionEvent): JobOutputTrace | undefined {
   if (event.type === 'tool/call') {
     const data = event.data as { name?: unknown; callId?: unknown; arguments?: unknown }
-    if (data.name !== 'task_output' || typeof data.callId !== 'string') return undefined
-    let taskId: string | undefined
+    if (data.name !== 'job_output' || typeof data.callId !== 'string') return undefined
+    let jobId: string | undefined
     try {
-      const args = JSON.parse(typeof data.arguments === 'string' ? data.arguments : '') as { task_id?: unknown }
-      if (typeof args.task_id === 'string') taskId = args.task_id
+      const args = JSON.parse(typeof data.arguments === 'string' ? data.arguments : '') as { job_id?: unknown }
+      if (typeof args.job_id === 'string') jobId = args.job_id
     } catch {
-      // Malformed model arguments: not a task_output pair.
+      // Malformed model arguments: not a job_output pair.
     }
-    if (taskId === undefined) return undefined
-    return { seq: event.seq, kind: 'call', callId: data.callId, taskId }
+    if (jobId === undefined) return undefined
+    return { seq: event.seq, kind: 'call', callId: data.callId, jobId }
   }
   if (event.type === 'tool/result') {
     const message = (event.data as { message?: unknown }).message as ToolResultMessageLike | undefined
@@ -132,17 +132,17 @@ function traceOf(event: SidebarSessionEvent): TaskOutputTrace | undefined {
 const MIRROR_MAX_ENTRIES = 200
 
 /**
- * The live task_output mirror: subscribes to the session append feed and
- * caches the task_output traces the session store's own log can lag behind
+ * The live job_output mirror: subscribes to the session append feed and
+ * caches the job_output traces the session store's own log can lag behind
  * (after a host restart the store session stays frozen at its rehydration
  * boundary, so `session.events` misses everything appended since — the very
  * reads the pane exists to show). Zero DSH writes: the api-proxy pushes the
  * same feed to browsers.
  */
-function createTaskOutputMirror(ctx: Context): { entries(sessionId: string): readonly TaskOutputTrace[] } {
-  const perSession = new Map<string, TaskOutputTrace[]>()
+function createJobOutputMirror(ctx: Context): { entries(sessionId: string): readonly JobOutputTrace[] } {
+  const perSession = new Map<string, JobOutputTrace[]>()
   // tool/call identities per session, so unrelated tool/result rows are
-  // never cached (only task_output results pair with a cached call).
+  // never cached (only job_output results pair with a cached call).
   const callIds = new Map<string, Set<string>>()
   if (typeof ctx.on !== 'function') {
     // Test doubles without the event API degrade to seed-only replay.
@@ -165,9 +165,9 @@ function createTaskOutputMirror(ctx: Context): { entries(sessionId: string): rea
       push(sessionId, trace)
     }
   })
-  ctx.effect(() => dispose, 'dsh-better-sidebar: task-output event mirror')
+  ctx.effect(() => dispose, 'dsh-better-sidebar: job-output event mirror')
 
-  const push = (sessionId: string, trace: TaskOutputTrace): void => {
+  const push = (sessionId: string, trace: JobOutputTrace): void => {
     let list = perSession.get(sessionId)
     if (list === undefined) perSession.set(sessionId, list = [])
     list.push(trace)
@@ -187,43 +187,43 @@ function createTaskOutputMirror(ctx: Context): { entries(sessionId: string): rea
 }
 
 /**
- * Build the tasks routes bound to the plugin context. `output` merges the
- * owner session's own event log with the live task_output mirror; `kill`
- * reads the tasks/agents services lazily and degrades to a 503 when the
+ * Build the jobs routes bound to the plugin context. `output` merges the
+ * owner session's own event log with the live job_output mirror; `kill`
+ * reads the jobs/agents services lazily and degrades to a 503 when the
  * deployment lacks the registry.
  * @param ctx - host plugin context.
  * @param outputLimit - response cap for one output replay in bytes; longer
  *   texts are sliced and flagged `truncated` (mirrors the fs.read cap).
  */
-export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRoutes {
-  const tasks = ctx.get('tasks')
+export function buildJobsApi(ctx: Context, outputLimit: number): SidebarJobsRoutes {
+  const jobs = ctx.get('jobs')
   const agents = ctx.get('agents')
-  const mirror = createTaskOutputMirror(ctx)
+  const mirror = createJobOutputMirror(ctx)
   /** The live caller whose session id the registry fence compares against. */
   const callerOf = (sessionId: string) => agents?.get(sessionId)
-  /** Registry refusals become a 404 task-error; unknown and foreign ids are indistinguishable. */
+  /** Registry refusals become a 404 job-error; unknown and foreign ids are indistinguishable. */
   const registryError = (error: unknown): SidebarError =>
-    new SidebarError('task-error', error instanceof Error ? error.message : String(error), 404)
+    new SidebarError('job-error', error instanceof Error ? error.message : String(error), 404)
   return {
     output(payload) {
       const sessionId = requireString(payload, 'sessionId')
       const id = requireString(payload, 'id')
       // Merge the store's event log (durable seed + whatever it received)
       // with the live mirror, deduped by seq — a trace never double-counts.
-      const bySeq = new Map<number, TaskOutputTrace>()
+      const bySeq = new Map<number, JobOutputTrace>()
       for (const event of ctx.sessions.get(sessionId)?.events ?? []) {
         const trace = traceOf(event)
         if (trace !== undefined) bySeq.set(trace.seq, trace)
       }
       for (const trace of mirror.entries(sessionId)) bySeq.set(trace.seq, trace)
       // Pair calls with results in seq order: the model's reads, oldest first.
-      const taskOf = new Map<string, string>()
+      const jobOf = new Map<string, string>()
       const parts: string[] = []
       let read = false
       for (const trace of [...bySeq.values()].sort((left, right) => left.seq - right.seq)) {
         if (trace.kind === 'call') {
-          if (trace.taskId !== undefined) taskOf.set(trace.callId, trace.taskId)
-        } else if (taskOf.get(trace.callId) === id) {
+          if (trace.jobId !== undefined) jobOf.set(trace.callId, trace.jobId)
+        } else if (jobOf.get(trace.callId) === id) {
           read = true
           if (trace.isError !== true && trace.text !== undefined && !isNoNewOutput(trace.text)) {
             parts.push(trace.text)
@@ -238,8 +238,8 @@ export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRo
       }
     },
     kill(payload) {
-      if (tasks === undefined) {
-        throw new SidebarError('task-error', 'the background-task registry is not mounted in this deployment', 503)
+      if (jobs === undefined) {
+        throw new SidebarError('job-error', 'the background-job registry is not mounted in this deployment', 503)
       }
       const sessionId = requireString(payload, 'sessionId')
       const id = requireString(payload, 'id')
@@ -248,7 +248,7 @@ export function buildTasksApi(ctx: Context, outputLimit: number): SidebarTasksRo
         ? record.reason
         : 'user requested via sidebar'
       try {
-        return { ok: true, outcome: tasks.kill(id, callerOf(sessionId), reason) }
+        return { ok: true, outcome: jobs.kill(id, callerOf(sessionId), reason) }
       } catch (error) {
         throw registryError(error)
       }

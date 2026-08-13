@@ -79,7 +79,7 @@ export const PrefsSchema: z<SidebarPrefs> = z.object({
   openByDefault: z.boolean().default(true),
   defaultWidthPercent: z.number().step(1).min(WIDTH_PERCENT_MIN).max(WIDTH_PERCENT_MAX).default(WIDTH_PERCENT_DEFAULT),
   autoOpenSubagent: z.boolean().default(true),
-  autoOpenTasks: z.boolean().default(true),
+  autoOpenJobs: z.boolean().default(true),
   agentTerminalTools: z.boolean().default(false),
   bottomPanelAutoTerminal: z.boolean().default(true),
   interceptOpenPath: z.boolean().default(true),

@@ -15,7 +15,7 @@ export const inject = ['invariants']
 
 /**
  * No runtime invariant: the sidebar owns no service state or event protocol
- * of its own — every route is mounted under the host's httpServer fence, the
+ * of its own — every route is mounted under the host's webServer fence, the
  * pty lifecycle is exercised by the smoke spec, and the panel's store is a
  * plain snapshot registry asserted by the behavior specs. The route fence,
  * pty quota, and store semantics are each observed through their seams.

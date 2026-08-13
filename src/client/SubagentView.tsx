@@ -33,7 +33,7 @@ import type {
   SidebarSubagentCatalog,
   SidebarSubagentChildEntry,
   SidebarSubagentDiagnosticEntry,
-  SidebarTaskView,
+  SidebarJobView,
 } from '../context-types.ts'
 import {
   collectBranchIds,
@@ -42,15 +42,15 @@ import {
 } from './subagent-detect.ts'
 import { lastActivity } from './subagent-activity.ts'
 import {
-  collectTreeTasks,
-  formatTaskDuration,
-  isTaskLive,
-  orderTasks,
-  taskDotState,
-  taskStatusLabel,
-  type TreeTask,
-} from './subagent-tasks.ts'
-import { api, type TaskOutputResult } from './api.ts'
+  collectTreeJobs,
+  formatJobDuration,
+  isJobLive,
+  orderJobs,
+  jobDotState,
+  jobStatusLabel,
+  type TreeJob,
+} from './subagent-jobs.ts'
+import { api, type JobOutputResult } from './api.ts'
 import { IconStopOutline16 } from './icons.tsx'
 import { t } from './locales.ts'
 import css from './SubagentView.module.css'
@@ -59,10 +59,10 @@ import css from './SubagentView.module.css'
 const POLL_MS = 3000
 /** Preview cap of one tool-call argument line. */
 const ARGS_PREVIEW = 60
-/** Refresh cadence of an expanded task-output panel while its task runs. */
-const TASK_POLL_MS = 2000
+/** Refresh cadence of an expanded job-output panel while its job runs. */
+const JOB_POLL_MS = 2000
 /** How long the kill button stays armed before it needs re-confirming. */
-const TASK_KILL_ARM_MS = 3000
+const JOB_KILL_ARM_MS = 3000
 
 /** The direct subagent children of one parent (durable `origin` rows). */
 function directChildren(
@@ -358,24 +358,24 @@ function CatalogRows({
 }
 
 /**
- * The shared output dock of the tasks section: ONE pane at the bottom of the
- * sidebar body (sticky, terminal-like) shows the SELECTED task's output as
+ * The shared output dock of the jobs section: ONE pane at the bottom of the
+ * sidebar body (sticky, terminal-like) shows the SELECTED job's output as
  * the MODEL has read it so far (replayed from the owner session's event
- * log), refreshed every {@link TASK_POLL_MS} while the task runs and the
- * page is visible. The model's `task_output` cursor is never touched — the
+ * log), refreshed every {@link JOB_POLL_MS} while the job runs and the
+ * page is visible. The model's `job_output` cursor is never touched — the
  * pane can never steal the agent's bytes, and it stays empty until the
- * agent reads the task. A single dock — not a panel per row — keeps the
- * task list compact and stable when many tasks are running.
+ * agent reads the job. A single dock — not a panel per row — keeps the
+ * job list compact and stable when many jobs are running.
  */
-function TaskOutputPane(props: {
+function JobOutputPane(props: {
   ownerSessionId: string
-  task: SidebarTaskView
+  job: SidebarJobView
   /** The page is visible (active tab + open panel): skip polling otherwise. */
   active: boolean
   onClose: () => void
 }) {
-  const { ownerSessionId, task, active, onClose } = props
-  const [state, setState] = useState<'loading' | TaskOutputResult | 'error'>('loading')
+  const { ownerSessionId, job, active, onClose } = props
+  const [state, setState] = useState<'loading' | JobOutputResult | 'error'>('loading')
   const controllerRef = useRef<AbortController | undefined>(undefined)
   const preRef = useRef<HTMLPreElement>(null)
 
@@ -384,44 +384,44 @@ function TaskOutputPane(props: {
     const controller = new AbortController()
     controllerRef.current = controller
     try {
-      const result = await api.taskOutput({ sessionId: ownerSessionId }, task.id, controller.signal)
+      const result = await api.jobOutput({ sessionId: ownerSessionId }, job.id, controller.signal)
       setState(result)
     } catch {
       // A newer pull aborted this one, or the wire failed: keep the last
       // known output; only a dock that never loaded anything shows an error.
       setState(current => (current === 'loading' ? 'error' : current))
     }
-  }, [ownerSessionId, task.id])
+  }, [ownerSessionId, job.id])
 
   useEffect(() => {
     void load()
-    if (!active || !isTaskLive(task)) return
-    const timer = window.setInterval(() => { void load() }, TASK_POLL_MS)
+    if (!active || !isJobLive(job)) return
+    const timer = window.setInterval(() => { void load() }, JOB_POLL_MS)
     return () => { window.clearInterval(timer) }
-  }, [load, active, task.status])
+  }, [load, active, job.status])
 
   useEffect(() => () => { controllerRef.current?.abort() }, [])
 
-  // Terminal-tail behavior: while the task runs, each refresh pins the view
+  // Terminal-tail behavior: while the job runs, each refresh pins the view
   // to the newest output; a settled dock leaves scrolling to the reader.
   useEffect(() => {
-    if (!isTaskLive(task) || typeof state !== 'object' || state.text.length === 0) return
+    if (!isJobLive(job) || typeof state !== 'object' || state.text.length === 0) return
     const pre = preRef.current
     if (pre !== null) pre.scrollTop = pre.scrollHeight
-  }, [state, task.status])
+  }, [state, job.status])
 
   return (
-    <div className={css.tasksPane} role="region" aria-label={`${task.label} ${t('tasks')}`}>
-      <div className={css.tasksPaneHeader}>
-        <StateDot state={taskDotState(task.status)} className={css.tasksPaneDot} />
-        <span className={css.tasksPaneLabel} title={task.label}>{task.label}</span>
-        <span className={css.tasksPaneStatus}>
-          {taskStatusLabel(task.status, t)}
-          {task.detail !== undefined && task.detail !== '' ? ` · ${task.detail}` : ''}
+    <div className={css.jobsPane} role="region" aria-label={`${job.label} ${t('jobs')}`}>
+      <div className={css.jobsPaneHeader}>
+        <StateDot state={jobDotState(job.status)} className={css.jobsPaneDot} />
+        <span className={css.jobsPaneLabel} title={job.label}>{job.label}</span>
+        <span className={css.jobsPaneStatus}>
+          {jobStatusLabel(job.status, t)}
+          {job.detail !== undefined && job.detail !== '' ? ` · ${job.detail}` : ''}
         </span>
         <button
           type="button"
-          className={css.tasksPaneClose}
+          className={css.jobsPaneClose}
           aria-label={t('close')}
           title={t('close')}
           onClick={onClose}
@@ -429,18 +429,18 @@ function TaskOutputPane(props: {
           <IconStopOutline16 size={10} />
         </button>
       </div>
-      {state === 'loading' && <div className={css.tasksPaneHint}>{t('loading')}</div>}
+      {state === 'loading' && <div className={css.jobsPaneHint}>{t('loading')}</div>}
       {state === 'error' && (
-        <div className={`${css.tasksPaneHint} ${css.tasksPaneError}`}>{t('taskOutputError')}</div>
+        <div className={`${css.jobsPaneHint} ${css.jobsPaneError}`}>{t('jobOutputError')}</div>
       )}
       {typeof state === 'object' && (
         <>
           {state.text.length > 0
-            ? <pre ref={preRef} className={css.tasksPanePre}>{state.text}</pre>
+            ? <pre ref={preRef} className={css.jobsPanePre}>{state.text}</pre>
             : state.read
-              ? <div className={css.tasksPaneHint}>{t('taskNoOutput')}</div>
-              : <div className={css.tasksPaneHint}>{t('taskNotReadYet')}</div>}
-          {state.truncated && <div className={css.tasksPaneHint}>{t('taskOutputTruncated')}</div>}
+              ? <div className={css.jobsPaneHint}>{t('jobNoOutput')}</div>
+              : <div className={css.jobsPaneHint}>{t('jobNotReadYet')}</div>}
+          {state.truncated && <div className={css.jobsPaneHint}>{t('jobOutputTruncated')}</div>}
         </>
       )}
     </div>
@@ -448,24 +448,24 @@ function TaskOutputPane(props: {
 }
 
 /**
- * The background-task section of the Subagent page: every task of the whole
+ * The background-job section of the Subagent page: every job of the whole
  * current tree (main agent + subagents, owner-labeled), fed by the harness
- * `session/tasks` push mirror. Clicking a row feeds its model-read output to
+ * `session/jobs` push mirror. Clicking a row feeds its model-read output to
  * the shared bottom dock (event replay — never the model's cursor); live
  * rows carry a two-click-confirm kill button. Renders nothing while the
- * tree has no tasks.
+ * tree has no jobs.
  */
-function TasksSection(props: {
+function JobsSection(props: {
   byId: SidebarSessionList['byId']
-  tasksBySession: SidebarSessionList['tasksBySession']
+  jobsBySession: SidebarSessionList['jobsBySession']
   rootId: string | undefined
   /** The page is visible (active tab + open panel): skip polling otherwise. */
   active: boolean
 }) {
-  const { byId, tasksBySession, rootId, active } = props
+  const { byId, jobsBySession, rootId, active } = props
   const rows = useMemo(
-    () => orderTasks(collectTreeTasks(byId, tasksBySession, rootId)),
-    [byId, tasksBySession, rootId],
+    () => orderJobs(collectTreeJobs(byId, jobsBySession, rootId)),
+    [byId, jobsBySession, rootId],
   )
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
   const [armedId, setArmedId] = useState<string | undefined>(undefined)
@@ -475,12 +475,12 @@ function TasksSection(props: {
   const [now, setNow] = useState(() => Date.now())
 
   const selectedRow = useMemo(
-    () => (selectedId === undefined ? undefined : rows.find(row => row.task.id === selectedId)),
+    () => (selectedId === undefined ? undefined : rows.find(row => row.job.id === selectedId)),
     [rows, selectedId],
   )
 
   const liveCount = useMemo(
-    () => rows.reduce((count, row) => count + (isTaskLive(row.task) ? 1 : 0), 0),
+    () => rows.reduce((count, row) => count + (isJobLive(row.job) ? 1 : 0), 0),
     [rows],
   )
   const multiOwner = useMemo(
@@ -491,7 +491,7 @@ function TasksSection(props: {
   // The kill button stays armed only briefly; a stray click must never kill.
   useEffect(() => {
     if (armedId === undefined) return
-    const timer = window.setTimeout(() => { setArmedId(undefined) }, TASK_KILL_ARM_MS)
+    const timer = window.setTimeout(() => { setArmedId(undefined) }, JOB_KILL_ARM_MS)
     return () => { window.clearTimeout(timer) }
   }, [armedId])
 
@@ -502,7 +502,7 @@ function TasksSection(props: {
     return () => { window.clearInterval(timer) }
   }, [liveCount])
 
-  // The docked output pane follows its task: when the selected task leaves
+  // The docked output pane follows its job: when the selected job leaves
   // the mirror (settled and dropped, or the tree switched), close the dock.
   useEffect(() => {
     if (selectedId !== undefined && selectedRow === undefined) setSelectedId(undefined)
@@ -511,13 +511,13 @@ function TasksSection(props: {
   // NOTE: every hook must live ABOVE the empty-state return — a hook below it
   // would flip this component's hook count when the mirror empties and crash
   // React with "Rendered fewer hooks than expected" (the #300 regression).
-  const kill = useCallback(async (row: TreeTask): Promise<void> => {
-    setKillingId(row.task.id)
+  const kill = useCallback(async (row: TreeJob): Promise<void> => {
+    setKillingId(row.job.id)
     setKillErrorId(undefined)
     try {
-      await api.taskKill({ sessionId: row.ownerSessionId }, row.task.id)
+      await api.jobKill({ sessionId: row.ownerSessionId }, row.job.id)
     } catch {
-      setKillErrorId(row.task.id)
+      setKillErrorId(row.job.id)
     } finally {
       setKillingId(undefined)
       setArmedId(undefined)
@@ -527,84 +527,84 @@ function TasksSection(props: {
   if (rows.length === 0) return null
 
   const countLabel = liveCount > 0
-    ? t('tasksCountRunning', { count: rows.length, running: liveCount })
-    : t('tasksCount', { count: rows.length })
+    ? t('jobsCountRunning', { count: rows.length, running: liveCount })
+    : t('jobsCount', { count: rows.length })
 
   return (
     <>
-      <section className={css.tasks} aria-label={t('tasks')}>
-        <div className={css.tasksHeader}>
-          <span className={css.tasksTitle}>{t('tasks')}</span>
-          <span className={css.tasksCount}>{countLabel}</span>
+      <section className={css.jobs} aria-label={t('jobs')}>
+        <div className={css.jobsHeader}>
+          <span className={css.jobsTitle}>{t('jobs')}</span>
+          <span className={css.jobsCount}>{countLabel}</span>
         </div>
-        <ul className={css.tasksList} aria-label={t('tasks')}>
+        <ul className={css.jobsList} aria-label={t('jobs')}>
           {rows.map((row) => {
-            const { task } = row
-            const live = isTaskLive(task)
-            const selected = selectedId === task.id
-            const armed = armedId === task.id
-            const killing = killingId === task.id
-            const killFailed = killErrorId === task.id
+            const { job } = row
+            const live = isJobLive(job)
+            const selected = selectedId === job.id
+            const armed = armedId === job.id
+            const killing = killingId === job.id
+            const killFailed = killErrorId === job.id
             const elapsed = live
-              ? now - task.startedAt
-              : (task.finishedAt ?? task.startedAt) - task.startedAt
+              ? now - job.startedAt
+              : (job.finishedAt ?? job.startedAt) - job.startedAt
             const secondary = [
               ...(multiOwner ? [row.ownerTitle] : []),
-              taskStatusLabel(task.status, t),
-              ...(task.detail !== undefined && task.detail !== '' ? [task.detail] : []),
-              formatTaskDuration(elapsed, t),
+              jobStatusLabel(job.status, t),
+              ...(job.detail !== undefined && job.detail !== '' ? [job.detail] : []),
+              formatJobDuration(elapsed, t),
             ].filter(Boolean).join(' · ')
             return (
               <li
-                key={task.id}
+                key={job.id}
                 className={clsx(
-                  css.tasksRow,
-                  !live && css.tasksRowSettled,
-                  selected && css.tasksRowSelected,
+                  css.jobsRow,
+                  !live && css.jobsRowSettled,
+                  selected && css.jobsRowSelected,
                 )}
               >
                 <button
                   type="button"
-                  className={css.tasksRowMain}
+                  className={css.jobsRowMain}
                   aria-pressed={selected}
-                  aria-label={`${task.label} ${secondary}`}
-                  onClick={() => { setSelectedId(selected ? undefined : task.id) }}
+                  aria-label={`${job.label} ${secondary}`}
+                  onClick={() => { setSelectedId(selected ? undefined : job.id) }}
                 >
-                  <StateDot state={taskDotState(task.status)} className={css.tasksDot} />
-                  <span className={css.tasksContent}>
-                    <span className={css.tasksLabelLine}>
-                      <span className={css.tasksKind}>{task.kind}</span>
-                      <span className={css.tasksLabel} title={task.label}>{task.label}</span>
+                  <StateDot state={jobDotState(job.status)} className={css.jobsDot} />
+                  <span className={css.jobsContent}>
+                    <span className={css.jobsLabelLine}>
+                      <span className={css.jobsKind}>{job.kind}</span>
+                      <span className={css.jobsLabel} title={job.label}>{job.label}</span>
                     </span>
-                    <span className={css.tasksSecondary}>{secondary}</span>
+                    <span className={css.jobsSecondary}>{secondary}</span>
                   </span>
                 </button>
-                {task.status === 'running' && (
+                {job.status === 'running' && (
                   <button
                     type="button"
-                    className={armed ? `${css.tasksKill} ${css.tasksKillArmed}` : css.tasksKill}
-                    aria-label={armed ? t('taskKillConfirm') : t('taskKill')}
-                    title={armed ? t('taskKillConfirm') : t('taskKill')}
+                    className={armed ? `${css.jobsKill} ${css.jobsKillArmed}` : css.jobsKill}
+                    aria-label={armed ? t('jobKillConfirm') : t('jobKill')}
+                    title={armed ? t('jobKillConfirm') : t('jobKill')}
                     disabled={killing}
                     onClick={(event) => {
                       event.stopPropagation()
                       if (armed) void kill(row)
-                      else setArmedId(task.id)
+                      else setArmedId(job.id)
                     }}
                   >
-                    {armed ? t('taskKillConfirm') : <IconStopOutline16 size={12} />}
+                    {armed ? t('jobKillConfirm') : <IconStopOutline16 size={12} />}
                   </button>
                 )}
-                {killFailed && <span className={css.tasksKillError}>{t('taskKillError')}</span>}
+                {killFailed && <span className={css.jobsKillError}>{t('jobKillError')}</span>}
               </li>
             )
           })}
         </ul>
       </section>
       {selectedRow !== undefined && (
-        <TaskOutputPane
+        <JobOutputPane
           ownerSessionId={selectedRow.ownerSessionId}
-          task={selectedRow.task}
+          job={selectedRow.job}
           active={active}
           onClose={() => { setSelectedId(undefined) }}
         />
@@ -854,9 +854,9 @@ export function SubagentView(props: {
             </div>
           )}
         </div>
-        <TasksSection
+        <JobsSection
           byId={byId}
-          tasksBySession={list.tasksBySession}
+          jobsBySession={list.jobsBySession}
           rootId={rootId}
           active={active}
         />

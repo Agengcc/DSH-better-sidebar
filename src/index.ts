@@ -36,7 +36,7 @@ import { SettingsConflictError, settingsNamespace, type SettingsNamespace } from
 import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 import { AgentPtyRegistry, clampDims, type AgentTerminalHandle } from './agent-pty.ts'
 import { registerTools } from './tools.ts'
-import { buildTasksApi, type SidebarTasksRoutes } from './tasks-routes.ts'
+import { buildJobsApi, type SidebarJobsRoutes } from './jobs-routes.ts'
 import { readJsonBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
 
 export { Config }
@@ -59,7 +59,7 @@ export type {
 export const name = 'dsh-better-sidebar'
 
 /** Services required before mounting: the webserver routes, the session store, the loader's connection row, and the tool registry. */
-export const inject = ['httpServer', 'sessions', 'loader', 'tools']
+export const inject = ['webServer', 'sessions', 'loader', 'tools']
 
 /** Content types for the media route, by extension. */
 const MEDIA_TYPES: Record<string, string> = {
@@ -199,12 +199,12 @@ function buildApi(
     const clientCwd = typeof record?.cwd === 'string' && record.cwd !== '' ? record.cwd : undefined
     return { sessionId, cwd: sessionCwdOf(ctx, sessionId, clientCwd) }
   }
-  // Background tasks: the LIST rides the harness's `session/tasks` push
+  // Background jobs: the LIST rides the harness's `session/jobs` push
   // mirror, so these routes only replay output the model has read (from the
   // session's own event log — no DSH source is touched, the model's
-  // task_output cursor is never consumed) and kill (the registry's stock
-  // API). A deployment without the tasks registry downgrades kill to a 503.
-  const tasksApi: SidebarTasksRoutes = buildTasksApi(ctx, resolved.readLimit)
+  // job_output cursor is never consumed) and kill (the registry's stock
+  // API). A deployment without the jobs registry downgrades kill to a 503.
+  const jobsApi: SidebarJobsRoutes = buildJobsApi(ctx, resolved.readLimit)
   return {
     'session.cwd': (payload) => {
       const { sessionId, cwd } = cwdOf(payload)
@@ -334,14 +334,14 @@ function buildApi(
       agentPtyRegistry.close(uuid)
       return { ok: true }
     },
-    // Background tasks: read one task's output (a REPLAY of what the model
+    // Background jobs: read one job's output (a REPLAY of what the model
     // has read so far, from the owner session's event log — the model's
-    // task_output cursor is never touched, so the human pane can never steal
-    // the agent's bytes), and kill one task. The task LIST itself arrives
-    // through the harness's session/tasks push mirror, so no list route
-    // exists. Kill is fenced to the owning session by the tasks registry.
-    'tasks.output': (payload) => tasksApi.output(payload),
-    'tasks.kill': (payload) => tasksApi.kill(payload),
+    // job_output cursor is never touched, so the human pane can never steal
+    // the agent's bytes), and kill one job. The job LIST itself arrives
+    // through the harness's session/jobs push mirror, so no list route
+    // exists. Kill is fenced to the owning session by the jobs registry.
+    'jobs.output': (payload) => jobsApi.output(payload),
+    'jobs.kill': (payload) => jobsApi.kill(payload),
     // The side card preferences. The settings service is optional in the
     // composition; while absent the routes report undefined and the client
     // keeps the schema defaults. Writes are revision-guarded: a stale editor
@@ -425,7 +425,7 @@ function buildApi(
 
 /**
  * Plugin body: mount the fenced routes and the pty lifecycle.
- * @param ctx - host plugin context (httpServer, sessions, loader).
+ * @param ctx - host plugin context (webServer, sessions, loader).
  * @param config - deployment-provided limits; the Loader validates against
  * {@link Config} and fills defaults, direct callers get them from
  * {@link resolveSidebarConfig}.
@@ -503,7 +503,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
 
   // ── JSON API ────────────────────────────────────────────────────────────
   const api = buildApi(ctx, ptyManager, agentPtyRegistry, resolved, () => settingsFace)
-  ctx.effect(() => ctx.httpServer.register({
+  ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: '/sidebar/api',
     handler: async (req, res) => {
@@ -541,7 +541,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   ctx.effect(() => registerBundleRoute(ctx, fence), 'dsh-better-sidebar: /sidebar/bundle chunk route')
 
   // ── Media route (images for the editor) ─────────────────────────────────
-  ctx.effect(() => ctx.httpServer.register({
+  ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: '/sidebar/file',
     handler: async (req, res) => {
@@ -599,7 +599,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   // boundary, this header is defense-in-depth so even a top-level load of
   // the URL (e.g. a popup opened by a previewed page) stays in an opaque
   // origin with no same-origin access to the GUI.
-  ctx.effect(() => ctx.httpServer.register({
+  ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: '/sidebar/html',
     handler: async (req, res) => {
@@ -662,7 +662,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   // terminals, scheduled-0 for UI tabs which keep the same reconnect grace
   // contract the host has always had).
   const wss = new WebSocketServer({ noServer: true })
-  ctx.effect(() => ctx.httpServer.registerUpgrade({
+  ctx.effect(() => ctx.webServer.registerUpgrade({
     path: '/sidebar/ws/terminal',
     handler: (req, socket, head) => {
       if (!fence(req)) {
@@ -684,7 +684,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   // sends `{type:'close'}` on the terminal WS, which kills the pty, which
   // fires a change here, which converges the view).
   const agentListWss = new WebSocketServer({ noServer: true })
-  ctx.effect(() => ctx.httpServer.registerUpgrade({
+  ctx.effect(() => ctx.webServer.registerUpgrade({
     path: '/sidebar/ws/agent-terminals',
     handler: (req, socket, head) => {
       if (!fence(req)) {

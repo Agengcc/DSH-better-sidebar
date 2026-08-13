@@ -110,16 +110,16 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       order: 30,
       single: true,
       // Declarative settings: the auto-open switches render under this row in
-      // the Side card settings page (the Tasks page's own related settings).
+      // the Side card settings page (the Jobs page's own related settings).
       settings: {
         toggles: [{
           key: 'autoOpenSubagent',
           title: () => t('settingsSubagentTitle'),
           desc: () => t('settingsSubagentDesc'),
         }, {
-          key: 'autoOpenTasks',
-          title: () => t('settingsTasksTitle'),
-          desc: () => t('settingsTasksDesc'),
+          key: 'autoOpenJobs',
+          title: () => t('settingsJobsTitle'),
+          desc: () => t('settingsJobsDesc'),
         }],
       },
       component: ({ ctx, scope, visible, onSubagentJump }) => (

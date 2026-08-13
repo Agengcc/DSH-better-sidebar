@@ -61,17 +61,17 @@ export interface FsTextResult { kind: 'text'; content: string; truncated: boolea
 export interface FsBinaryResult { kind: 'binary'; size: number; truncated: boolean; head: string }
 
 /**
- * One tasks.output response: the output the MODEL has read so far for the
- * task (replayed from the owner session's event log — the model's
- * task_output cursor is never touched, so the pane can never steal the
+ * One jobs.output response: the output the MODEL has read so far for the
+ * job (replayed from the owner session's event log — the model's
+ * job_output cursor is never touched, so the pane can never steal the
  * agent's bytes). `read` is false until the model actually called
- * task_output for the task.
+ * job_output for the job.
  */
-export interface TaskOutputResult {
+export interface JobOutputResult {
   text: string
   /** True when the host capped the text at its output limit. */
   truncated: boolean
-  /** Whether the model has read the task at least once. */
+  /** Whether the model has read the job at least once. */
   read: boolean
 }
 
@@ -161,15 +161,15 @@ export const api = {
   agentPtyClose: (uuid: string) =>
     call<{ ok: true }>('agent-pty.close', { uuid }),
   /**
-   * The output the model has read so far for one background task (replayed
-   * from the owner session's event log — never the model's task_output
-   * cursor). The scope MUST be the task's OWNER session.
+   * The output the model has read so far for one background job (replayed
+   * from the owner session's event log — never the model's job_output
+   * cursor). The scope MUST be the job's OWNER session.
    */
-  taskOutput: (scope: SessionScope, id: string, signal?: AbortSignal) =>
-    call<TaskOutputResult>('tasks.output', scopePayload(scope, { id }), signal),
-  /** Request cancellation of one background task (live tasks flip to stopping). */
-  taskKill: (scope: SessionScope, id: string, reason?: string) =>
-    call<{ ok: true; outcome: 'requested' | 'already-finished' }>('tasks.kill', scopePayload(scope, {
+  jobOutput: (scope: SessionScope, id: string, signal?: AbortSignal) =>
+    call<JobOutputResult>('jobs.output', scopePayload(scope, { id }), signal),
+  /** Request cancellation of one background job (live jobs flip to stopping). */
+  jobKill: (scope: SessionScope, id: string, reason?: string) =>
+    call<{ ok: true; outcome: 'requested' | 'already-finished' }>('jobs.kill', scopePayload(scope, {
       id,
       ...(reason !== undefined ? { reason } : {}),
     })),

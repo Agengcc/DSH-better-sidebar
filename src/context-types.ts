@@ -6,14 +6,14 @@
  * the npm cordis package does not declare the DSH-vendored runtime members
  * (`ctx.effect`, service properties). The members below mirror the actual
  * runtime shapes this plugin touches:
- * - httpServer: @deepseek-ai/dsh-host-webserver
+ * - webServer: @deepseek-ai/dsh-host-webserver (the WebServer)
  * - sessions: host side @deepseek-ai/dsh-session (SessionStore), client
  *   side the runtime ISessions list feed
  * - conversation: client side ui-conversation's IConversation (composer
  *   draft), read lazily through `ctx.get` — cross-plugin service reads need
  *   an inject declaration, so the direct property is never typed here
  * - loader: @cordisjs/plugin-loader (entry options)
- * - slots: the client runtime SlotsService
+ * - slots: the client runtime SlotRegistry
  * - effect: the DSH-vendored cordis lifecycle helper
  * Drift from upstream is contained to this file.
  */
@@ -35,8 +35,8 @@ export interface SidebarWebUpgradeRoute {
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
 
-/** The httpServer service face this plugin uses. */
-export interface SidebarHttpServer {
+/** The webServer service face this plugin uses. */
+export interface SidebarWebServer {
   register(route: SidebarWebRoute): () => void
   registerUpgrade(route: SidebarWebUpgradeRoute): () => void
 }
@@ -53,7 +53,7 @@ export interface SidebarSessionStore {
     /**
      * The live session's append-only event log (immutable snapshot; absent
      * on sessions the runtime has not hydrated). Read-only access — the
-     * tasks.output route replays `task_output` tool/result rows from it.
+     * jobs.output route replays `job_output` tool/result rows from it.
      */
     events?: readonly SidebarSessionEvent[]
   } | undefined
@@ -91,7 +91,7 @@ export interface SidebarSlotsService {
   register(options: SidebarSlotRegisterOptions, component: unknown): () => void
   /**
    * Run a callback for each declaration lifetime of a slot (the runtime
-   * SlotsService.inject): a no-op while the slot is undeclared, so the
+   * SlotRegistry.inject): a no-op while the slot is undeclared, so the
    * settings section registration waits for the settings shell.
    */
   inject(key: string, callback: () => () => void): () => void
@@ -158,33 +158,33 @@ export interface SidebarHistoryEntry {
   view?: unknown
 }
 
-/** Lifecycle status set of one background task (closed wire union). */
-export type SidebarTaskStatus = 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
+/** Lifecycle status set of one background job (closed wire union). */
+export type SidebarJobStatus = 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
 
 /**
- * One background task as the client mirror sees it (wire `TaskView` shape:
+ * One background job as the client mirror sees it (wire `JobView` shape:
  * id/kind/label/status/detail?/startedAt/finishedAt?).
  */
-export interface SidebarTaskView {
-  /** Registry-issued `<kind>-N` identity, stable for the task's whole life. */
+export interface SidebarJobView {
+  /** Registry-issued `<kind>-N` identity, stable for the job's whole life. */
   id: string
   /** Producer kind (`bash`, `pwsh`, `subagent`, …; open string by design). */
   kind: string
   /** Producer-supplied one-line label: the command, or the delegation description. */
   label: string
   /** Current lifecycle state. */
-  status: SidebarTaskStatus
+  status: SidebarJobStatus
   /** Kind-specific status detail ('exit code: 3'), present once supplied. */
   detail?: string
-  /** Epoch ms when the task was registered. */
+  /** Epoch ms when the job was registered. */
   startedAt: number
-  /** Epoch ms when the task settled; absent while live. */
+  /** Epoch ms when the job settled; absent while live. */
   finishedAt?: number
 }
 
-/** The host tasks registry face the sidebar routes touch (structural mirror of `TaskService`). */
-export interface SidebarTasksService {
-  /** Request cancellation; throws for an unknown or foreign task. */
+/** The host jobs registry face the sidebar routes touch (structural mirror of `JobRegistry`). */
+export interface SidebarJobsService {
+  /** Request cancellation; throws for an unknown or foreign job. */
   kill(id: string, caller?: SidebarAgent, reason?: string): 'requested' | 'already-finished'
 }
 
@@ -222,11 +222,11 @@ export interface SidebarSessionList {
   /** Direct durable catalogs keyed by their selected parent address. */
   subagentsByParent?: Readonly<Record<string, SidebarSubagentCatalog>>
   /**
-   * Background tasks per session, last-wins from the harness's `session/tasks`
+   * Background jobs per session, last-wins from the harness's `session/jobs`
    * push (a missing key is an empty set). Absent on runtime snapshots older
-   * than the tasks mirror — the sidebar simply shows no task rows.
+   * than the jobs mirror — the sidebar simply shows no job rows.
    */
-  tasksBySession?: Readonly<Record<string, readonly SidebarTaskView[]>>
+  jobsBySession?: Readonly<Record<string, readonly SidebarJobView[]>>
 }
 
 /** The client sessions service face (only the list feed is needed). */
@@ -267,7 +267,7 @@ export interface SidebarSessionsService {
 
 /**
  * The client locale service face (mirror of @deepseek-ai/dsh-client-locale's
- * LocaleService — only the slices the sidebar touches). The sidebar follows
+ * LocaleRuntime — only the slices the sidebar touches). The sidebar follows
  * the DSH i18n system: the active locale is the Host-backed preference
  * (`locale.preference` in settings.yaml) rather than the raw browser
  * language, and the sidebar's zh/en dictionaries register into the service's
@@ -312,7 +312,7 @@ export interface SidebarWorkspacesService {
 
 /**
  * The invariant service face (mirror of @deepseek-ai/dsh-invariants'
- * InvariantService). The upstream augmentation does not reach this Context
+ * InvariantRegistry). The upstream augmentation does not reach this Context
  * (dual-cordis-instance resolution), so the register signature is restated
  * structurally, exactly like the other service faces above.
  */
@@ -324,7 +324,7 @@ export interface SidebarInvariantsService {
   ): () => void
 }
 
-/** The settings service face (mirror of @deepseek-ai/dsh-settings' Settings). */
+/** The settings service face (mirror of @deepseek-ai/dsh-settings' SettingsProvider). */
 export interface SidebarSettingsService {
   /**
    * Register one namespace schema (the resolved value layers schema defaults,
@@ -354,7 +354,7 @@ export interface SidebarSettingsService {
 }
 
 /**
- * The tools service face (mirror of @deepseek-ai/dsh-tools' ToolRegistry).
+ * The tools service face (mirror of @deepseek-ai/dsh-tools' ToolRuntime).
  * The host half registers model-facing tools here; the registry attaches the
  * returned disposer to the contributing fiber so unloading unregisters them.
  */
@@ -380,7 +380,7 @@ export interface SidebarAgent {
 
 declare module 'cordis' {
   interface Context {
-    httpServer: SidebarHttpServer
+    webServer: SidebarWebServer
     sessions: SidebarSessionStore & SidebarSessionsService
     connection: SidebarConnectionHandle
     loader: SidebarLoader
@@ -396,13 +396,13 @@ declare module 'cordis' {
      */
     locale: SidebarLocaleService
     /**
-     * The host background-task registry (`ctx.get('tasks')`; optional — the
+     * The host background-job registry (`ctx.get('jobs')`; optional — the
      * sidebar routes degrade to a 503 when the deployment lacks it).
      */
-    tasks: SidebarTasksService
+    jobs: SidebarJobsService
     /**
      * The host live-agent registry (`ctx.get('agents')`; optional — used to
-     * resolve the caller the tasks fence compares against).
+     * resolve the caller the jobs fence compares against).
      */
     agents: SidebarAgentsService
     /**
@@ -415,7 +415,7 @@ declare module 'cordis' {
      * Subscribe to the session append feed (mirror of the cordis event API):
      * the listener receives every appended session event with the LIVE
      * Session instance that appended it. The api-proxy pushes the same feed
-     * to browsers; the sidebar uses it to mirror task_output events the
+     * to browsers; the sidebar uses it to mirror job_output events the
      * session store's own log can lag behind (restart divergence). Returns
      * the disposer.
      */

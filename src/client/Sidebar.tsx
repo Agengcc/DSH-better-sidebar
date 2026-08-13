@@ -45,7 +45,7 @@ import type { TabDragPayload } from './TabBar.tsx'
 import { relativeTo } from './paths.ts'
 import { OrphanedTab } from './OrphanedTab.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
-import { detectNewTask } from './subagent-tasks.ts'
+import { detectNewJob } from './subagent-jobs.ts'
 import { t } from './locales.ts'
 import { api, type SessionScope } from './api.ts'
 import css from './sidebar.module.css'
@@ -141,6 +141,18 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   const state = snapshot.state
   const sessionId = snapshot.sessionId
   const summaryCwd = sessionId === undefined ? undefined : sessionList.byId[sessionId]?.cwd
+
+  // The collapsed toggle cluster reclaims the top-right corner, so the DSH
+  // session header's right-aligned utilities (the "Session log" download
+  // capsule) must yield. layout.css keys off this body attribute to push the
+  // header's right padding out past the cluster. Only the CLOSED panel needs
+  // it — an open panel already squeezes `#root` left, moving the header clear.
+  const collapsed = state === undefined || !state.panelOpen
+  useEffect(() => {
+    if (collapsed) document.body.setAttribute('data-dsh-sidebar-collapsed', '')
+    else document.body.removeAttribute('data-dsh-sidebar-collapsed')
+    return () => { document.body.removeAttribute('data-dsh-sidebar-collapsed') }
+  }, [collapsed])
 
   /**
    * Bottom-panel merge on narrow viewports: whenever a session is current
@@ -253,21 +265,21 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   }, [sessionList, sessionId, store, ctx])
 
   /**
-   * Task auto-activation: the moment a NEW background task appears for the
-   * current conversation (a task id the previous snapshot lacked), the
-   * auto-open pref is on, and the Tasks tab type is enabled, open the panel
-   * (if collapsed) and focus the Tasks page. Unlike the subagent trigger
-   * (0 → N only), ANY new task id triggers: the agent may start several
-   * tasks in one session, and each should surface. A fresh page load never
+   * Job auto-activation: the moment a NEW background job appears for the
+   * current conversation (a job id the previous snapshot lacked), the
+   * auto-open pref is on, and the Jobs tab type is enabled, open the panel
+   * (if collapsed) and focus the Jobs page. Unlike the subagent trigger
+   * (0 → N only), ANY new job id triggers: the agent may start several
+   * jobs in one session, and each should surface. A fresh page load never
    * triggers — its baseline starts at the current snapshot.
    */
-  const taskBaselineRef = useRef<SidebarSessionList | undefined>(undefined)
+  const jobBaselineRef = useRef<SidebarSessionList | undefined>(undefined)
   useEffect(() => {
-    const prev = taskBaselineRef.current
-    taskBaselineRef.current = sessionList
+    const prev = jobBaselineRef.current
+    jobBaselineRef.current = sessionList
     if (sessionId === undefined || prev === undefined) return
-    if (!detectNewTask(prev, sessionList, sessionId)) return
-    if (!store.getPrefs().autoOpenTasks) return
+    if (!detectNewJob(prev, sessionList, sessionId)) return
+    if (!store.getPrefs().autoOpenJobs) return
     if (ctx.betterSidebar?.isTabEnabled('subagent') === false) return
     store.reduce(s => s.panelOpen ? s : togglePanel(s))
     store.reduce(s => ({ ...s, activePane: firstLeaf(s.splits).id }))

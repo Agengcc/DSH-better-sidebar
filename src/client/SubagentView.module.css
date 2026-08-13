@@ -274,15 +274,15 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* ── Background-task section (below the topology tree) ────────────────── */
+/* ── Background-job section (below the topology tree) ────────────────── */
 
-.tasks {
+.jobs {
   margin-top: 10px;
   border-top: 1px solid var(--dsw-alias-border-l2);
   padding-top: 8px;
 }
 
-.tasksHeader {
+.jobsHeader {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -290,7 +290,7 @@
   padding: 0 2px;
 }
 
-.tasksTitle {
+.jobsTitle {
   flex: 1;
   min-width: 0;
   font: var(--dsw-font-xxxs-strong-11);
@@ -300,13 +300,13 @@
   white-space: nowrap;
 }
 
-.tasksCount {
+.jobsCount {
   flex: none;
   font: var(--dsw-font-xxxs-11);
   color: var(--dsw-alias-label-tertiary);
 }
 
-.tasksList {
+.jobsList {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -315,30 +315,30 @@
   list-style: none;
 }
 
-/* One task row; the whole row lights up on hover, the expandable target
+/* One job row; the whole row lights up on hover, the expandable target
    stays transparent (the kill button rides on the row's right edge). */
-.tasksRow {
+.jobsRow {
   display: flex;
   align-items: center;
   gap: 4px;
   border-radius: 8px;
 }
 
-.tasksRow:hover {
+.jobsRow:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.tasksRowSettled {
+.jobsRowSettled {
   opacity: 0.8;
 }
 
 /* The row whose output is shown in the bottom dock. */
-.tasksRowSelected,
-.tasksRowSelected:hover {
+.jobsRowSelected,
+.jobsRowSelected:hover {
   background: var(--dsw-alias-interactive-bg-active);
 }
 
-.tasksRowMain {
+.jobsRowMain {
   flex: 1;
   display: flex;
   align-items: flex-start;
@@ -355,15 +355,15 @@
   outline: none;
 }
 
-.tasksRowMain:focus-visible {
+.jobsRowMain:focus-visible {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.tasksDot {
+.jobsDot {
   margin-top: 5px;
 }
 
-.tasksContent {
+.jobsContent {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -372,14 +372,14 @@
 
 /* The command line: a kind badge followed by the command itself in the code
    face, like the terminal's live lines. */
-.tasksLabelLine {
+.jobsLabelLine {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.tasksKind {
+.jobsKind {
   flex: none;
   max-width: 90px;
   overflow: hidden;
@@ -393,7 +393,7 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.tasksLabel {
+.jobsLabel {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -405,7 +405,7 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.tasksSecondary {
+.jobsSecondary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -413,7 +413,7 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.tasksKill {
+.jobsKill {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -428,14 +428,14 @@
   cursor: pointer;
 }
 
-.tasksKill:hover {
+.jobsKill:hover {
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
   color: var(--dsw-alias-state-error-primary);
 }
 
 /* The armed (first-click) state: a filled confirm chip instead of the icon. */
-.tasksKillArmed,
-.tasksKillArmed:hover {
+.jobsKillArmed,
+.jobsKillArmed:hover {
   width: auto;
   height: 20px;
   padding: 0 8px;
@@ -445,12 +445,12 @@
   white-space: nowrap;
 }
 
-.tasksKill:disabled {
+.jobsKill:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.tasksKillError {
+.jobsKillError {
   flex: none;
   margin-right: 4px;
   font: var(--dsw-font-xxxs-11);
@@ -460,9 +460,9 @@
 /* ── The shared output dock (bottom of the page, sticky like a terminal) ── */
 
 /* Direct child of the scrolling body, so it docks at the scrollport's bottom
-   edge while the task list scrolls above it; a solid background keeps the
+   edge while the job list scrolls above it; a solid background keeps the
    tree from showing through. */
-.tasksPane {
+.jobsPane {
   position: sticky;
   bottom: 0;
   z-index: 1;
@@ -474,7 +474,7 @@
   overflow: hidden;
 }
 
-.tasksPaneHeader {
+.jobsPaneHeader {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -483,11 +483,11 @@
   border-bottom: 1px solid var(--dsw-alias-border-l1);
 }
 
-.tasksPaneDot {
+.jobsPaneDot {
   flex: none;
 }
 
-.tasksPaneLabel {
+.jobsPaneLabel {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -499,13 +499,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.tasksPaneStatus {
+.jobsPaneStatus {
   flex: none;
   font: var(--dsw-font-xxxs-11);
   color: var(--dsw-alias-label-tertiary);
 }
 
-.tasksPaneClose {
+.jobsPaneClose {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -519,11 +519,11 @@
   cursor: pointer;
 }
 
-.tasksPaneClose:hover {
+.jobsPaneClose:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.tasksPanePre {
+.jobsPanePre {
   margin: 0;
   max-height: 200px;
   overflow: auto;
@@ -536,12 +536,12 @@
   word-break: break-word;
 }
 
-.tasksPaneHint {
+.jobsPaneHint {
   padding: 8px 10px;
   font: var(--dsw-font-xxxs-11);
   color: var(--dsw-alias-label-tertiary);
 }
 
-.tasksPaneError {
+.jobsPaneError {
   color: var(--dsw-alias-state-error-primary);
 }
