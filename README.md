@@ -38,10 +38,10 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 前置：已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10。`@deepseek-ai/*` 已发布到 npm，`pnpm install` 直接解析、无需令牌。把下面提示词**整段**发给 DSH 即可自动完成克隆、构建、注册与安装：
 
 ```text
-请帮我把 dsh-better-sidebar 插件安装到我的 web profile（插件 = VSCode 风格右侧侧边栏，仓库 https://github.com/dsh-external/DSH-better-sidebar）：
+请帮我把 dsh-better-sidebar 插件安装到我的 web profile（插件 = VSCode 风格右侧侧边栏，仓库 https://github.com/omdsh-dev/DSH-better-sidebar）：
 
 1. 克隆并构建：
-   git clone https://github.com/dsh-external/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
+   git clone https://github.com/omdsh-dev/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
    cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
 2. 注册到 web profile：
    a. ~/.dsh/profiles/web/package.json 的 dependencies 加 "dsh-better-sidebar": "link:<第 1 步克隆目录的绝对路径>"
@@ -69,7 +69,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 前置：DSH 已集成 [plugin-registry](https://github.com/dsh-external/plugin-registry)（`dsh registry` 可用）。**同时启用两个通道会双挂载**（Node 半挂两次、页面两个侧边栏）。
 
 ```sh
-git clone https://github.com/dsh-external/DSH-better-sidebar.git && cd DSH-better-sidebar
+git clone https://github.com/omdsh-dev/DSH-better-sidebar.git && cd DSH-better-sidebar
 pnpm install && pnpm build
 node scripts/package-registry.mjs   # 组装 registry/ 暂存（含清单 + 产物 + README，不入库）
 dsh registry install ./registry     # 安装（默认禁用）

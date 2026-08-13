@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dsh-external/DSH-better-sidebar"
+    "url": "https://github.com/omdsh-dev/DSH-better-sidebar"
   },
   "publishConfig": {
     "access": "public"

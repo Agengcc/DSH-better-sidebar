@@ -38,10 +38,10 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 Prerequisites: DSH installed (`dsh web` works), Node.js ≥ 20, pnpm ≥ 10. `@deepseek-ai/*` packages are published to npm and resolved directly by `pnpm install` — no token needed. Send the following prompt **in full** to DSH and it will automatically clone, build, register and install:
 
 ```text
-Please install the dsh-better-sidebar plugin into my web profile (plugin = VSCode-style right sidebar, repo https://github.com/dsh-external/DSH-better-sidebar):
+Please install the dsh-better-sidebar plugin into my web profile (plugin = VSCode-style right sidebar, repo https://github.com/omdsh-dev/DSH-better-sidebar):
 
 1. Clone and build:
-   git clone https://github.com/dsh-external/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
+   git clone https://github.com/omdsh-dev/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
    cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
 2. Register into the web profile:
    a. Add "dsh-better-sidebar": "link:<absolute path of the cloned directory from step 1>" to the dependencies of ~/.dsh/profiles/web/package.json
@@ -69,7 +69,7 @@ Please install the dsh-better-sidebar plugin into my web profile (plugin = VSCod
 Prerequisite: DSH with [plugin-registry](https://github.com/dsh-external/plugin-registry) integrated (`dsh registry` available). **Enabling both channels double-mounts** (the Node half loads twice, the page gets two sidebars).
 
 ```sh
-git clone https://github.com/dsh-external/DSH-better-sidebar.git && cd DSH-better-sidebar
+git clone https://github.com/omdsh-dev/DSH-better-sidebar.git && cd DSH-better-sidebar
 pnpm install && pnpm build
 node scripts/package-registry.mjs   # assemble the registry/ staging (manifest + artifacts + README, not committed)
 dsh registry install ./registry     # install (disabled by default)
