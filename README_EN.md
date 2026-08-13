@@ -53,7 +53,7 @@ Please install the dsh-better-sidebar plugin into my web profile (plugin = VSCod
 4. Restart DSH and hard-refresh (Cmd/Ctrl+Shift+R) to verify
 ```
 
-> Installation = dependency registration (equivalent to `dsh plugin --profile web add link:<path>`) + one mount line. **It also works when DSH is started as an npm package (e.g. `npx -p @deepseek-ai/dsh@0.0.1-rc.1 dsh web`)** (verified since v0.4.3).
+> Installation = dependency registration (equivalent to `dsh plugin --profile web add link:<path>`) + one mount line. **It also works when DSH is started as an npm package (e.g. `npx -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web`)** (verified since v0.4.3).
 
 ### Updating
 
@@ -110,7 +110,7 @@ Full integration docs (`TabDescriptor` / `FileViewerDescriptor` full fields, mat
 ## 🛠️ Development & Build
 
 ```sh
-pnpm install      # @deepseek-ai/* resolved from npm (^0.0.1-rc.1, published) — no token needed
+pnpm install      # @deepseek-ai/* resolved from npm (^0.1.0-rc.6, published) — no token needed
 pnpm typecheck    # tsc --noEmit
 pnpm build        # → lib/index.js + lib/invariant.js + lib/client.js + lib/client-registry.js + lib/types
 pnpm test         # vitest (includes manifest consistency guard; build first)

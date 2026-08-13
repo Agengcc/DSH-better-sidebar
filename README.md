@@ -53,7 +53,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 4. 重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）验证
 ```
 
-> 安装 = 依赖登记（等价 `dsh plugin --profile web add link:<路径>`）+ 一行挂载行。**DSH 以 npm 包启动（如 `npx -p @deepseek-ai/dsh@0.0.1-rc.1 dsh web`）同样可用**（v0.4.3 起实测验证）。
+> 安装 = 依赖登记（等价 `dsh plugin --profile web add link:<路径>`）+ 一行挂载行。**DSH 以 npm 包启动（如 `npx -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web`）同样可用**（v0.4.3 起实测验证）。
 
 ### 更新
 
@@ -110,7 +110,7 @@ export function apply(ctx: Context) {
 ## 🛠️ 开发与构建
 
 ```sh
-pnpm install      # @deepseek-ai/* 已发布到 npm（^0.0.1-rc.1），直接解析、无需令牌
+pnpm install      # @deepseek-ai/* 已发布到 npm（^0.1.0-rc.6），直接解析、无需令牌
 pnpm typecheck    # tsc --noEmit
 pnpm build        # → lib/index.js + lib/invariant.js + lib/client.js + lib/client-registry.js + lib/types
 pnpm test         # vitest（含 manifest 一致性守卫，需先 build）
