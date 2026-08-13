@@ -40,6 +40,9 @@
     "node": ">=20"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
@@ -63,6 +66,7 @@
     "lib/types/**/*.d.ts",
     "src",
     "scripts/install.sh",
+    "cordis.patch.yml",
     "README.md",
     "README_EN.md",
     "LICENSE"
