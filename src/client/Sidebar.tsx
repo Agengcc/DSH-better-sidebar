@@ -311,8 +311,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   // ("squeezes the agent output area") — it starts at the app sidebar's
   // right edge and ends at the details column's left edge (the details
   // column sits between the center and the right panel). Measured directly
-  // from the AppFrame's center column DOM (children[1], the layout.css
-  // nth-child(2) column) so the bottom panel tracks the column's real
+  // from the AppFrame's center column DOM (the parent of the
+  // [data-slot="conversation"] wrapper — layout.css's center column) so the
+  // bottom panel tracks the column's real
   // horizontal edges — including the animated margin-right push while the
   // right panel opens/closes; a frame that never appears keeps the initial
   // zero-size fallback (the panel renders at 0 width until measured).
@@ -340,17 +341,20 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   useEffect(() => {
     let disposed = false
     let observer: ResizeObserver | undefined
-    // Locate the AppFrame's center column (children[1] of the frame div —
-    // layout.css's nth-child(2)). The shell swaps the boot page for the
-    // AppFrame only AFTER boot settles, so the first query may miss it.
-    // Never give up: watch #root's children (the swap mutates them) and
-    // re-run this locator — querying once and bailing would strand the
-    // panel at the zero-size fallback forever (observed: a 1px sliver at
-    // the viewport's left edge).
+    // Locate the AppFrame's center column. DSH 0.1.x wraps slot hosts in
+    // [data-slot] containers: the conversation slot wrapper
+    // ([data-slot="conversation"]) sits directly inside the center column,
+    // so its parent IS that column — no hashed-class or positional
+    // dependency (layout.css uses the same anchor). The shell swaps the
+    // boot page for the AppFrame only AFTER boot settles, so the first
+    // query may miss it. Never give up: watch #root's children (the swap
+    // mutates them) and re-run this locator — querying once and bailing
+    // would strand the panel at the zero-size fallback forever (observed:
+    // a 1px sliver at the viewport's left edge).
     const locate = (): void => {
       if (disposed) return
-      const frame = document.querySelector('#root > div')
-      const col = frame?.children[1] as HTMLElement | undefined
+      const col = document.querySelector('#root [data-slot="conversation"]')
+        ?.parentElement as HTMLElement | undefined
       if (col === undefined) {
         if (centerColRef.current !== null) {
           centerColRef.current = null
