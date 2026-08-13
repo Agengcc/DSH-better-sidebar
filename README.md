@@ -1,12 +1,15 @@
 # dsh-better-sidebar
 
-[中文](./README.md) · [English](./README_EN.md)
+<!-- 介绍区（HTML 居中排版） -->
+<p align="center">
+  <b>一个插件，一套完整工作台</b><br />
+  文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、后台任务页 —— <b>右侧栏 + 底部面板双工作台</b>，一个插件全部搞定。<br />
+  支持 Tab 窗口随意拖拽，支持三方拓展注册新 Tab 页面和文件预览
+</p>
 
-> 一个插件，一套完整工作台：
->
-> 文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、后台任务页——**右侧栏 + 底部面板双工作台**，一个插件全部搞定。
->
-> 支持Tab窗口随意拖拽，支持三方拓展注册新Tab页面和文件预览
+<p align="center">
+  🌏 <a href="./README.md"><b>中文</b></a> · <a href="./README_EN.md">English</a>
+</p>
 
 https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 

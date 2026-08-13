@@ -1,12 +1,15 @@
 # dsh-better-sidebar
 
-[中文](./README.md) · [English](./README_EN.md)
+<!-- Hero (HTML centered layout) -->
+<p align="center">
+  <b>One plugin, one complete workbench</b><br />
+  File management, edit &amp; preview, embedded browser, real terminal, Git panel, background tasks — <b>dual workbench: right sidebar + bottom panel</b>, all in one plugin.<br />
+  Tabs are freely draggable; third-party plugins can register new tab pages and file viewers
+</p>
 
-> One plugin, one complete workbench:
->
-> File management, edit & preview, embedded browser, real terminal, Git panel, background tasks — **dual workbench: right sidebar + bottom panel**, all in one plugin.
->
-> Tabs are freely draggable; third-party plugins can register new tab pages and file viewers.
+<p align="center">
+  🌏 <a href="./README.md">中文</a> · <a href="./README_EN.md"><b>English</b></a>
+</p>
 
 https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
