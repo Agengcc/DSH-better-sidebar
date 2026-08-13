@@ -35,10 +35,22 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 Installation
 
-Prerequisites: DSH installed (`dsh web` works), Node.js ≥ 20, pnpm ≥ 10. The plugin is published to npm as **`dsh-better-sidebar@0.10.0`** (`@deepseek-ai/*` peers aligned with the host's actual versions `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`, single instance). Mounting still goes through the profile + `cordis.patch.yml`; the dependency source is the npm package:
+Prerequisites: DSH installed (`dsh web` works), Node.js ≥ 20, pnpm ≥ 10. The plugin is published to npm as **`dsh-better-sidebar@0.10.1`** (`@deepseek-ai/*` peers aligned with the host's actual versions `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`, single instance). Mounting still goes through the profile + `cordis.patch.yml`; the DSH source is never modified.
+
+### One-click install (recommended)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
+# Pick a version:   curl -fsSL <same URL> | bash -s 0.10.1
+# Auto-restart DSH: curl -fsSL <same URL> | bash -s -- --restart
+```
+
+The script registers the npm dependency in `~/.dsh/profiles/web/package.json`, idempotently appends the `cordis.patch.yml` mount line, and runs `pnpm install` (version defaults to latest, pass one as an argument; `--dry-run` previews without writing anything).
+
+### Manual install (npm package)
 
 ```text
-1. In ~/.dsh/profiles/web/package.json dependencies add "dsh-better-sidebar": "^0.10.0"
+1. In ~/.dsh/profiles/web/package.json dependencies add "dsh-better-sidebar": "^0.10.1"
 2. Append the mount line to ~/.dsh/profiles/web/cordis.patch.yml:
    - insert:
        - id: better-sidebar
@@ -73,7 +85,7 @@ To debug local changes or track the dev branch, point the dependency at a local 
 5. Restart DSH and hard-refresh
 ```
 
-Update: `git pull && pnpm install && pnpm build` → restart DSH (client-only changes can just hard-refresh). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.10.0"` and re-run `pnpm install`.
+Update: `git pull && pnpm install && pnpm build` → restart DSH (client-only changes can just hard-refresh). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.10.1"` and re-run `pnpm install`.
 
 </details>
 
