@@ -57,9 +57,22 @@ export function SidebarProducedFiles(props: {
   )
 }
 
-/** Register the turn-tail interception (returns the disposer). */
+/**
+ * Register the turn-tail interception (returns the disposer).
+ *
+ * The slot is a CHILD slot the host's ui-conversation declares in its
+ * `conversation.chat.node` children table (kind: chain, scope: session).
+ * Registering it directly races the declaration — the ui-slots core's
+ * load-time validation throws "not declared (a parent entry's children
+ * table must declare it)" when the parent entry is not on the ledger yet.
+ * slots.inject waits for the declaration: the callback runs synchronously
+ * when the slot is already declared, otherwise it runs inside the declaring
+ * register() call once the declaration commits; declaration collapse
+ * disposes the entry and a later declaration re-registers it. This mirrors
+ * @deepseek-ai/dsh-client-ui-deliverables' registration of the same slot.
+ */
 export function registerTurnTailInterception(ctx: Context, store: SidebarStore): () => void {
-  return ctx.slots.register({
+  return ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
     name: 'conversation.chat.turnTail',
     // Decline the takeover while the editor tab type is disabled in the side
     // card settings: the produced-files row falls back to the default
@@ -73,7 +86,7 @@ export function registerTurnTailInterception(ctx: Context, store: SidebarStore):
     inject: (sessionId: string) => ({
       openInSidebar: (path: string) => { openSidebarFile(ctx, store, sessionId, path) },
     }),
-  }, SidebarProducedFiles)
+  }, SidebarProducedFiles))
 }
 
 /**
