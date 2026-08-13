@@ -1,5 +1,7 @@
 # dsh-better-sidebar
 
+[中文](./README.md) · [English](./README_EN.md)
+
 > 一个插件，一套完整工作台：
 >
 > 文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、后台任务页——**右侧栏 + 底部面板双工作台**，一个插件全部搞定。
@@ -40,7 +42,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 安装
 
-前置：已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10。把下面提示词**整段**发给 DSH 即可自动完成克隆、构建、注册与安装：
+前置：已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10。`@deepseek-ai/*` 已发布到 npm，`pnpm install` 直接解析、无需令牌。把下面提示词**整段**发给 DSH 即可自动完成克隆、构建、注册与安装：
 
 ```text
 请帮我把 dsh-better-sidebar 插件安装到我的 web profile（插件 = VSCode 风格右侧侧边栏，仓库 https://github.com/dsh-external/DSH-better-sidebar）：
@@ -48,7 +50,6 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 1. 克隆并构建：
    git clone https://github.com/dsh-external/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
    cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
-   （@deepseek-ai/* 从 npm 解析（0.0.1-rc.? 预发布版）；若 401/404，用安装者自己的只读令牌配置 ~/.npmrc，或把 devDependencies 改回指向自己 ~/.dsh/source/current 的 link:，不要继续）
 2. 注册到 web profile：
    a. ~/.dsh/profiles/web/package.json 的 dependencies 加 "dsh-better-sidebar": "link:<第 1 步克隆目录的绝对路径>"
    b. ~/.dsh/profiles/web/cordis.patch.yml 追加：
@@ -64,12 +65,13 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 ### 更新
 
 ```text
-1. cd ~/Code/DSH-better-sidebar && git pull && pnpm install && pnpm build（401/404 处理同上）
+1. cd ~/Code/DSH-better-sidebar && git pull && pnpm install && pnpm build
 2. 核对注册仍有效（缺失才补）：profile package.json 的 link: 依赖 + cordis.patch.yml 挂载行
 3. 仅 client（src/client/*）→ 硬刷新即可；含 host（src/index.ts、src/config.ts 等）→ 重启 DSH + 硬刷新
 ```
 
-### 通过 plugin-registry 安装（可选，与上述二选一）
+<details>
+<summary><b>通过 plugin-registry 安装（可选，与上述二选一）</b></summary>
 
 前置：DSH 已集成 [plugin-registry](https://github.com/dsh-external/plugin-registry)（`dsh registry` 可用）。**同时启用两个通道会双挂载**（Node 半挂两次、页面两个侧边栏）。
 
@@ -82,6 +84,8 @@ dsh registry enable dsh-external/dsh-better-sidebar
 ```
 
 更新：`git pull && pnpm install && pnpm build` → `node scripts/package-registry.mjs` → `dsh registry uninstall/install/enable`。切换通道前先移除另一通道的挂载。
+
+</details>
 
 ## 🔌 服务化：注册 tab 与文件预览器
 
@@ -102,9 +106,7 @@ export function apply(ctx: Context) {
 ## 🛠️ 开发与构建
 
 ```sh
-pnpm install      # @deepseek-ai/* 从 npm 解析（^0.0.1-rc.1），需安装者自己的只读令牌：
-                  # ~/.npmrc 配 //registry.npmjs.org/:_authToken=<自己的令牌>（勿写进仓库），
-                  # 或改 devDependencies 为 link: 指向自己的 ~/.dsh/source/current
+pnpm install      # @deepseek-ai/* 已发布到 npm（^0.0.1-rc.1），直接解析、无需令牌
 pnpm typecheck    # tsc --noEmit
 pnpm build        # → lib/index.js + lib/invariant.js + lib/client.js + lib/client-registry.js + lib/types
 pnpm test         # vitest（含 manifest 一致性守卫，需先 build）
