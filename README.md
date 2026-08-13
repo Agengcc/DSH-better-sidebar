@@ -55,6 +55,22 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 > 安装 = 依赖登记（等价 `dsh plugin --profile web add link:<路径>`）+ 一行挂载行。**DSH 以 npm 包启动（如 `npx -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web`）同样可用**（v0.4.3 起实测验证）。
 
+### 通过 npm 安装（推荐）
+
+插件已发布到 npm：**`dsh-better-sidebar@0.10.0`**（`@deepseek-ai/*` 依赖已对齐宿主实际版本 `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`，同版本单实例）。挂载仍走 profile + `cordis.patch.yml`，只是依赖来源换成 npm 包：
+
+```text
+1. ~/.dsh/profiles/web/package.json 的 dependencies 写 "dsh-better-sidebar": "^0.10.0"
+2. ~/.dsh/profiles/web/cordis.patch.yml 追加：
+   - insert:
+       - id: better-sidebar
+         name: 'dsh-better-sidebar'
+3. 在 ~/.dsh/profiles/web 执行 pnpm install
+4. 重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）验证
+```
+
+更新：改版本号（如 `^0.10.1`）→ `pnpm install` → 重启。若 profile 的 pnpm 因 `minimumReleaseAge`（发布 <24h）拒绝，会在 `pnpm-workspace.yaml` 自动追加 `minimumReleaseAgeExclude` 条目，或手动加上 `dsh-better-sidebar@<版本>`。
+
 ### 更新
 
 ```text

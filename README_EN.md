@@ -55,6 +55,22 @@ Please install the dsh-better-sidebar plugin into my web profile (plugin = VSCod
 
 > Installation = dependency registration (equivalent to `dsh plugin --profile web add link:<path>`) + one mount line. **It also works when DSH is started as an npm package (e.g. `npx -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web`)** (verified since v0.4.3).
 
+### Install from npm (recommended)
+
+The plugin is published to npm as **`dsh-better-sidebar@0.10.0`** (`@deepseek-ai/*` peers aligned with the host's actual versions `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`, single instance). Mounting still goes through the profile + `cordis.patch.yml`; only the dependency source becomes the npm package:
+
+```text
+1. In ~/.dsh/profiles/web/package.json dependencies add "dsh-better-sidebar": "^0.10.0"
+2. Append to ~/.dsh/profiles/web/cordis.patch.yml:
+   - insert:
+       - id: better-sidebar
+         name: 'dsh-better-sidebar'
+3. Run pnpm install in ~/.dsh/profiles/web
+4. Restart DSH and hard-refresh (Cmd/Ctrl+Shift+R) to verify
+```
+
+Update: bump the version range (e.g. `^0.10.1`) → `pnpm install` → restart. If the profile's pnpm rejects the package via `minimumReleaseAge` (<24h old), it auto-appends a `minimumReleaseAgeExclude` entry to `pnpm-workspace.yaml` — or add `dsh-better-sidebar@<version>` there manually.
+
 ### Updating
 
 ```text
