@@ -1,15 +1,16 @@
 # dsh-better-sidebar
 
-<!-- Hero (HTML centered layout) -->
-<p align="center">
-  <b>One plugin, one complete workbench</b><br />
-  File management, edit &amp; preview, embedded browser, real terminal, Git panel, background tasks — <b>dual workbench: right sidebar + bottom panel</b>, all in one plugin.<br />
-  Tabs are freely draggable; third-party plugins can register new tab pages and file viewers
-</p>
+<!-- Hero (HTML layout) -->
+<div align="center">
+  <b style="font-size: 1.15em;">One plugin, one complete workbench</b><br /><br />
+  <code>File management</code> <code>Edit &amp; preview</code> <code>Embedded browser</code> <code>Real terminal</code> <code>Git panel</code> <code>Background tasks</code><br /><br />
+  <b>Dual workbench: right sidebar + bottom panel</b>, all in one plugin.<br />
+  <small>Tabs are freely draggable; third-party plugins can register new tab pages and file viewers</small>
+</div>
 
-<p align="center">
+<div align="center">
   🌏 <a href="./README.md">中文</a> · <a href="./README_EN.md"><b>English</b></a>
-</p>
+</div>
 
 https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
@@ -31,17 +32,6 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 - **⚙️ Declarative Settings**: the "Side Cards" section of the settings page renders a registry-driven feature list (small card grid, highlighted = enabled), each toggleable independently; secondary settings (auto-expand subagents, terminal tools, auto-open terminal on first bottom-panel expand, sandbox switches, etc.) are edited in a native dialog via the gear button
 - **🔌 Service API**: exposes the `ctx.betterSidebar` service — other plugins can register sidebar tabs and file viewers (the 7 built-in tabs + 9 viewers go through the same service, see [AGENTS.md](./AGENTS.md))
 - **🌏 i18n**: UI text follows DSH's language setting (zh/en) with live switching — Host preference takes priority over browser language, dictionaries registered into DSH's i18n namespace; no refresh needed
-
-## ⌨️ Keyboard Shortcuts
-
-| Action | Keys |
-|---|---|
-| Save edits | `Ctrl/Cmd + S` |
-| Git commit | `Ctrl + Enter` |
-| Close tab | Middle mouse button |
-| Split / merge panes | Drag tab to pane edge / middle |
-| Reference file to input | Hover the `@file` button at end of line |
-| Copy file path | Right-click row → copy relative/absolute path |
 
 ## 🚀 Installation
 
@@ -89,6 +79,17 @@ dsh registry enable dsh-external/dsh-better-sidebar
 Update: `git pull && pnpm install && pnpm build` → `node scripts/package-registry.mjs` → `dsh registry uninstall/install/enable`. Remove the other channel's mount before switching.
 
 </details>
+
+## ⌨️ Keyboard Shortcuts
+
+| Action | Keys |
+|---|---|
+| Save edits | `Ctrl/Cmd + S` |
+| Git commit | `Ctrl + Enter` |
+| Close tab | Middle mouse button |
+| Split / merge panes | Drag tab to pane edge / middle |
+| Reference file to input | Hover the `@file` button at end of line |
+| Copy file path | Right-click row → copy relative/absolute path |
 
 ## 🔌 Service: register tabs & file viewers
 

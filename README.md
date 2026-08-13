@@ -1,15 +1,16 @@
 # dsh-better-sidebar
 
-<!-- 介绍区（HTML 居中排版） -->
-<p align="center">
-  <b>一个插件，一套完整工作台</b><br />
-  文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板、后台任务页 —— <b>右侧栏 + 底部面板双工作台</b>，一个插件全部搞定。<br />
-  支持 Tab 窗口随意拖拽，支持三方拓展注册新 Tab 页面和文件预览
-</p>
+<!-- 头部介绍区（HTML 排版） -->
+<div align="center">
+  <b style="font-size: 1.15em;">一个插件，一套完整工作台</b><br /><br />
+  <code>文件管理</code> <code>编辑预览</code> <code>内嵌浏览器</code> <code>真实终端</code> <code>Git 面板</code> <code>后台任务页</code><br /><br />
+  <b>右侧栏 + 底部面板双工作台</b>，一个插件全部搞定。<br />
+  <small>支持 Tab 窗口随意拖拽，支持三方拓展注册新 Tab 页面和文件预览</small>
+</div>
 
-<p align="center">
+<div align="center">
   🌏 <a href="./README.md"><b>中文</b></a> · <a href="./README_EN.md">English</a>
-</p>
+</div>
 
 https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
@@ -31,17 +32,6 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 - **⚙️ 声明式设置**：设置页「侧边卡片」分区按注册表渲染功能清单（小卡片网格，高亮 = 启用），每项可独立开/关；二级设置（子代理自动展开、终端工具、底部面板首展自动开终端、沙箱开关等）经齿轮按钮在原生弹窗中编辑
 - **🔌 服务化**：暴露 `ctx.betterSidebar` 服务，其他插件可注册侧边栏 tab 与文件预览器（内置 7 tab + 9 viewer 也走同一服务，详见 [AGENTS.md](./AGENTS.md)）
 - **🌏 多语言**：界面文案跟随 DSH 的语言设置（zh/en）实时切换——Host 偏好优先于浏览器语言，词典注册进 DSH 的 i18n 命名空间；切换语言无需刷新
-
-## ⌨️ 快捷键
-
-| 操作 | 按键 |
-|---|---|
-| 保存编辑 | `Ctrl/Cmd + S` |
-| Git 提交 | `Ctrl + Enter` |
-| 关闭 Tab | 鼠标中键 |
-| 拆分/合并分栏 | 拖 Tab 到分栏边缘 / 中间 |
-| 引用文件到输入框 | 悬浮行尾 `@文件` 按钮 |
-| 复制文件路径 | 右键行 → 复制相对/绝对地址 |
 
 ## 🚀 安装
 
@@ -89,6 +79,17 @@ dsh registry enable dsh-external/dsh-better-sidebar
 更新：`git pull && pnpm install && pnpm build` → `node scripts/package-registry.mjs` → `dsh registry uninstall/install/enable`。切换通道前先移除另一通道的挂载。
 
 </details>
+
+## ⌨️ 快捷键
+
+| 操作 | 按键 |
+|---|---|
+| 保存编辑 | `Ctrl/Cmd + S` |
+| Git 提交 | `Ctrl + Enter` |
+| 关闭 Tab | 鼠标中键 |
+| 拆分/合并分栏 | 拖 Tab 到分栏边缘 / 中间 |
+| 引用文件到输入框 | 悬浮行尾 `@文件` 按钮 |
+| 复制文件路径 | 右键行 → 复制相对/绝对地址 |
 
 ## 🔌 服务化：注册 tab 与文件预览器
 
