@@ -40,14 +40,14 @@ Prerequisites: DSH installed (`dsh web` works, including the `dsh plugin` comman
 ### Official CLI install (recommended)
 
 ```sh
-dsh plugin --profile web add dsh-better-sidebar@0.10.2
-# or (no local dsh command):
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar@0.10.2
-# or install the latest published version:
 dsh plugin --profile web add dsh-better-sidebar
+# or (no local dsh command):
+npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
+# or pin a specific version:
+dsh plugin --profile web add dsh-better-sidebar@0.10.2
 ```
 
-The command: runs `pnpm add` to register the dependency in `~/.dsh/profiles/web/package.json`, detects the package's `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and the next boot mounts it — no hand-written `cordis.patch.yml` mount line. Update the same way: `dsh plugin --profile web add dsh-better-sidebar@<new>`.
+Without `@<version>`, pnpm resolves npm's `latest` tag — the newest published release (currently `0.10.2`). The command: runs `pnpm add` to register the dependency in `~/.dsh/profiles/web/package.json`, detects the package's `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and the next boot mounts it — no hand-written `cordis.patch.yml` mount line. Update the same way: re-run `dsh plugin --profile web add dsh-better-sidebar` to get the latest.
 
 > ⚠️ On a fresh profile, pnpm 11's `strict-dep-builds` blocks node-pty/protobufjs build scripts and the command reports `Ignored build scripts` (the package is still installed; node-pty's prebuilds work as-is). Fix: run `pnpm approve-builds --all` in `~/.dsh/profiles/web` and re-run. `scripts/install.sh` handles this automatically (pre-writes allowBuilds + cleans up the old mount line).
 

@@ -40,14 +40,14 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 ### 官方 CLI 安装（推荐）
 
 ```sh
-dsh plugin --profile web add dsh-better-sidebar@0.10.2
-# 或（本机无 dsh 命令时）
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar@0.10.2
-# 或安装最新发布版
 dsh plugin --profile web add dsh-better-sidebar
+# 或（本机无 dsh 命令时）
+npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
+# 或固定某版本
+dsh plugin --profile web add dsh-better-sidebar@0.10.2
 ```
 
-命令自动完成：`pnpm add` 登记依赖到 `~/.dsh/profiles/web/package.json` → 识别包内 `dsh.bundle.patch`，把插件自动加进 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml` 挂载行）。更新同理：`dsh plugin --profile web add dsh-better-sidebar@<新版>`。
+不带 `@<版本>` 时，pnpm 默认解析 npm 的 `latest` 标签，即最新发布版（当前 `0.10.2`）。命令自动完成：`pnpm add` 登记依赖到 `~/.dsh/profiles/web/package.json` → 识别包内 `dsh.bundle.patch`，把插件自动加进 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml` 挂载行）。更新同理：重跑 `dsh plugin --profile web add dsh-better-sidebar` 即升到最新版。
 
 > ⚠️ 首次在新 profile 上执行时，pnpm 11 的 `strict-dep-builds` 会拦截 node-pty/protobufjs 的构建脚本，命令会报 `Ignored build scripts`（包仍已安装、node-pty 预编译产物可直接用）。此时在 `~/.dsh/profiles/web` 执行 `pnpm approve-builds --all` 再重跑一次即可；`scripts/install.sh` 会自动处理（预写 allowBuilds + 清理旧挂载行）。
 
