@@ -35,35 +35,86 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 安装
 
-前置：已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10。插件已发布到 npm：**`dsh-better-sidebar@0.10.2`**（`@deepseek-ai/*` peer 依赖对齐宿主实际版本 `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`，同版本单实例）。包内声明了 `dsh.bundle.patch`（随包发布的 `cordis.patch.yml`），安装后由官方 CLI 自动挂载，不修改 DSH 源码。
+装好只需三步：**① 满足前置 → ② 跑一条对应平台的一键命令 → ③ 重启 DSH 并硬刷新**。
+
+### 前置要求
+
+- 已安装 **DSH**，且 `dsh web` 能正常启动（首次运行会初始化 `~/.dsh/profiles/web` 这个 profile）。
+- **Node.js ≥ 20**（DSH 运行本身就需要）。
+- **pnpm ≥ 10**（装依赖用；pnpm 11 也可，脚本会自动处理它的新策略）。
+- 插件已发布到 npm：**`dsh-better-sidebar@0.10.2`**。包内声明了 `dsh.bundle.patch`（随包发布的 `cordis.patch.yml`），官方 CLI 装完即自动挂载，**不修改 DSH 源码**。
 
 ### 一键安装（推荐）
 
+**macOS / Linux**（Windows 装了 Git Bash 或 WSL 也可用）：
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
-# 指定版本：         curl -fsSL <同上> | bash -s 0.10.2
-# 装完自动重启 DSH： curl -fsSL <同上> | bash -s -- --restart
 ```
 
-脚本自动完成：`pnpm add` 登记依赖到 `~/.dsh/profiles/web/package.json` → 预写 `allowBuilds`（node-pty/protobufjs，规避 pnpm 11 的构建脚本拦截）→ 识别包内 `dsh.bundle.patch`，把插件自动加进 `dsh.profile.bundles` 挂载 → 幂等清理旧的手动挂载行（防双挂载）。版本默认最新（`latest`），可传参；`--dry-run` 只预览不落盘。
+**Windows（PowerShell 5.1+ / pwsh）**：
 
-### 手动安装（npx dsh + 命令链）
+```powershell
+irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
+```
 
-等价于上面脚本的一连串 bash 命令（全新 profile 首次装可能因构建脚本被拦，链里 `||` 分支会自动批准并重试一次）：
+**指定版本 / 装完自动重启**（两平台参数一致）：
 
 ```sh
-cd ~/.dsh/profiles/web \
-  && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar \
-  || (pnpm approve-builds --all \
-      && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar)
-# 固定版本：把上面的 dsh-better-sidebar 换成 dsh-better-sidebar@0.10.2
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.10.2 --restart
+
+# Windows PowerShell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.10.2 -Restart
 ```
 
-不带 `@<版本>` 时，pnpm 解析 npm 的 `latest` 标签（最新发布版）。`dsh plugin add` 完成：`pnpm add` 登记依赖 → 识别 `dsh.bundle.patch` 自动注册到 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml`）。
+脚本会自动完成 4 件事（全部幂等，可安全重复执行）：
 
-> ⚠️ pnpm 11 的两道供应链策略，命令链无法完全规避：
-> - `strict-dep-builds` 拦截 node-pty/protobufjs 的构建脚本：首次装报 `Ignored build scripts`（包其实已装上、node-pty 预编译产物可直接用），`pnpm approve-builds --all` 一次即可。
-> - `minimumReleaseAge` 拒绝发布 <24h 的新版本：这是 pnpm 的策略、命令链无法完全规避，仅因插件刚发布不久才会触发，**24 小时后自动消失**（触发时重跑一次，pnpm 会自动补 `minimumReleaseAgeExclude`）。
+1. 预写 `allowBuilds`（node-pty / protobufjs），规避 pnpm 11 的构建脚本拦截；
+2. 预写 `minimumReleaseAgeExclude`，放行「发布不足 24 小时」的新版本；
+3. 执行 `dsh plugin --profile web add dsh-better-sidebar`：登记依赖 → 识别 `dsh.bundle.patch` → 自动注册进 `dsh.profile.bundles` 挂载；
+4. 清理旧版残留的手动挂载行，避免「双挂载」（页面出现两个侧边栏）。
+
+不确定的话，可先加 `--dry-run`（PowerShell 用 `-DryRun`）预览步骤再真正执行。`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。
+
+### 手动安装（逐步命令）
+
+适合想看清每一步的用户，与一键脚本等价。**第 ③ 步可重复执行；①② 只需做一次。**
+
+**macOS / Linux（bash）**：
+
+```sh
+cd ~/.dsh/profiles/web
+
+# ① 放行 node-pty / protobufjs 的构建脚本（pnpm 11 默认拦截；pnpm 10 可跳过）
+pnpm approve-builds --all
+
+# ② 放行「发布不足 24h」的新版本（装老版本可跳过；若已有该键，把下面那行并入其下即可）
+cat >> pnpm-workspace.yaml <<'EOF'
+minimumReleaseAgeExclude:
+  - dsh-better-sidebar
+EOF
+
+# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.10.2）
+npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
+```
+
+**Windows（PowerShell）**：
+
+```powershell
+cd ~\.dsh\profiles\web
+
+# ① 放行构建脚本
+pnpm approve-builds --all
+
+# ② 放行新版本（一次性；若已有该键，把 - dsh-better-sidebar 并入其下即可）
+Add-Content -Path pnpm-workspace.yaml -Value "`nminimumReleaseAgeExclude:`n  - dsh-better-sidebar"
+
+# ③ 安装并自动挂载
+npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
+```
+
+`dsh plugin add` 会：`pnpm add` 登记依赖 → 识别包内 `dsh.bundle.patch` → 自动注册到 `dsh.profile.bundles` → 下次启动自动挂载（**无需手写 `cordis.patch.yml`**）。
 
 ### 更新
 
@@ -71,7 +122,18 @@ cd ~/.dsh/profiles/web \
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-或重跑一次一键脚本；也可手动把 `~/.dsh/profiles/web/package.json` 版本号改新版后 `pnpm install`。随后重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）。
+或重跑一次一键脚本；也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**重启 DSH 并硬刷新**（Cmd/Ctrl+Shift+R）。
+
+### 常见问题
+
+| 现象 | 原因与解决 |
+|---|---|
+| 报 `Ignored build scripts` | pnpm 11 拦截构建脚本。跑 `pnpm approve-builds --all`（一键脚本已自动处理）。 |
+| 报 `minimum release age` / 版本不足 24h | 装的版本发布不足 24 小时。等 24h 或重跑一次（pnpm 会自动补 `minimumReleaseAgeExclude`）；一键脚本已自动处理。 |
+| 报「找不到 profile 目录」 | 先跑一次 `dsh web`，让它初始化 `~/.dsh/profiles/web`。 |
+| 页面出现**两个侧边栏** | 双挂载：`~/.dsh/profiles/web/cordis.patch.yml` 还留着旧的手动挂载行，删掉那段 `- insert: ... better-sidebar ...`（一键脚本会自动清）。 |
+| Windows 下终端无法使用 | `node-pty` 依赖预编译二进制；若当前 Node 版本没有对应产物，需装编译工具链（VS Build Tools）。主流 Node 版本一般已有预编译。 |
+| Windows 没有 bash / curl | 直接用 PowerShell 一键命令；或安装 Git Bash / WSL 再跑 bash 命令。 |
 
 <details>
 <summary><b>从源码安装 / 开发（可选，替代 npm 方式）</b></summary>
@@ -82,7 +144,10 @@ dsh plugin --profile web add dsh-better-sidebar
 1. git clone https://github.com/omdsh-dev/DSH-better-sidebar.git ~/Code/DSH-better-sidebar
    cd ~/Code/DSH-better-sidebar && pnpm install && pnpm build
 2. ~/.dsh/profiles/web/package.json 的 dependencies 写 "dsh-better-sidebar": "link:<克隆目录绝对路径>"
-3. ~/.dsh/profiles/web/cordis.patch.yml 追加挂载行（同上）
+3. ~/.dsh/profiles/web/cordis.patch.yml 追加挂载行：
+   - insert:
+       - id: better-sidebar
+         name: 'dsh-better-sidebar'
 4. 在 ~/.dsh/profiles/web 执行 pnpm install
 5. 重启 DSH 并硬刷新
 ```

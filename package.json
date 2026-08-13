@@ -66,6 +66,7 @@
     "lib/types/**/*.d.ts",
     "src",
     "scripts/install.sh",
+    "scripts/install.ps1",
     "cordis.patch.yml",
     "README.md",
     "README_EN.md",
