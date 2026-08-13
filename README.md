@@ -35,18 +35,9 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 安装
 
-装好只需三步：**① 满足前置 → ② 跑一条对应平台的一键命令 → ③ 重启 DSH 并硬刷新**。
+**前置**：已装好 DSH（`dsh web` 能正常运行），Node.js ≥ 20、pnpm ≥ 10。
 
-### 前置要求
-
-- 已安装 **DSH**，且 `dsh web` 能正常启动（首次运行会初始化 `~/.dsh/profiles/web` 这个 profile）。
-- **Node.js ≥ 20**（DSH 运行本身就需要）。
-- **pnpm ≥ 10**（装依赖用；pnpm 11 也可，脚本会自动处理它的新策略）。
-- 插件已发布到 npm：**`dsh-better-sidebar@0.10.2`**。包内声明了 `dsh.bundle.patch`（随包发布的 `cordis.patch.yml`），官方 CLI 装完即自动挂载，**不修改 DSH 源码**。
-
-### 一键安装（推荐）
-
-**macOS / Linux**（Windows 装了 Git Bash 或 WSL 也可用）：
+**macOS / Linux**（Windows 装了 Git Bash 或 WSL 也可）：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
@@ -58,28 +49,27 @@ curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/s
 irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
 ```
 
-**指定版本 / 装完自动重启**（两平台参数一致）：
+装完**重启 DSH 并硬刷新**（Cmd/Ctrl+Shift+R）即可看到侧边栏。
+
+<details>
+<summary><b>指定版本 / 装完自动重启（可选）</b></summary>
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.10.2 --restart
+curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.10.3 --restart
 
 # Windows PowerShell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.10.2 -Restart
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.10.3 -Restart
 ```
 
-脚本会自动完成 4 件事（全部幂等，可安全重复执行）：
+不确定的话，可先加 `--dry-run`（PowerShell 用 `-DryRun`）预览步骤再执行。
 
-1. 预写 `allowBuilds`（node-pty / protobufjs），规避 pnpm 11 的构建脚本拦截；
-2. 预写 `minimumReleaseAgeExclude`，放行「发布不足 24 小时」的新版本；
-3. 执行 `dsh plugin --profile web add dsh-better-sidebar`：登记依赖 → 识别 `dsh.bundle.patch` → 自动注册进 `dsh.profile.bundles` 挂载；
-4. 清理旧版残留的手动挂载行，避免「双挂载」（页面出现两个侧边栏）。
+</details>
 
-不确定的话，可先加 `--dry-run`（PowerShell 用 `-DryRun`）预览步骤再真正执行。`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。
+<details>
+<summary><b>手动安装（逐步命令，想看清每一步）</b></summary>
 
-### 手动安装（逐步命令）
-
-适合想看清每一步的用户，与一键脚本等价。**第 ③ 步可重复执行；①② 只需做一次。**
+与一键脚本等价。**第 ③ 步可重复执行；①② 只需做一次。**
 
 **macOS / Linux（bash）**：
 
@@ -95,7 +85,7 @@ minimumReleaseAgeExclude:
   - dsh-better-sidebar
 EOF
 
-# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.10.2）
+# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.10.3）
 npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
 ```
 
@@ -114,9 +104,24 @@ Add-Content -Path pnpm-workspace.yaml -Value "`nminimumReleaseAgeExclude:`n  - d
 npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
 ```
 
-`dsh plugin add` 会：`pnpm add` 登记依赖 → 识别包内 `dsh.bundle.patch` → 自动注册到 `dsh.profile.bundles` → 下次启动自动挂载（**无需手写 `cordis.patch.yml`**）。
+</details>
 
-### 更新
+<details>
+<summary><b>脚本内部做了什么（技术细节）</b></summary>
+
+一键脚本自动完成 4 件事（全部幂等，可安全重复执行）：
+
+1. 预写 `allowBuilds`（node-pty / protobufjs），规避 pnpm 11 的构建脚本拦截；
+2. 预写 `minimumReleaseAgeExclude`，放行「发布不足 24 小时」的新版本；
+3. 执行 `dsh plugin --profile web add dsh-better-sidebar`：登记依赖 → 识别包内 `dsh.bundle.patch` → 自动注册进 `dsh.profile.bundles` 挂载；
+4. 清理旧版残留的手动挂载行，避免「双挂载」（页面出现两个侧边栏）。
+
+`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。插件以 npm 包 `dsh-better-sidebar@0.10.3` 发布，通过 `dsh.bundle.patch`（随包的 `cordis.patch.yml`）由官方 CLI 自动挂载，**不修改 DSH 源码**。
+
+</details>
+
+<details>
+<summary><b>更新</b></summary>
 
 ```sh
 dsh plugin --profile web add dsh-better-sidebar
@@ -124,7 +129,10 @@ dsh plugin --profile web add dsh-better-sidebar
 
 或重跑一次一键脚本；也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**重启 DSH 并硬刷新**（Cmd/Ctrl+Shift+R）。
 
-### 常见问题
+</details>
+
+<details>
+<summary><b>常见问题</b></summary>
 
 | 现象 | 原因与解决 |
 |---|---|
@@ -134,6 +142,8 @@ dsh plugin --profile web add dsh-better-sidebar
 | 页面出现**两个侧边栏** | 双挂载：`~/.dsh/profiles/web/cordis.patch.yml` 还留着旧的手动挂载行，删掉那段 `- insert: ... better-sidebar ...`（一键脚本会自动清）。 |
 | Windows 下终端无法使用 | `node-pty` 依赖预编译二进制；若当前 Node 版本没有对应产物，需装编译工具链（VS Build Tools）。主流 Node 版本一般已有预编译。 |
 | Windows 没有 bash / curl | 直接用 PowerShell 一键命令；或安装 Git Bash / WSL 再跑 bash 命令。 |
+
+</details>
 
 <details>
 <summary><b>从源码安装 / 开发（可选，替代 npm 方式）</b></summary>
@@ -152,7 +162,7 @@ dsh plugin --profile web add dsh-better-sidebar
 5. 重启 DSH 并硬刷新
 ```
 
-更新：`git pull && pnpm install && pnpm build` → 重启 DSH（仅 client 改动可硬刷新）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.10.2"` 再 `pnpm install`。
+更新：`git pull && pnpm install && pnpm build` → 重启 DSH（仅 client 改动可硬刷新）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.10.3"` 再 `pnpm install`。
 
 </details>
 
