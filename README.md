@@ -35,23 +35,9 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 安装
 
-前置：已安装 DSH（`dsh web` 可运行，含 `dsh plugin` 命令），Node.js ≥ 20、pnpm ≥ 10。插件已发布到 npm：**`dsh-better-sidebar@0.10.2`**（`@deepseek-ai/*` peer 依赖对齐宿主实际版本 `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`，同版本单实例）。包内声明了 `dsh.bundle.patch`（随包发布的 `cordis.patch.yml`），官方 CLI **一条命令完成安装 + 挂载**，不修改 DSH 源码。
+前置：已安装 DSH（`dsh web` 可运行），Node.js ≥ 20、pnpm ≥ 10。插件已发布到 npm：**`dsh-better-sidebar@0.10.2`**（`@deepseek-ai/*` peer 依赖对齐宿主实际版本 `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`，同版本单实例）。包内声明了 `dsh.bundle.patch`（随包发布的 `cordis.patch.yml`），安装后由官方 CLI 自动挂载，不修改 DSH 源码。
 
-### 官方 CLI 安装（推荐）
-
-```sh
-dsh plugin --profile web add dsh-better-sidebar
-# 或（本机无 dsh 命令时）
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-# 或固定某版本
-dsh plugin --profile web add dsh-better-sidebar@0.10.2
-```
-
-不带 `@<版本>` 时，pnpm 默认解析 npm 的 `latest` 标签，即最新发布版（当前 `0.10.2`）。命令自动完成：`pnpm add` 登记依赖到 `~/.dsh/profiles/web/package.json` → 识别包内 `dsh.bundle.patch`，把插件自动加进 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml` 挂载行）。更新同理：重跑 `dsh plugin --profile web add dsh-better-sidebar` 即升到最新版。
-
-> ⚠️ 首次在新 profile 上执行时，pnpm 11 的 `strict-dep-builds` 会拦截 node-pty/protobufjs 的构建脚本，命令会报 `Ignored build scripts`（包仍已安装、node-pty 预编译产物可直接用）。此时在 `~/.dsh/profiles/web` 执行 `pnpm approve-builds --all` 再重跑一次即可；`scripts/install.sh` 会自动处理（预写 allowBuilds + 清理旧挂载行）。
-
-### 一键脚本（自动处理 allowBuilds / 旧挂载行）
+### 一键安装（推荐）
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
@@ -59,15 +45,31 @@ curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/s
 # 装完自动重启 DSH： curl -fsSL <同上> | bash -s -- --restart
 ```
 
+脚本自动完成：`pnpm add` 登记依赖到 `~/.dsh/profiles/web/package.json` → 预写 `allowBuilds`（node-pty/protobufjs，规避 pnpm 11 的构建脚本拦截）→ 识别包内 `dsh.bundle.patch`，把插件自动加进 `dsh.profile.bundles` 挂载 → 幂等清理旧的手动挂载行（防双挂载）。版本默认最新（`latest`），可传参；`--dry-run` 只预览不落盘。
+
+### 手动安装（npx dsh + 命令链）
+
+等价于上面脚本的一连串 bash 命令（全新 profile 首次装可能因构建脚本被拦，链里 `||` 分支会自动批准并重试一次）：
+
+```sh
+cd ~/.dsh/profiles/web \
+  && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar \
+  || (pnpm approve-builds --all \
+      && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar)
+# 固定版本：把上面的 dsh-better-sidebar 换成 dsh-better-sidebar@0.10.2
+```
+
+不带 `@<版本>` 时，pnpm 解析 npm 的 `latest` 标签（最新发布版）。`dsh plugin add` 完成：`pnpm add` 登记依赖 → 识别 `dsh.bundle.patch` 自动注册到 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml`）。
+
+> ⚠️ pnpm 11 的两道供应链策略：① `strict-dep-builds` 拦截 node-pty/protobufjs 构建脚本（首次 `pnpm approve-builds --all` 一次即可，包其实已装上、node-pty 预编译产物可直接用）；② `minimumReleaseAge` 拒绝 <24h 的新版本（pnpm 会自动补 `minimumReleaseAgeExclude`，重跑一次即可）。
+
 ### 更新
 
 ```sh
-dsh plugin --profile web add dsh-better-sidebar@<新版>
+dsh plugin --profile web add dsh-better-sidebar
 ```
 
-或手动把 `~/.dsh/profiles/web/package.json` 里版本号改到新版（如 `"^0.10.2"`）后 `pnpm install`。随后重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）。
-
-> 提示：若 pnpm 因 `minimumReleaseAge`（发布 <24h 的新版本）拒绝安装，会自动向 `~/.dsh/profiles/web/pnpm-workspace.yaml` 追加 `minimumReleaseAgeExclude` 条目；也可手动补一行 `dsh-better-sidebar@<版本>`。
+或重跑一次一键脚本；也可手动把 `~/.dsh/profiles/web/package.json` 版本号改新版后 `pnpm install`。随后重启 DSH 并硬刷新（Cmd/Ctrl+Shift+R）。
 
 <details>
 <summary><b>从源码安装 / 开发（可选，替代 npm 方式）</b></summary>

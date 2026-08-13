@@ -35,23 +35,9 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🚀 Installation
 
-Prerequisites: DSH installed (`dsh web` works, including the `dsh plugin` command), Node.js ≥ 20, pnpm ≥ 10. The plugin is published to npm as **`dsh-better-sidebar@0.10.2`** (`@deepseek-ai/*` peers aligned with the host's actual versions `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`, single instance). The package declares `dsh.bundle.patch` (the shipped `cordis.patch.yml`), so the official CLI installs **and mounts in one command** — the DSH source is never modified.
+Prerequisites: DSH installed (`dsh web` works), Node.js ≥ 20, pnpm ≥ 10. The plugin is published to npm as **`dsh-better-sidebar@0.10.2`** (`@deepseek-ai/*` peers aligned with the host's actual versions `^0.1.0-rc.6` / `@deepseek-ai/cordis@^4.0.1`, single instance). The package declares `dsh.bundle.patch` (the shipped `cordis.patch.yml`), so the official CLI mounts it after install — the DSH source is never modified.
 
-### Official CLI install (recommended)
-
-```sh
-dsh plugin --profile web add dsh-better-sidebar
-# or (no local dsh command):
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-# or pin a specific version:
-dsh plugin --profile web add dsh-better-sidebar@0.10.2
-```
-
-Without `@<version>`, pnpm resolves npm's `latest` tag — the newest published release (currently `0.10.2`). The command: runs `pnpm add` to register the dependency in `~/.dsh/profiles/web/package.json`, detects the package's `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and the next boot mounts it — no hand-written `cordis.patch.yml` mount line. Update the same way: re-run `dsh plugin --profile web add dsh-better-sidebar` to get the latest.
-
-> ⚠️ On a fresh profile, pnpm 11's `strict-dep-builds` blocks node-pty/protobufjs build scripts and the command reports `Ignored build scripts` (the package is still installed; node-pty's prebuilds work as-is). Fix: run `pnpm approve-builds --all` in `~/.dsh/profiles/web` and re-run. `scripts/install.sh` handles this automatically (pre-writes allowBuilds + cleans up the old mount line).
-
-### One-click script (handles allowBuilds / old mount line)
+### One-click install (recommended)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
@@ -59,15 +45,31 @@ curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/s
 # Auto-restart DSH: curl -fsSL <same URL> | bash -s -- --restart
 ```
 
+The script: runs `pnpm add` to register the dependency in `~/.dsh/profiles/web/package.json`, pre-writes `allowBuilds` (node-pty/protobufjs, to dodge pnpm 11's build-script block), detects the package's `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and idempotently cleans up the old hand-written mount line (to avoid double-mounting). Version defaults to latest (`latest`); `--dry-run` previews without writing.
+
+### Manual install (npx dsh + command chain)
+
+The same steps as a chain of bash commands (a fresh profile may hit the build-script block once; the `||` branch approves and retries):
+
+```sh
+cd ~/.dsh/profiles/web \
+  && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar \
+  || (pnpm approve-builds --all \
+      && npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar)
+# Pin a version: replace dsh-better-sidebar with dsh-better-sidebar@0.10.2
+```
+
+Without `@<version>`, pnpm resolves npm's `latest` tag (the newest release). `dsh plugin add` runs `pnpm add` to register the dependency, detects `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and the next boot mounts it — no hand-written `cordis.patch.yml` mount line.
+
+> ⚠️ pnpm 11's two supply-chain policies: ① `strict-dep-builds` blocks node-pty/protobufjs build scripts (run `pnpm approve-builds --all` once; the package is already installed and node-pty's prebuilds work as-is); ② `minimumReleaseAge` rejects releases younger than 24h (pnpm auto-appends a `minimumReleaseAgeExclude` entry — just re-run once).
+
 ### Updating
 
 ```sh
-dsh plugin --profile web add dsh-better-sidebar@<new>
+dsh plugin --profile web add dsh-better-sidebar
 ```
 
-or bump the version range in `~/.dsh/profiles/web/package.json` (e.g. `"^0.10.2"`) and run `pnpm install`. Then restart DSH and hard-refresh (Cmd/Ctrl+Shift+R).
-
-> Note: if pnpm rejects a too-fresh release via `minimumReleaseAge` (<24h old), it auto-appends a `minimumReleaseAgeExclude` entry to `~/.dsh/profiles/web/pnpm-workspace.yaml` — or add `dsh-better-sidebar@<version>` there manually.
+or re-run the one-click script; or bump the version range in `~/.dsh/profiles/web/package.json` (e.g. `"^0.10.2"`) and run `pnpm install`. Then restart DSH and hard-refresh (Cmd/Ctrl+Shift+R).
 
 <details>
 <summary><b>Install from source / develop (optional — alternative to the npm flow)</b></summary>
