@@ -50,6 +50,11 @@ DSH 的 i18n 系统（`@deepseek-ai/dsh-client-locale`）：
 
 - 无。计划与实施一致。
 - 版本号随 v0.8.2 发版提交（`package.json` + `dsh.plugin.json`）。
+- v0.8.2 后补遗：md 预览（`TextEditor.tsx`）的代码块复制按钮文案——DSH 的
+  `MarkdownText`/`CodeBlock` 是 cordis-free 组件，未传 `codeLabels` 时回退到硬编码中文
+  「复制/复制成功」。修复为渲染时传入 `codeLabels={{ copyLabel: t('copy'), copiedLabel: t('copied') }}`
+  （对齐 DSH 聊天区 `AssistantMarkdown` 的做法），新增 `tests/markdown-copy-labels.spec.tsx`
+  钉住 zh/en 跟随。
 
 ## 验收
 

@@ -329,7 +329,15 @@ export function TextEditor(props: FileViewerProps) {
           onMouseUp={handlePreviewMouseUp}
           onScroll={hidePopup}
         >
-          <MarkdownText text={draft ?? content ?? ''} />
+          {/* The fence copy-button labels must come from this plugin's own
+              dictionary: the DSH MarkdownText/CodeBlock are cordis-free and
+              fall back to hardcoded Chinese otherwise (same pattern as the
+              chat's AssistantMarkdown). Render-time t() keeps them following
+              the active locale on live switches. */}
+          <MarkdownText
+            text={draft ?? content ?? ''}
+            codeLabels={{ copyLabel: t('copy'), copiedLabel: t('copied') }}
+          />
         </div>
       )}
       {html && mode === 'preview' && (
