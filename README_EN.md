@@ -61,7 +61,9 @@ cd ~/.dsh/profiles/web \
 
 Without `@<version>`, pnpm resolves npm's `latest` tag (the newest release). `dsh plugin add` runs `pnpm add` to register the dependency, detects `dsh.bundle.patch`, auto-appends the plugin to `dsh.profile.bundles`, and the next boot mounts it — no hand-written `cordis.patch.yml` mount line.
 
-> ⚠️ pnpm 11's two supply-chain policies: ① `strict-dep-builds` blocks node-pty/protobufjs build scripts (run `pnpm approve-builds --all` once; the package is already installed and node-pty's prebuilds work as-is); ② `minimumReleaseAge` rejects releases younger than 24h (pnpm auto-appends a `minimumReleaseAgeExclude` entry — just re-run once).
+> ⚠️ pnpm 11's two supply-chain policies, which no command chain can fully dodge:
+> - `strict-dep-builds` blocks node-pty/protobufjs build scripts: the first install reports `Ignored build scripts` (the package is already installed and node-pty's prebuilds work as-is); run `pnpm approve-builds --all` once.
+> - `minimumReleaseAge` rejects releases younger than 24h: this is a pnpm policy that no command chain can fully avoid — it only triggers because the plugin was just published, and **it disappears on its own after 24 hours** (if it fires, just re-run once; pnpm auto-appends a `minimumReleaseAgeExclude` entry).
 
 ### Updating
 

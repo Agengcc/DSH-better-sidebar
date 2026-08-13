@@ -61,7 +61,9 @@ cd ~/.dsh/profiles/web \
 
 不带 `@<版本>` 时，pnpm 解析 npm 的 `latest` 标签（最新发布版）。`dsh plugin add` 完成：`pnpm add` 登记依赖 → 识别 `dsh.bundle.patch` 自动注册到 `dsh.profile.bundles` → 下次启动自动挂载（无需手写 `cordis.patch.yml`）。
 
-> ⚠️ pnpm 11 的两道供应链策略：① `strict-dep-builds` 拦截 node-pty/protobufjs 构建脚本（首次 `pnpm approve-builds --all` 一次即可，包其实已装上、node-pty 预编译产物可直接用）；② `minimumReleaseAge` 拒绝 <24h 的新版本（pnpm 会自动补 `minimumReleaseAgeExclude`，重跑一次即可）。
+> ⚠️ pnpm 11 的两道供应链策略，命令链无法完全规避：
+> - `strict-dep-builds` 拦截 node-pty/protobufjs 的构建脚本：首次装报 `Ignored build scripts`（包其实已装上、node-pty 预编译产物可直接用），`pnpm approve-builds --all` 一次即可。
+> - `minimumReleaseAge` 拒绝发布 <24h 的新版本：这是 pnpm 的策略、命令链无法完全规避，仅因插件刚发布不久才会触发，**24 小时后自动消失**（触发时重跑一次，pnpm 会自动补 `minimumReleaseAgeExclude`）。
 
 ### 更新
 
