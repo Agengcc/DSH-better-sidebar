@@ -141,33 +141,101 @@ function Switch(props: {
 
 /**
  * The body of a feature's secondary settings popup: one row (title/desc +
- * custom switch) per declared toggle. Extracted so the rows are testable
+ * control) per declared setting. Switches render the custom switch; text and
+ * number rows render a free-form / numeric input committed on blur/Enter
+ * (clamped to the declared min/max). Extracted so the rows are testable
  * without opening the Modal (the Modal portal renders only while open).
  */
 export function FeatureSettingsRows(props: {
   toggles: readonly SidebarSettingToggle[]
   prefs: SidebarPrefs
   onToggle: (toggle: SidebarSettingToggle, next: boolean) => void
+  /** Commit one text/number row; returns the canonical value the row should
+   *  display (clamped for numbers, the current pref when the input is
+   *  invalid). Optional: rows with no handler keep their draft. */
+  onCommit?: (toggle: SidebarSettingToggle, raw: string) => string
 }) {
-  const { toggles, prefs, onToggle } = props
+  const { toggles, prefs, onToggle, onCommit } = props
   return (
     <div className={css.popupRows}>
       {toggles.map(toggle => {
         const title = textOf(toggle.title)
+        if ((toggle.type ?? 'switch') === 'switch') {
+          return (
+            <div key={toggle.key} className={css.popupRow}>
+              <span className={css.rowText}>
+                <span className={css.title}>{title}</span>
+                {textOf(toggle.desc) !== '' && <span className={css.desc}>{textOf(toggle.desc)}</span>}
+              </span>
+              <Switch
+                label={title}
+                checked={prefBool(prefs, toggle.key)}
+                onChange={(next) => { onToggle(toggle, next) }}
+              />
+            </div>
+          )
+        }
+        const value = String((prefs as unknown as Record<string, unknown>)[toggle.key] ?? '')
+        // Keyed by the committed value: a failed commit reverts prefs, the
+        // key changes, and the row remounts with the stored value (typing
+        // never changes the key, so mid-edit drafts survive re-renders).
         return (
-          <div key={toggle.key} className={css.popupRow}>
-            <span className={css.rowText}>
-              <span className={css.title}>{title}</span>
-              {textOf(toggle.desc) !== '' && <span className={css.desc}>{textOf(toggle.desc)}</span>}
-            </span>
-            <Switch
-              label={title}
-              checked={prefBool(prefs, toggle.key)}
-              onChange={(next) => { onToggle(toggle, next) }}
-            />
-          </div>
+          <TypedRow
+            key={`${toggle.key}:${value}`}
+            toggle={toggle}
+            title={title}
+            value={value}
+            onCommit={onCommit}
+          />
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * One text/number row: a controlled input whose draft is local state,
+ * committed on blur/Enter through the parent's onCommit. The parent's
+ * canonical return is adopted (clamped numbers, stored value for invalid
+ * input); a `unit` suffix renders after the input (e.g. 'px').
+ */
+function TypedRow(props: {
+  toggle: SidebarSettingToggle
+  title: string
+  value: string
+  onCommit?: (toggle: SidebarSettingToggle, raw: string) => string
+}) {
+  const { toggle, title, value, onCommit } = props
+  const [draft, setDraft] = useState(value)
+  const commit = (): void => {
+    const canonical = onCommit?.(toggle, draft) ?? draft
+    setDraft(canonical)
+  }
+  const number = toggle.type === 'number'
+  return (
+    <div className={css.popupRow}>
+      <span className={css.rowText}>
+        <span className={css.title}>{title}</span>
+        {textOf(toggle.desc) !== '' && <span className={css.desc}>{textOf(toggle.desc)}</span>}
+      </span>
+      <span className={css.control}>
+        <Input
+          type={number ? 'number' : 'text'}
+          className={number ? css.typedInputNumber : css.typedInput}
+          value={draft}
+          min={toggle.min}
+          max={toggle.max}
+          step={1}
+          placeholder={toggle.placeholder}
+          aria-label={title}
+          onChange={event => { setDraft(event.currentTarget.value) }}
+          onBlur={commit}
+          onKeyDown={event => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+          }}
+        />
+        {toggle.unit !== undefined && <span className={css.suffix}>{toggle.unit}</span>}
+      </span>
     </div>
   )
 }
@@ -251,8 +319,8 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
     setWidthDraft(String(settled.defaultWidthPercent))
   }
 
-  /** Optimistically flip one boolean pref, then commit (revert on failure). */
-  const togglePref = (patch: Record<string, unknown>): void => {
+  /** Optimistically apply one pref patch, then commit (revert on failure). */
+  const applyPref = (patch: Record<string, unknown>): void => {
     const previous = prefs
     setPrefs({ ...previous, ...patch } as SidebarPrefs)
     setError(null)
@@ -260,22 +328,44 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   }
 
   const onToggle = (next: boolean): void => {
-    togglePref({ openByDefault: next })
+    applyPref({ openByDefault: next })
   }
 
   /** Flip one per-tab enable switch (merge into the tabsEnabled map). */
   const onToggleTab = (id: string, next: boolean): void => {
-    togglePref({ tabsEnabled: { ...prefs.tabsEnabled, [id]: next } })
+    applyPref({ tabsEnabled: { ...prefs.tabsEnabled, [id]: next } })
   }
 
   /** Flip one per-viewer enable switch (merge into the viewersEnabled map). */
   const onToggleViewer = (id: string, next: boolean): void => {
-    togglePref({ viewersEnabled: { ...prefs.viewersEnabled, [id]: next } })
+    applyPref({ viewersEnabled: { ...prefs.viewersEnabled, [id]: next } })
   }
 
   /** Flip one declaratively-declared toggle (a SidebarPrefs boolean field). */
   const onToggleSetting = (toggle: SidebarSettingToggle, next: boolean): void => {
-    togglePref({ [toggle.key]: next })
+    applyPref({ [toggle.key]: next })
+  }
+
+  /**
+   * Commit one declaratively-declared text/number row. Numbers are parsed
+   * and clamped to the toggle's declared min/max (an unparsable input falls
+   * back to the CURRENT stored value, mirroring the width row); text rows
+   * persist as-is (empty is meaningful, e.g. the theme-default font).
+   * Returns the canonical value the row should display.
+   */
+  const onCommitSetting = (toggle: SidebarSettingToggle, raw: string): string => {
+    if (toggle.type === 'number') {
+      const parsed = Number(raw)
+      const fallback = String((prefs as unknown as Record<string, unknown>)[toggle.key] ?? '')
+      if (!Number.isFinite(parsed)) return fallback
+      let clamped = Math.round(parsed)
+      if (toggle.min !== undefined) clamped = Math.max(toggle.min, clamped)
+      if (toggle.max !== undefined) clamped = Math.min(toggle.max, clamped)
+      applyPref({ [toggle.key]: clamped })
+      return String(clamped)
+    }
+    applyPref({ [toggle.key]: raw })
+    return raw
   }
 
   const commitWidth = (): void => {
@@ -397,7 +487,7 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
           <Switch
             label={t('settingsOpenPathTitle')}
             checked={prefs.interceptOpenPath}
-            onChange={(next) => { togglePref({ interceptOpenPath: next }) }}
+            onChange={(next) => { applyPref({ interceptOpenPath: next }) }}
           />
         </div>
       </div>
@@ -476,6 +566,7 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             toggles={settingsFor.settings?.toggles ?? []}
             prefs={prefs}
             onToggle={onToggleSetting}
+            onCommit={onCommitSetting}
           />
         </Modal>
       )}

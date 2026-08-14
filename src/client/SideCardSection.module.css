@@ -337,6 +337,17 @@
   width: 76px;
 }
 
+/* Text/number rows in the settings popup: the free-form input (e.g. the
+   terminal font family) gets a generous width; numeric rows (font size)
+   keep the compact width of the general number inputs. */
+.typedInput {
+  width: 200px;
+}
+
+.typedInputNumber {
+  width: 76px;
+}
+
 .suffix {
   font-size: 14px;
   line-height: 22px;

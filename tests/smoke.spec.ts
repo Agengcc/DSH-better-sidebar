@@ -517,6 +517,8 @@ describe('side card settings routes', () => {
         autoOpenJobs: true,
         agentTerminalTools: false,
         bottomPanelAutoTerminal: true,
+        terminalFontFamily: '',
+        terminalFontSize: 13,
         interceptOpenPath: true,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,

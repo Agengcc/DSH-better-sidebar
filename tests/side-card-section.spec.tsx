@@ -172,4 +172,47 @@ describe('FeatureSettingsRows (the secondary settings popup body)', () => {
     }))
     expect(html).toContain('checked=""')
   })
+
+  it('renders a text row as an input seeded with the pref value (empty = theme default)', () => {
+    const html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [{
+        key: 'terminalFontFamily',
+        type: 'text',
+        title: () => 'Font family',
+        desc: () => 'CSS stack',
+        placeholder: '"JetBrains Mono", monospace',
+      }],
+      prefs: { ...prefs, terminalFontFamily: '"JetBrains Mono", monospace' },
+      onToggle: () => {},
+      onCommit: () => '',
+    }))
+    expect(html).toContain('Font family')
+    expect(html).toContain('placeholder="&quot;JetBrains Mono&quot;, monospace"')
+    // The input carries the pref value (no switch for text rows).
+    expect(html).toContain('value="&quot;JetBrains Mono&quot;, monospace"')
+    expect(html).not.toContain('type="checkbox"')
+  })
+
+  it('renders a number row with the pref value, the declared bounds and a unit suffix', () => {
+    const html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [{
+        key: 'terminalFontSize',
+        type: 'number',
+        title: () => 'Font size',
+        min: 9,
+        max: 32,
+        unit: 'px',
+      }],
+      prefs: { ...prefs, terminalFontSize: 18 },
+      onToggle: () => {},
+      onCommit: () => '18',
+    }))
+    expect(html).toContain('Font size')
+    expect(html).toContain('type="number"')
+    expect(html).toContain('value="18"')
+    expect(html).toContain('min="9"')
+    expect(html).toContain('max="32"')
+    expect(html).toContain('px')
+    expect(html).not.toContain('type="checkbox"')
+  })
 })

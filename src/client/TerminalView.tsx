@@ -27,6 +27,7 @@ import { t } from './locales.ts'
 import type { SessionScope } from './api.ts'
 import { agentUuidOf, isAgentTabId, type SidebarStore } from './state.ts'
 import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
+import { resolveTerminalFont } from './terminal-font.ts'
 import css from './sidebar.module.css'
 
 /** How many consecutive unreasoned failures before showing the error banner. */
@@ -82,10 +83,13 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
   useEffect(() => {
     const host = hostRef.current
     if (host === null) return
+    // The custom font prefs (side card settings, terminal card) resolve at
+    // mount; store changes re-apply them live below.
+    const font = resolveTerminalFont(store.getPrefs(), tokenValue('--ds-font-family-code'))
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
-      fontFamily: tokenValue('--ds-font-family-code') || '"SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+      fontSize: font.fontSize,
+      fontFamily: font.fontFamily,
       allowTransparency: true,
       convertEol: false,
       scrollback: 4000,
@@ -185,11 +189,31 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
     })
     observer.observe(host)
 
+    // Custom font prefs (the terminal card's secondary settings) apply LIVE:
+    // on any store change re-resolve and diff the two options, re-fitting
+    // when they moved (the grid dimensions may change with the font). The
+    // subscribe fires on every store change (tabs, panels…), so the diff is
+    // what keeps this cheap.
+    const fontSub = store.subscribe(() => {
+      const next = resolveTerminalFont(store.getPrefs(), tokenValue('--ds-font-family-code'))
+      if (next.fontFamily !== term.options.fontFamily || next.fontSize !== term.options.fontSize) {
+        term.options.fontFamily = next.fontFamily
+        term.options.fontSize = next.fontSize
+        try {
+          fit.fit()
+          sendResize()
+        } catch {
+          // The terminal may be mid-dispose; ignore.
+        }
+      }
+    })
+
     connect()
     return () => {
       closed = true
       window.clearTimeout(retry)
       observer.disconnect()
+      fontSub()
       schemeSub()
       inputSub.dispose()
       // The close frame tells the host the owning tab is GONE (immediate
