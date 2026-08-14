@@ -865,15 +865,21 @@ describe('pty helpers', () => {
     if (process.platform === 'win32') return
     ensureSpawnHelper()
     ensureSpawnHelper()
-    const { existsSync } = require('node:fs') as typeof import('node:fs')
+    const { existsSync, statSync } = require('node:fs') as typeof import('node:fs')
     const { dirname, join } = require('node:path') as typeof import('node:path')
     const { createRequire } = require('node:module') as typeof import('node:module')
     const entry = createRequire(import.meta.url).resolve('node-pty')
     const root = dirname(dirname(entry))
-    const helper = join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper')
-    expect(existsSync(helper)).toBe(true)
-    const { statSync } = require('node:fs') as typeof import('node:fs')
-    expect((statSync(helper).mode & 0o111) !== 0).toBe(true)
+    // node-pty ships a prebuilt spawn-helper for darwin/win32; on other
+    // platforms (linux) node-gyp compiles it into build/Release. Mirror
+    // ensureSpawnHelper's candidate list: either location is acceptable.
+    const candidates = [
+      join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
+      join(root, 'build', 'Release', 'spawn-helper'),
+    ]
+    const helper = candidates.find(existsSync)
+    expect(helper).toBeTruthy()
+    expect((statSync(helper!).mode & 0o111) !== 0).toBe(true)
   })
 })
 
