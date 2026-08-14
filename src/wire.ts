@@ -16,6 +16,7 @@ export type SidebarErrorCode =
   | 'git-error'
   | 'pty-error'
   | 'job-error'
+  | 'reveal-error'
   | 'settings-rejected'
   | 'settings-conflict'
   | 'internal'

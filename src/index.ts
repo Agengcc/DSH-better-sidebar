@@ -26,7 +26,8 @@ import {
   type SidebarConfig,
   type SidebarPrefs,
 } from './config.ts'
-import { isWithin, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
+import { isWithin, messageOf, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
+import { revealInFileManager } from './reveal.ts'
 import { decodeHtmlUrl } from './html-route.ts'
 import { extractFrameAncestors } from './browser-probe.ts'
 import { isTrustedApiRequest, isLoopbackHostname } from './trust-fence.ts'
@@ -239,6 +240,24 @@ function buildApi(
         throw new SidebarError('fs-error', `cannot write "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
       }
       return { ok: true }
+    },
+    // Reveal a file or directory in the OS file manager ("在访达中显示").
+    // The web client has no way to open the system file manager, so the host
+    // runs the platform command locally (execFile, no shell). Confined to the
+    // session working directory like the media route — the explorer only
+    // ever offers rows under the session cwd, so nothing reachable here is
+    // outside the workspace.
+    'fs.reveal': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      const path = requireAbsolute(requireString(payload, 'path'))
+      if (!isWithin(cwd, path)) {
+        throw new SidebarError('fs-error', 'path outside the session working directory', 403)
+      }
+      const info = await stat(path).catch((error: unknown) => {
+        throw new SidebarError('fs-error', `cannot access "${path}": ${messageOf(error)}`, 400)
+      })
+      await revealInFileManager(path, info.isDirectory())
+      return { ok: true, revealed: path }
     },
     'git.status': async (payload) => {
       const { cwd } = cwdOf(payload)

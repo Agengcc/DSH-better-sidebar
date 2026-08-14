@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import clsx from 'clsx'
 import {
   IconCodeOutline16, IconCopyOutline16, IconDownloadOutline16, IconFolderClose16, IconFolderOpen16,
-  IconRefreshOutline16, Menu, writeClipboard,
+  IconFolderOpenOutline16, IconRefreshOutline16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, downloadUrl, type FsEntry } from './api.ts'
 import { relativeTo } from './paths.ts'
@@ -53,6 +53,8 @@ export function ExplorerView(props: {
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
   /** Open context menu: the row path (and whether it is a directory) plus the cursor position. */
   const [rowMenu, setRowMenu] = useState<{ path: string; isDir: boolean; x: number; y: number } | null>(null)
+  /** Transient "reveal in file manager" failure (rendered as an error row, auto-clears). */
+  const [revealError, setRevealError] = useState<string | null>(null)
 
   const storeLevel = useCallback((path: string, level: LevelData) => {
     dataRef.current = { ...dataRef.current, [path]: level }
@@ -125,6 +127,16 @@ export function ExplorerView(props: {
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
+  }
+
+  /** Reveal a row in the OS file manager via the host route; surface failures
+   *  as a transient error row (Finder/Explorer opens on the host machine). */
+  const revealInFileManager = (path: string): void => {
+    api.fsReveal({ sessionId, cwd }, path).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      setRevealError(`${t('revealFailed')}: ${message}`)
+      window.setTimeout(() => { setRevealError(null) }, 4000)
+    })
   }
 
   const root = cwd
@@ -213,6 +225,11 @@ export function ExplorerView(props: {
         </button>
       </div>
       <div className={css.explorerBody}>
+        {revealError !== null && (
+          <div className={clsx(css.explorerRow, css.explorerError)} style={{ paddingLeft: 6 }}>
+            {revealError}
+          </div>
+        )}
         {root === undefined ? (
           <div className={css.explorerEmpty}>{t('noSession')}</div>
         ) : (
@@ -253,6 +270,9 @@ export function ExplorerView(props: {
         open={rowMenu !== null}
         onClose={() => { setRowMenu(null) }}
         items={[
+          // Reveal works for files and directories alike (the host selects
+          // the row in the OS file manager).
+          { id: 'reveal', label: t('revealInFinder'), icon: <IconFolderOpenOutline16 size={14} /> },
           // Download applies to files only (the host route refuses directories).
           ...(rowMenu?.isDir === false
             ? [{ id: 'download', label: t('download'), icon: <IconDownloadOutline16 size={14} /> }]
@@ -264,6 +284,10 @@ export function ExplorerView(props: {
           const target = rowMenu
           if (target === null) return
           setRowMenu(null)
+          if (id === 'reveal') {
+            revealInFileManager(target.path)
+            return
+          }
           if (id === 'download') {
             downloadFile(target.path)
             return
