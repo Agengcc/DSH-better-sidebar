@@ -25,7 +25,7 @@
  * drawer floats). Widening does not migrate back: the tabs keep living in
  * the right tree.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import { IconCloseFill14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -44,6 +44,7 @@ import type { NewTabOption } from './TabBar.tsx'
 import type { TabDragPayload } from './TabBar.tsx'
 import { relativeTo } from './paths.ts'
 import { OrphanedTab } from './OrphanedTab.tsx'
+import { RenderBoundary } from './RenderBoundary.tsx'
 import { detectNewDirectSubagent } from './subagent-detect.ts'
 import { detectNewJob } from './subagent-jobs.ts'
 import { t } from './locales.ts'
@@ -77,10 +78,22 @@ function TabContent(props: {
   if (descriptor === undefined) {
     return <OrphanedTab ctx={ctx} store={store} scope={scope} tab={tab} visible={visible} />
   }
-  return descriptor.component({
-    ctx, store, scope, tab, visible, expanded,
-    onToggleDir, onReferenceFile, onOpenDiff, onSubagentJump,
-  })
+  // One boundary per tab: a render crash in a viewer/editor shows a strip in
+  // THIS tab's pane only — the toggle cluster, the other tabs, and the panel
+  // stay alive (issue #31). The tab strip (close button) lives outside, so a
+  // crashing tab stays closable; the root boundary in index.tsx remains the
+  // last resort for errors in the sidebar shell itself. The descriptor is
+  // rendered as a REAL element (not called directly): a direct call would
+  // throw inside TabContent's own render, which the boundary cannot catch —
+  // as a child fiber, every render error (top-level or deep) lands in it.
+  return createElement(
+    RenderBoundary,
+    { className: css.tabBoundaryError },
+    createElement(descriptor.component, {
+      ctx, store, scope, tab, visible, expanded,
+      onToggleDir, onReferenceFile, onOpenDiff, onSubagentJump,
+    }),
+  )
 }
 
 /** The + menu options for the current state, driven by the tab registry.
@@ -512,6 +525,17 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       : 0
     document.documentElement.style.setProperty('--dsh-sidebar-width', `${width}px`)
     document.documentElement.style.setProperty('--dsh-sidebar-height', `${height}px`)
+    // Unmount must release the push (issue #31): when the boundary swaps the
+    // whole sidebar after a render crash (or the plugin fiber is disposed /
+    // HMR), the CSS variables would otherwise stay on <html> and layout.css
+    // keeps squeezing #root with a stale margin — "the sidebar cannot be
+    // hidden" until a full reload. removeProperty restores the CSS fallback
+    // (var(--dsh-sidebar-width, 0px)); React re-runs cleanup+setup in the
+    // same commit on state changes, so there is no visible flicker.
+    return () => {
+      document.documentElement.style.removeProperty('--dsh-sidebar-width')
+      document.documentElement.style.removeProperty('--dsh-sidebar-height')
+    }
   }, [narrow, snapshot.state?.panelOpen, snapshot.state?.width, snapshot.state?.bottomOpen, snapshot.state?.bottomHeight])
   useEffect(() => {
     if (anyDragging) document.body.setAttribute('data-dsh-sidebar-dragging', '')
