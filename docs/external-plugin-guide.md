@@ -32,7 +32,7 @@ better-sidebar 从 v0.4.0 起把自己改造成一个**注册表服务**：
 import type {} from 'dsh-better-sidebar'  // 触发 declare module 'cordis' 类型合并
 ```
 
-这个 **type-only import** 在编译时被擦除，不产生任何运行时依赖，也不会触发构建纯度门（见 §9）。
+这个 **type-only import** 在编译时被擦除，不产生任何运行时依赖，也不会触发构建纯度门（见 §10）。
 
 ### 2.2 package.json 声明
 
