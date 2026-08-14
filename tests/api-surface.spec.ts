@@ -58,7 +58,8 @@ describe('public API surface (v0.12.0)', () => {
   })
 
   it('advertises the capability list and version (values come from service.ts)', () => {
-    expect(SIDEBAR_SERVICE_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
+    // Full releases are bare x.y.z; pre-releases (beta) carry -<tag>.<n>.
+    expect(SIDEBAR_SERVICE_VERSION).toMatch(/^\d+\.\d+\.\d+(-[a-z0-9.]+)?$/)
     expect(SIDEBAR_FEATURES.length).toBeGreaterThanOrEqual(8)
     for (const feature of ['badge', 'tabLifecycle', 'updateTab', 'openFile', 'targetedOpen', 'stateSubscription', 'tabMeta', 'pluginSettings']) {
       expect(SIDEBAR_FEATURES).toContain(feature)
