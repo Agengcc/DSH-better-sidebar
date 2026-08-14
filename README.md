@@ -6,8 +6,6 @@
   <code>文件管理</code> <code>编辑预览</code> <code>内嵌浏览器</code> <code>真实终端</code> <code>Git 面板</code> <code>后台任务</code><br /><br />
   <b>右侧栏 + 底部面板双工作台</b>，并把 <code>ctx.betterSidebar</code> 服务开放给所有插件——<br />
   通过 <code>registerTab</code> / <code>registerFileViewer</code> 注册新页面与文件预览器，<br />
-  内置的 7 tab + 6 viewer 与外部插件走<b>同一套服务</b>：我们吃自己的狗粮。<br /><br />
-  <b>🧩 生态位插件</b>：打上 <a href="https://github.com/topics/dsh-better-sidebar"><code>dsh-better-sidebar</code> topic</a>，把你的侧边栏页面 / 文件预览器接入这个生态。
 </div>
 
 <div align="center">
