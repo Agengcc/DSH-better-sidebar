@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 ## 🆕 最近更新
 
-<small>v0.12.0</small>
+<small>v0.12.1</small>
 
 | 功能 | 说明 | 截图 |
 |---|---|---|
@@ -41,7 +41,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 - **🔧 分栏工作台**：拖 Tab 拆分/合并（可跨面板）、分隔线调比例；右上角按钮一键折叠/展开面板
 - **🔁 会话隔离**：布局 / Tab / 面板状态按会话持久化，陈旧状态自动净化；「产出文件」在侧边栏打开
 - **⚙️ 声明式设置**：设置页「侧边卡片」按注册表渲染开关网格，逐项独立开/关；二级设置（自动展开、终端工具、沙箱等）经齿轮弹窗编辑
-- **🔌 服务化（基座）**：暴露 `ctx.betterSidebar`，其他插件可注册 tab 与文件预览器（内置 7 tab + 9 viewer 同走一服务）；v0.12.0 起支持角标/生命周期回调/状态订阅/定向打开/插件自有设置（见 [AGENTS.md](./AGENTS.md) 与 [外部插件接入指南](./docs/external-plugin-guide.md)）
+- **🔌 服务化（基座）**：暴露 `ctx.betterSidebar`，其他插件可注册 tab 与文件预览器（内置 7 tab + 9 viewer 同走一服务）；v0.12.1 起支持角标/生命周期回调/状态订阅/定向打开/插件自有设置（见 [AGENTS.md](./AGENTS.md) 与 [外部插件接入指南](./docs/external-plugin-guide.md)）
 - **➕ 添加插件**：设置页「侧边卡片」两个网格（侧边栏内容 / 文件预览）末尾的虚线卡片分别打开 Tab / 预览插件弹窗：声明扩展点、「在 GitHub 上浏览更多插件」按钮、推荐插件目录（「跳转」直达仓库、「复制」安装命令到剪贴板）；弹窗不打开终端、无失败路径，不阻塞启动与侧边栏
 - **🌏 多语言**：界面文案跟随 DSH 语言（zh/en）实时切换，无需刷新
 
@@ -68,10 +68,10 @@ irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.0 --restart
+curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.1 --restart
 
 # Windows PowerShell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.0 -Restart
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.1 -Restart
 ```
 
 不确定的话，可先加 `--dry-run`（PowerShell 用 `-DryRun`）预览步骤再执行。
@@ -97,7 +97,7 @@ minimumReleaseAgeExclude:
   - dsh-better-sidebar
 EOF
 
-# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.12.0）
+# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.12.1）
 npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
 ```
 
@@ -128,7 +128,7 @@ npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sideba
 3. 执行 `dsh plugin --profile web add dsh-better-sidebar`：登记依赖 → 识别包内 `dsh.bundle.patch` → 自动注册进 `dsh.profile.bundles` 挂载；
 4. 清理旧版残留的手动挂载行，避免「双挂载」（页面出现两个侧边栏）。
 
-`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。插件以 npm 包 `dsh-better-sidebar@0.12.0` 发布，通过 `dsh.bundle.patch`（随包的 `cordis.patch.yml`）由官方 CLI 自动挂载，**不修改 DSH 源码**。
+`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。插件以 npm 包 `dsh-better-sidebar@0.12.1` 发布，通过 `dsh.bundle.patch`（随包的 `cordis.patch.yml`）由官方 CLI 自动挂载，**不修改 DSH 源码**。
 
 </details>
 
@@ -174,7 +174,7 @@ dsh plugin --profile web add dsh-better-sidebar
 5. 硬刷新浏览器（Cmd/Ctrl+Shift+R）即可看到效果（client 改动无需重启 DSH；host 半改动才需重启）
 ```
 
-更新：`git pull && pnpm install && pnpm build` → 硬刷新浏览器即可（client 改动热加载生效，无需重启 DSH；host 半改动才需重启）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.12.0"` 再 `pnpm install`。
+更新：`git pull && pnpm install && pnpm build` → 硬刷新浏览器即可（client 改动热加载生效，无需重启 DSH；host 半改动才需重启）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.12.1"` 再 `pnpm install`。
 
 </details>
 
@@ -220,7 +220,7 @@ export function apply(ctx: Context) {
 }
 ```
 
-v0.12.0 补齐基座能力（完整类型导出、能力探测、状态订阅、tab 角标、生命周期回调、定向打开、插件自有设置等），详见下方接入文档。
+v0.12.1 补齐基座能力（完整类型导出、能力探测、状态订阅、tab 角标、生命周期回调、定向打开、插件自有设置等），详见下方接入文档。
 
 完整接入文档：
 - **[`AGENTS.md`](./AGENTS.md)**——仓库内维护的接入文档（全字段、匹配算法、HMR 陷阱、声明式设置、版本探测）；
