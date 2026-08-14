@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Tests run git log against this repository and need the full history.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # The plugin's git revert/cherry-pick spawn git without setting an
+      # identity (deliberate, see tests/smoke.spec.ts) and rely on ambient
+      # config; the runner has none by default.
+      - name: Configure git identity for tests
+        run: |
+          git config --global user.name "dsh-better-sidebar-ci"
+          git config --global user.email "ci@dsh.invalid"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
