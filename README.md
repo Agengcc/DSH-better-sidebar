@@ -21,7 +21,6 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 - **终端自定义字体**：设置页终端卡片新增字体族 + 9–32px 字号设置，实时生效
 - **侧边卡片设置页重构**：分组容器卡片、计数徽标、自定义开关、加宽设置弹窗
 - **修复**：WKWebView 下底部面板展开后终端空白（xterm 零尺寸容器初始化崩溃，[#25](https://github.com/omdsh-dev/DSH-better-sidebar/issues/25)）
-- **文档**：client 改动硬刷新即可生效，无需重启 DSH
 
 ## ✨ 功能一览
 
