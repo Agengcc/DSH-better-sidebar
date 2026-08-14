@@ -1,4 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Pin the passwd login shell to a non-bash value for the pty helpers tests:
+// the CI runner's own login shell is /bin/bash, which the old hardcoded
+// fallback would have satisfied by coincidence, so the fallback chain needs
+// a mock passwd to be genuinely discriminating. No other test in this file
+// reads os.userInfo.
+vi.mock('node:os', async (importOriginal) => {
+  const os = await importOriginal<typeof import('node:os')>()
+  return {
+    ...os,
+    userInfo: () => ({ ...os.userInfo(), shell: '/usr/bin/zsh' }),
+  }
+})
 import { compareEntries, isWithin, parentOf, rootLabel, requireAbsolute } from '../src/fs-tree.ts'
 import { parseLogLines, parsePorcelainZ } from '../src/git.ts'
 import { parseUnifiedDiff } from '../src/client/DiffView.tsx'
@@ -846,13 +859,21 @@ describe('agent terminal reconciliation', () => {
 })
 
 describe('pty helpers', () => {
-  it('falls back from an empty SHELL to a usable shell', () => {
+  it('prefers an explicit SHELL, then falls back to the account login shell', () => {
+    if (process.platform === 'win32') {
+      // defaultShell() short-circuits to powershell.exe before env/passwd
+      // resolution on Windows; the POSIX fallback chain is asserted below.
+      expect(defaultShell()).toBe('powershell.exe')
+      return
+    }
     const previous = process.env.SHELL
     try {
-      process.env.SHELL = ''
-      expect(defaultShell()).toBe('/bin/bash')
+      process.env.SHELL = '/explicit/zsh'
+      expect(defaultShell()).toBe('/explicit/zsh')
+      process.env.SHELL = '   '
+      expect(defaultShell()).toBe('/usr/bin/zsh')
       delete process.env.SHELL
-      expect(defaultShell()).toBe('/bin/bash')
+      expect(defaultShell()).toBe('/usr/bin/zsh')
     } finally {
       if (previous === undefined) delete process.env.SHELL
       else process.env.SHELL = previous
