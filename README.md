@@ -1,20 +1,38 @@
 # dsh-better-sidebar
 
-<!-- 头部介绍区（HTML 排版） -->
+<!-- Hero -->
 <div align="center">
-  <b style="font-size: 1.15em;">一个插件，一套完整工作台</b><br /><br />
-  <code>文件管理</code> <code>编辑预览</code> <code>内嵌浏览器</code> <code>真实终端</code> <code>Git 面板</code> <code>后台任务页</code><br /><br />
-  <b>右侧栏 + 底部面板双工作台</b>，一个插件全部搞定。<br />
-  <small>支持 Tab 窗口随意拖拽，支持三方拓展注册新 Tab 页面和文件预览</small>
+  <b style="font-size: 1.15em;">一个服务化的侧边栏框架，一套开箱即用的完整工作台</b><br /><br />
+  <code>文件管理</code> <code>编辑预览</code> <code>内嵌浏览器</code> <code>真实终端</code> <code>Git 面板</code> <code>后台任务</code><br /><br />
+  <b>右侧栏 + 底部面板双工作台</b>，并把 <code>ctx.betterSidebar</code> 服务开放给所有插件——<br />
+  通过 <code>registerTab</code> / <code>registerFileViewer</code> 注册新页面与文件预览器，<br />
+  内置的 7 tab + 6 viewer 与外部插件走<b>同一套服务</b>：我们吃自己的狗粮。<br /><br />
+  <b>🧩 生态位插件</b>：打上 <a href="https://github.com/topics/dsh-better-sidebar"><code>dsh-better-sidebar</code> topic</a>，把你的侧边栏页面 / 文件预览器接入这个生态。
 </div>
 
 <div align="center">
   🌏 <a href="./README.md"><b>中文</b></a> · <a href="./README_EN.md">English</a>
 </div>
 
-https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86" muted autoplay loop playsinline controls width="100%"></video>
+  <img alt="dsh-better-sidebar 工作台截图" src="https://github.com/user-attachments/assets/dfdb875e-a1a8-4d4b-8340-353736b1708f" />
+</div>
 
-<img width="2630" height="1794" alt="6c4293e1bec2e935031bf0e986d6ec65" src="https://github.com/user-attachments/assets/dfdb875e-a1a8-4d4b-8340-353736b1708f" />
+## ✨ 功能一览
+
+- **🗂️ 文件工作台**：资源管理器（懒加载目录树）+ CodeMirror 编辑器；图片 / Markdown / HTML / PDF / Office 内联预览
+- **🌐 内嵌浏览器**：多开网页 tab，后退 / 前进 / 刷新；内容运行在沙箱 iframe，外链默认在侧边栏打开
+- **💻 真实终端**：xterm.js + node-pty 真实 shell，断线重连回放；可选为模型注入 `terminal_*` 工具
+- **🌿 Git 面板**：真 diff + VSCode 式 diff tab、历史、右键暂存 / 提交 / 还原
+- **🧩 后台任务页**：agent 拓扑 + 后台任务（退出码 / 实时输出 / 强制终止）
+- **🪟 双工作台**：右侧栏 + 底部面板；拖 Tab 拆分 / 合并分栏（可跨面板），移动端自动合并全宽抽屉
+- **🔁 会话隔离**：布局 / Tab / 面板按会话持久化，陈旧状态自动净化
+- **⚙️ 声明式设置**：设置页「侧边卡片」逐项独立开关，二级设置经齿轮弹窗
+- **⚡ 按需加载**：启动只拉 ~325KB 核心，终端 / 编辑器等重依赖用到才按需拉取（[设计文档](docs/plans/2026-08-12-lazy-chunks-design.md)）
+- **🌏 多语言**：界面文案跟随 DSH 语言（zh / en）实时切换
+
+> 🔌 **我们的态度**：把插件做成服务、把自己当用户——内置的 7 tab + 6 viewer 与外部插件走同一套 `ctx.betterSidebar` API，不自留特权；可被生态替代的就交给生态。详见下方「🔌 服务化」一节与 [外部插件接入指南](./docs/external-plugin-guide.md)。
 
 ## 🆕 最近更新
 
@@ -22,28 +40,10 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 
 | 功能 | 说明 | 截图 |
 |---|---|---|
-| 🔌 服务化基座 | 完整类型导出 + `version`/`features` 能力探测、状态订阅（`getSnapshot`/`subscribeState`）、tab 角标、`onOpen`/`onActivate`/`onClose` 生命周期回调、`updateTab`/`activateTab`/`openFile`、定向打开、`meta` 跨刷新持久化、插件自有设置（`pluginToggles`/`render`） | <img width="1544" height="1512" alt="image" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /> |
-| ➕ 添加插件 | 设置页「推荐插件目录」+ 一键复制安装命令；内置 Office 预览迁至推荐插件 | <img width="1268" height="914" alt="image" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /> |
+| 🔌 服务化基座 | 完整类型导出 + `version`/`features` 能力探测、状态订阅（`getSnapshot`/`subscribeState`）、tab 角标、`onOpen`/`onActivate`/`onClose` 生命周期回调、`updateTab`/`activateTab`/`openFile`、定向打开、`meta` 跨刷新持久化、插件自有设置（`pluginToggles`/`render`） | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="320" alt="服务化基座截图" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
+| ➕ 添加插件 | 设置页「推荐插件目录」+ 一键复制安装命令；内置 Office 预览迁至推荐插件 | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="320" alt="添加插件截图" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
 | 🖱️ 标签页滚轮 | 标签页栏支持鼠标滚轮横向滚动 | |
 | 🐛 修复 | 远程访问 403（信任栅栏改用 `trustedHosts`）、侧边栏崩溃 [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31)、Windows 下 HTML 预览盘符路径 | |
-
-## ✨ 功能一览
-
-- **🗂️ 资源管理器**：懒加载目录树（根 = 会话 cwd），点击打开、`@文件` 引用、右键复制路径
-- **📝 编辑与预览**：CodeMirror 6 编辑（Ctrl/Cmd+S 原子保存，切 Tab 不丢草稿）；图片 / Markdown / HTML / PDF / Word / Excel / PPT 内联预览（HTML 走沙箱 iframe）
-- **⚡ 客户端懒加载**：启动只拉 ~325KB 核心，终端 / 编辑器等重依赖用到才按需拉取（详见 `docs/plans/2026-08-12-lazy-chunks-design.md`）
-- **🌐 浏览器**：多开内嵌网页 tab，后退/前进/刷新；内容运行在沙箱 iframe（无法访问界面数据与本地文件，拒绝本机地址），可临时解锁（红色警示）；被站点拒绝嵌入时显示原因；外链默认在侧边栏打开
-- **💻 终端**：xterm.js + node-pty 真实 shell、断线重连回放；可选为模型注入 `terminal_*` 工具；支持自定义字体（字体族 + 9–32px 字号，实时生效）
-- **🌿 Git 面板**：真 diff + VSCode 式 diff tab、历史、右键暂存/提交/还原等
-- **🧩 后台任务页**：主会话 agent 拓扑、点击直达执行记录；同页显示后台任务（类型徽标 + 退出码、实时输出 peek、可强制终止）
-- **🪟 底部面板**：第二个独立工作台，只挤占中间输出区；首次展开自动开终端（可关）
-- **📱 移动端**：窄屏（<768px）自动合并为全宽抽屉，底部面板标签页并入右侧栏；点文件/外链自动展开
-- **🔧 分栏工作台**：拖 Tab 拆分/合并（可跨面板）、分隔线调比例；右上角按钮一键折叠/展开面板
-- **🔁 会话隔离**：布局 / Tab / 面板状态按会话持久化，陈旧状态自动净化；「产出文件」在侧边栏打开
-- **⚙️ 声明式设置**：设置页「侧边卡片」按注册表渲染开关网格，逐项独立开/关；二级设置（自动展开、终端工具、沙箱等）经齿轮弹窗编辑
-- **🔌 服务化（基座）**：暴露 `ctx.betterSidebar`，其他插件可注册 tab 与文件预览器（内置 7 tab + 9 viewer 同走一服务）；v0.12.1 起支持角标/生命周期回调/状态订阅/定向打开/插件自有设置（见 [AGENTS.md](./AGENTS.md) 与 [外部插件接入指南](./docs/external-plugin-guide.md)）
-- **➕ 添加插件**：设置页「侧边卡片」两个网格（侧边栏内容 / 文件预览）末尾的虚线卡片分别打开 Tab / 预览插件弹窗：声明扩展点、「在 GitHub 上浏览更多插件」按钮、推荐插件目录（「跳转」直达仓库、「复制」安装命令到剪贴板）；弹窗不打开终端、无失败路径，不阻塞启动与侧边栏
-- **🌏 多语言**：界面文案跟随 DSH 语言（zh/en）实时切换，无需刷新
 
 ## 🚀 安装
 
@@ -208,7 +208,7 @@ dsh registry enable dsh-external/dsh-better-sidebar
 
 ## 🔌 服务化：注册 tab 与文件预览器
 
-从 v0.4.0 起暴露 `ctx.betterSidebar` 服务，其他插件可注册侧边栏页面与文件预览器（内置 7 tab + 9 viewer 也走同一服务，吃自己的狗粮）：
+从 v0.4.0 起暴露 `ctx.betterSidebar` 服务，其他插件可注册侧边栏页面与文件预览器（内置 7 tab + 6 viewer 也走同一服务，吃自己的狗粮）：
 
 ```ts
 import type {} from 'dsh-better-sidebar'  // 触发 ctx.betterSidebar 类型合并
