@@ -14,14 +14,15 @@
  *  3. asserts the plugin's crash markers never appear (no RenderBoundary /
  *     fail() strips, no `pageerror`, no plugin-prefixed console errors);
  *  4. sweeps every built-in tab (Explorer / Source Control / Tasks /
- *     Terminal / Browser), which exercises tab activation including the
- *     lazily-fetched terminal/editor chunks.
+ *     Terminal / Browser) — including the lazily-fetched terminal chunk —
+ *     and then opens a seeded file through the Explorer to force the
+ *     lazily-fetched editor chunk (client-editor.js) to load as well.
  *
  * Deterministic by construction: every wait is on a DOM/network marker, the
  * suite is serial (one server instance), and any crash trips the very next
  * assertion.
  */
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, expect, request, type APIRequestContext } from '@playwright/test'
@@ -33,6 +34,10 @@ if (!BASE_URL) {
 
 /** Workspace the sidebar renders against (created by the lane's seeding). */
 const WORKSPACE_PATH = process.env.DSH_E2E_WORKSPACE ?? join(tmpdir(), 'dsh-e2e-workspace')
+
+/** A file seeded into the workspace, opened through the Explorer to force the
+ *  lazily-packed editor chunk (client-editor.js) to load. */
+const SEEDED_FILE = 'hello.txt'
 
 /**
  * The plugin's crash markers. The client mounts inside an error boundary that
@@ -46,9 +51,11 @@ const BUILTIN_TABS = ['Explorer', 'Source Control', 'Tasks', 'Terminal', 'Browse
 
 let api: APIRequestContext
 
-/** Seed one workspace + one session through the host's unary RPC surface. */
+/** Seed one workspace + one session (plus a file for the editor-chunk probe)
+ *  through the host's unary RPC surface. */
 async function seedSession(): Promise<void> {
   mkdirSync(WORKSPACE_PATH, { recursive: true })
+  writeFileSync(join(WORKSPACE_PATH, SEEDED_FILE), 'hello from the mount lane\n')
   const workspace = await api.post(`${BASE_URL}/api/workspace.create`, {
     data: { type: 'client-request', rpcId: 'e2e-workspace', method: 'workspace.create', payload: { path: WORKSPACE_PATH } },
   })
@@ -145,25 +152,41 @@ test('plugin mounts into the DSH shell and survives a built-in tab sweep', async
   // Sweep every built-in tab through the "+" menu (the sidebar's own open-tab
   // affordance, reachable from any pane state). Each open may fetch a lazy
   // chunk (/sidebar/bundle/client-terminal.js / client-editor.js) and mount a
-  // real viewer — the highest-risk crash surfaces. A failure anywhere must
-  // surface as a pageerror or a console error, both of which the next
-  // assertion sees.
+  // real viewer — the highest-risk crash surfaces. The pinned plugin must
+  // offer every listed built-in: a missing or renamed descriptor is a real
+  // regression and fails the lane loudly instead of silently narrowing the
+  // sweep. A failure anywhere surfaces as a pageerror or a console error,
+  // both of which the next assertion sees.
   const newTabButton = sidebar.getByRole('button', { name: 'New tab' }).first()
   for (const title of BUILTIN_TABS) {
     await newTabButton.click()
     const item = page.getByRole('menuitem', { name: title }).first()
-    if ((await item.count()) === 0) {
-      console.warn(`[e2e] built-in tab "${title}" not offered by this DSH build; skipping`)
-      // Close the menu so the next iteration's + click re-opens it.
-      await page.keyboard.press('Escape')
-      continue
-    }
+    await expect(item, `built-in tab "${title}" is not offered by the + menu — descriptor removed or its label changed`).toHaveCount(1)
     await item.click()
     // Let the activation commit (including any lazy-chunk fetch) before the
     // crash assertions run.
     await page.waitForTimeout(1_500)
     await assertNoCrash()
   }
+
+  // The editor tab is hidden from the + menu — its CodeMirror chunk
+  // (client-editor.js) only loads when a file is opened. Exercise that path
+  // explicitly: reopen Explorer, open the seeded file, and require the chunk
+  // round-trip, so a missing/corrupt editor chunk fails the lane.
+  await newTabButton.click()
+  const explorerItem = page.getByRole('menuitem', { name: 'Explorer' }).first()
+  await expect(explorerItem, 'Explorer must be re-openable for the editor-chunk probe').toHaveCount(1)
+  await explorerItem.click()
+  const editorChunk = page.waitForResponse(
+    (response) => response.url().includes('/sidebar/bundle/editor.js'),
+    { timeout: 30_000 },
+  )
+  const fileRow = sidebar.locator(`[role="button"][title$="${SEEDED_FILE}"]`)
+  await expect(fileRow, `the seeded "${SEEDED_FILE}" file must appear in the Explorer tree`).toHaveCount(1, { timeout: 30_000 })
+  await fileRow.click()
+  await editorChunk
+  await page.waitForTimeout(1_500)
+  await assertNoCrash()
 
   // The plugin's own console prefix must never appear in errors, and no
   // unhandled rejection may escape the sweep.
