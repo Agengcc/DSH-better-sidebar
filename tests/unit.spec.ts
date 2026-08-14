@@ -861,8 +861,10 @@ describe('pty helpers', () => {
   })
 
   it('restores the spawn-helper executable bit idempotently', () => {
-    // On non-Windows the helper must exist and be executable after the fix.
-    if (process.platform === 'win32') return
+    // node-pty's spawn-helper is a macOS-only artifact: binding.gyp builds
+    // the executable only for OS=="mac", and no other platform ships one to
+    // restore (linux uses forkpty directly). Skip elsewhere.
+    if (process.platform !== 'darwin') return
     ensureSpawnHelper()
     ensureSpawnHelper()
     const { existsSync, statSync } = require('node:fs') as typeof import('node:fs')
@@ -870,9 +872,8 @@ describe('pty helpers', () => {
     const { createRequire } = require('node:module') as typeof import('node:module')
     const entry = createRequire(import.meta.url).resolve('node-pty')
     const root = dirname(dirname(entry))
-    // node-pty ships a prebuilt spawn-helper for darwin/win32; on other
-    // platforms (linux) node-gyp compiles it into build/Release. Mirror
-    // ensureSpawnHelper's candidate list: either location is acceptable.
+    // Prebuilt (tarball) or node-gyp-compiled (build/Release): mirror
+    // ensureSpawnHelper's candidate list — either location is acceptable.
     const candidates = [
       join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
       join(root, 'build', 'Release', 'spawn-helper'),
