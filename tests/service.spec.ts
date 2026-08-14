@@ -897,3 +897,89 @@ describe('lifecycle classification vs dedupe (codex review fixes)', () => {
     expect(events).toEqual(['open', 'activate'])
   })
 })
+
+describe('independent CR follow-up fixes', () => {
+  it('onOpen for a url-created tab receives the LANDED tab (path = url)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    let seenPath: string | undefined
+    service.registerTab({
+      id: 'web',
+      title: 'Web',
+      onOpen: (tab) => { seenPath = tab.path },
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'web', title: 'example.com', url: 'https://example.com/x' })
+    expect(seenPath).toBe('https://example.com/x')
+  })
+
+  it('a url seed NEVER overwrites the path of a dedupe-focused tab', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({
+      id: 'web',
+      title: 'Web',
+      dedupeKey: () => 'web',
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'web', title: 'first', url: 'https://a.example' })
+    service.openTab({ type: 'web', title: 'second', url: 'https://b.example' })
+    const tabs = allLeaves(store.getSnapshot().state!.splits).flatMap(l => l.tabs).filter(t => t.type === 'web')
+    expect(tabs).toHaveLength(1)
+    // The focused tab keeps its ORIGINAL url — the second open must not
+    // repoint it.
+    expect(tabs[0]!.path).toBe('https://a.example')
+  })
+
+  it('closing / activating an unknown tab id is a strict no-op (no notify)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'x', title: 'X', component: () => null })
+    store.setSession('s1')
+    let calls = 0
+    store.subscribe(() => { calls++ })
+    service.closeTab('does-not-exist')
+    service.activateTab('does-not-exist')
+    expect(calls).toBe(0)
+  })
+
+  it('a targeted open into an INACTIVE session never auto-expands its panels', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerTab({ id: 'editor', title: 'Editor', component: () => null })
+    store.setSession('s1')
+    // The target session starts collapsed.
+    store.reduceFor('s2', s => ({ ...s, panelOpen: false, bottomOpen: false }))
+    service.openTab({ type: 'editor', title: 'main.ts', path: '/p/main.ts' }, { sessionId: 's2' })
+    // Nothing is in sight for the user — the open must not expand s2.
+    store.setSession('s2')
+    expect(store.getSnapshot().state?.panelOpen).toBe(false)
+    expect(store.getSnapshot().state?.bottomOpen).toBe(false)
+    expect(allLeaves(store.getSnapshot().state!.splits).flatMap(l => l.tabs).some(t => t.type === 'editor')).toBe(true)
+  })
+
+  it('closeTab/activateTab accept an optional scope that rides to the callback', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    const seen: Array<{ kind: string; cwd?: string }> = []
+    service.registerTab({
+      id: 'life',
+      title: 'Life',
+      single: true,
+      onActivate: (_tab, scope) => { seen.push({ kind: 'activate', cwd: scope.cwd }) },
+      onClose: (_tab, scope) => { seen.push({ kind: 'close', cwd: scope.cwd }) },
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'life', title: 'Life' })
+    const tab = allLeaves(store.getSnapshot().state!.splits).flatMap(l => l.tabs).find(t => t.type === 'life')!
+    service.activateTab(tab.id, { sessionId: 's1', cwd: '/work' })
+    service.closeTab(tab.id, { sessionId: 's1', cwd: '/work' })
+    expect(seen).toEqual([
+      { kind: 'activate', cwd: '/work' },
+      { kind: 'close', cwd: '/work' },
+    ])
+  })
+})

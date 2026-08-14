@@ -236,3 +236,34 @@ describe('mergePluginSetting (v0.12.0, codex review fix)', () => {
     expect(map['my-plugin:db']).toEqual({ pageSize: 50, theme: 'dark' })
   })
 })
+
+describe('FeatureSettingsRows valueSource (v0.12.0, independent CR fix)', () => {
+  it('plugin rows read from their OWN value source — a plugin key colliding with a host pref never reads the host value', () => {
+    const prefs = { ...SIDEBAR_PREFS_DEFAULTS, openByDefault: true }
+    const toggle = { key: 'openByDefault', title: 'My flag' }
+    // valueOf returns undefined (the plugin never wrote this key): the row
+    // must render UNCHECKED even though the host pref openByDefault is true.
+    let html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [toggle],
+      prefs,
+      onToggle: () => {},
+      valueSource: () => undefined,
+    }))
+    expect(html).not.toContain('checked=""')
+    // The plugin wrote `true` into its own blob: the row is checked.
+    html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [toggle],
+      prefs,
+      onToggle: () => {},
+      valueSource: () => true,
+    }))
+    expect(html).toContain('checked=""')
+    // Without valueOf the row falls back to the prefs face (host semantics).
+    html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [toggle],
+      prefs,
+      onToggle: () => {},
+    }))
+    expect(html).toContain('checked=""')
+  })
+})

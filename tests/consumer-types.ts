@@ -11,6 +11,10 @@
  * `dsh-better-sidebar/client/service` in the built package.
  */
 import type {} from '../src/client/service.ts'
+import {
+  SIDEBAR_FEATURES,
+  SIDEBAR_SERVICE_VERSION,
+} from '../src/client/service.ts'
 import type {
   BetterSidebarService,
   FileFetchStrategy,
@@ -129,5 +133,8 @@ const toggleType: SidebarSettingToggleType = 'number'
 const toggle: SidebarSettingToggle = { key: 'k', title: 'K', type: toggleType }
 const declaration: SidebarSettingsDeclaration = { toggles: [toggle], pluginToggles: [toggle] }
 const typeName: TabType = 'my-plugin:db'
+const version: string = SIDEBAR_SERVICE_VERSION
+const features: readonly string[] = SIDEBAR_FEATURES
+void version; void features
 const strategy: FileFetchStrategy = 'mediaUrl'
 void diff; void prefs; void store; void declaration; void typeName; void strategy

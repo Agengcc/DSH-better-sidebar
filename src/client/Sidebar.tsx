@@ -553,11 +553,17 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
       // TerminalView on unmount), and the agent-pty.close HTTP route is the
       // fallback when the WS is down.
       const current = store.getSnapshot().state
-      const leaf = current === undefined ? undefined : leafWithTab(current.splits, tabId)
+      // Terminal tabs may live in EITHER tree (the bottom panel hosts them
+      // too) — the pty-release lookup covers both, or the HTTP fallback is
+      // skipped for a bottom-panel terminal whose WS frame never arrived.
+      const leaf = current === undefined
+        ? undefined
+        : leafWithTab(current.splits, tabId) ?? leafWithTab(current.bottomSplits, tabId)
       const tab = leaf?.tabs.find(candidate => candidate.id === tabId)
       // Route through the service: the tab-bar close is the canonical close
-      // path (finds the pane itself, fires descriptor.onClose).
-      ctx.betterSidebar?.closeTab(tabId)
+      // path (finds the pane itself, fires descriptor.onClose); the session
+      // scope (with its cwd) rides to the callback.
+      ctx.betterSidebar?.closeTab(tabId, sessionId === undefined ? undefined : { sessionId, cwd })
       if (tab?.type === 'terminal') {
         if (isAgentTabId(tabId)) {
           const uuid = agentUuidOf(tabId)
@@ -569,8 +575,9 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     },
     activateTab: (paneId, tabId) => {
       // Route through the service: same reducer (finds the pane in EITHER
-      // tree, sets the active pane) and fires descriptor.onActivate.
-      ctx.betterSidebar?.activateTab(tabId)
+      // tree, sets the active pane) and fires descriptor.onActivate; the
+      // session scope (with its cwd) rides to the callback.
+      ctx.betterSidebar?.activateTab(tabId, sessionId === undefined ? undefined : { sessionId, cwd })
     },
     focusPane: (paneId) => { store.reduce(s => ({ ...s, activePane: paneId })) },
     moveTabToEdge: (payload: TabDragPayload, toPane: string, zone: DropZone) => {

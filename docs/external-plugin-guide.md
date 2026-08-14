@@ -522,16 +522,19 @@ interface BetterSidebarService {
    * 打开一个 tab（+ 菜单和外部触发都用它；走 descriptor.dedupeKey 去重）。
    * title 可选：给出时优先于 descriptor.title（editor 显示文件名）；
    * 有 createTab 的 descriptor（terminal）会忽略 title/path/id。
-   * url 可选：落地后把 tab 的 path 预填为 URL（侧边栏浏览器导航种子）。
+   * url 可选：把**新建** tab 的 path 预填为 URL（侧边栏浏览器导航种子）；
+   * 聚焦既有 tab 时 url 不会覆写其 path。
    * 被设置禁用的类型是 no-op（console.warn 提示）。
    * scope（v0.12.0+）定向到指定 session：给出且非当前 session 时，打开落在
    * 该 session 的侧边栏状态里（没有则按 prefs 新建），不切换 UI 的激活 session；
-   * 缺省或指向当前 session 时行为与之前完全一致。注意：available 不拦截 openTab。
+   * 定向打开不自动展开目标 session 的面板；缺省或指向当前 session 时行为
+   * 与之前完全一致。注意：available 不拦截 openTab。
    * 内容型打开（带 path/url seed）自动展开承载面板，保证落点可见。
    */
   openTab(seed: OpenTabSeed, scope?: SessionScope): void
-  /** 关闭一个 tab */
-  closeTab(tabId: string): void
+  /** 关闭一个 tab（未知 id 严格 no-op，无状态搅动）；scope（v0.12.0+）
+   *  随回调传递（含可选 cwd），缺省为 { sessionId: 当前 } */
+  closeTab(tabId: string, scope?: SessionScope): void
   /** 订阅注册表变化（register/dispose 时触发） */
   subscribe(listener: () => void): () => void
   // ── v0.12.0+ ──────────────────────────────────────────────────────────
@@ -548,8 +551,9 @@ interface BetterSidebarService {
   subscribeState(listener: () => void): () => void
   /** 更新一个已打开 tab 的显示字段（title/path/meta）；tab 不存在时 no-op */
   updateTab(tabId: string, patch: { title?: string; path?: string; meta?: unknown }): void
-  /** 激活一个已打开的 tab（tab 栏点击路径；触发 descriptor.onActivate） */
-  activateTab(tabId: string): void
+  /** 激活一个已打开的 tab（tab 栏点击路径；触发 descriptor.onActivate；
+   *  未知 id 严格 no-op）；scope（v0.12.0+）随回调传递，同 closeTab */
+  activateTab(tabId: string, scope?: SessionScope): void
   /** 在 scope.sessionId 的侧边栏编辑器打开一个文件（title 缺省为文件名；
    *  id 按路径派生，与内置 open-path 拦截一致，不同文件可并排打开） */
   openFile(scope: SessionScope, path: string, title?: string): void

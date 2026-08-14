@@ -10,6 +10,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The check reads the BUILT declaration surface (lib/types) — fail loudly
+# instead of silently passing when the build output is missing.
+if [ ! -f lib/types/client/service.d.ts ]; then
+  echo "[check-consumer-types] FAIL: lib/types/client/service.d.ts not found — run 'pnpm build' first." >&2
+  exit 1
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -17,6 +24,7 @@ mkdir -p "$WORK/node_modules"
 ln -s "$(pwd)" "$WORK/node_modules/dsh-better-sidebar"
 
 cat > "$WORK/check.ts" <<'EOF'
+import { SIDEBAR_FEATURES, SIDEBAR_SERVICE_VERSION } from 'dsh-better-sidebar/client/service'
 import type {} from 'dsh-better-sidebar/client/service'
 import type {
   BetterSidebarService, FileViewerDescriptor, OpenTabSeed, SidebarSettingsRenderProps,
@@ -56,6 +64,7 @@ const snap: SidebarSnapshot = ctx.betterSidebar.getSnapshot()
 const prefs: SidebarPrefs = snap.prefs
 const store: SidebarStore = null as unknown as SidebarStore
 void prefs; void store; void ctx.betterSidebar.version; void ctx.betterSidebar.features
+void SIDEBAR_SERVICE_VERSION; void SIDEBAR_FEATURES
 EOF
 
 cat > "$WORK/tsconfig.json" <<'EOF'

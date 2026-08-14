@@ -321,8 +321,13 @@ export interface BetterSidebarService {
    * refuse `openTab` (only the settings disable switch does).
    */
   openTab(seed: OpenTabSeed, scope?: SessionScope): void
-  /** Close a tab by id. */
-  closeTab(tabId: string): void
+  /**
+   * Close a tab by id (fires descriptor.onClose). An unknown tab id is a
+   * strict no-op (no state churn, no callbacks). `scope` (v0.12.0+) rides
+   * to the callback (its optional cwd included); absent, the callback gets
+   * `{ sessionId }` of the active session.
+   */
+  closeTab(tabId: string, scope?: SessionScope): void
   /** Subscribe to registry changes (register/dispose). */
   subscribe(listener: () => void): () => void
   /** The plugin version this service instance was built from ('0.12.0'). */
@@ -344,8 +349,12 @@ export interface BetterSidebarService {
   subscribeState(listener: () => void): () => void
   /** Update an open tab's display fields (title / path / meta); a missing tab id is a no-op. */
   updateTab(tabId: string, patch: { title?: string; path?: string; meta?: unknown }): void
-  /** Activate an open tab (the tab-bar activation path; fires descriptor.onActivate). */
-  activateTab(tabId: string): void
+  /**
+   * Activate an open tab (the tab-bar activation path; fires
+   * descriptor.onActivate). An unknown tab id is a strict no-op. `scope`
+   * (v0.12.0+) rides to the callback like `closeTab`'s.
+   */
+  activateTab(tabId: string, scope?: SessionScope): void
   /** Open a file in the sidebar editor of `scope`'s session (title defaults to the file name). */
   openFile(scope: SessionScope, path: string, title?: string): void
 }
@@ -503,6 +512,11 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     const targetSessionId = scope?.sessionId ?? store.getSnapshot().sessionId
     if (targetSessionId === undefined) return
     const callbackScope: SessionScope = scope ?? { sessionId: targetSessionId }
+    // Whether this open targets a session that is NOT the one on screen: a
+    // targeted open must not auto-expand panels the user cannot see (the
+    // expansion is about landing "in sight" for the CURRENT viewer).
+    const activeSessionId = store.getSnapshot().sessionId
+    const targetsInactiveSession = scope !== undefined && scope.sessionId !== activeSessionId
     // Lifecycle capture: `created` when the open minted a NEW tab (a
     // dedupe/id-safety-net focus is an ACTIVATION, not an open).
     let created: SidebarTab | undefined
@@ -530,20 +544,7 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
         }
         next = applyDedupe(state, tab, descriptor)
       }
-      // A URL seed pre-fills the tab's path (the browser tab navigates to it
-      // on mount). An explicit seed.title also wins over a createTab-minted
-      // default title (e.g. the sidebar-browser's hostname title).
-      let landed: SidebarState
-      if (seed.url !== undefined) {
-        landed = patchTab(next, tab.id, {
-          path: seed.url,
-          ...(seed.title !== undefined ? { title: seed.title } : {}),
-        })
-      } else {
-        landed = next
-      }
-      // Lifecycle capture (before the auto-expand block, which early-returns).
-      // Classify the landing against the INPUT state: a FOCUS fires
+      // Classify the landing against the INPUT state FIRST: a FOCUS fires
       // onActivate with the tab that is active NOW; a real creation fires
       // onOpen with the minted tab. Both the dedupeKey match AND the id
       // match count as a focus — a descriptor deduping by key (e.g. editor
@@ -556,8 +557,24 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       const existedByKey = key !== undefined
         && inputTabs.some(candidate => candidate.type === tab.type && dedupeKey!(candidate) === key)
       const existedById = tabOpenIn(state, tab.id)
-      if (!existedByKey && !existedById) {
-        created = tab
+      const isCreation = !existedByKey && !existedById
+      // A URL seed pre-fills a NEWLY CREATED tab's path (the browser tab
+      // navigates to it on mount); a FOCUS must never have its path
+      // overwritten. An explicit seed.title still wins over a createTab-
+      // minted default title (e.g. the sidebar-browser's hostname title).
+      let landed: SidebarState = next
+      if (seed.url !== undefined && isCreation) {
+        landed = patchTab(next, tab.id, {
+          path: seed.url,
+          ...(seed.title !== undefined ? { title: seed.title } : {}),
+        })
+      }
+      // Lifecycle capture (before the auto-expand block, which early-returns).
+      if (isCreation) {
+        // Resolve the ACTUAL landed tab — the url patch mints a new object,
+        // so the callback must see the tab that was really inserted.
+        const landedTabs = allLeaves(landed.splits).concat(allLeaves(landed.bottomSplits)).flatMap(leaf => leaf.tabs)
+        created = landedTabs.find(candidate => candidate.id === tab.id) ?? tab
       } else {
         // A focus happened: resolve the tab that is actually active now and
         // report THAT to onActivate (never the caller's un-inserted seed).
@@ -576,9 +593,11 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
       // agent-terminal auto-tabs) never expand (the panel behavior is their
       // caller's business). The check runs on the post-dedupe state, so a
       // content open that merely FOCUSES an existing tab expands the panel
-      // too — the open must never land out of sight.
+      // too — the open must never land out of sight. Opens targeted at an
+      // INACTIVE session never expand (nothing is in sight for the user).
       if (
-        typeof window !== 'undefined'
+        !targetsInactiveSession
+        && typeof window !== 'undefined'
         && (seed.path !== undefined || seed.url !== undefined)
       ) {
         if (isNarrowWidth(window.innerWidth)) {
@@ -597,8 +616,7 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     // A scope targeting ANOTHER session lands the open there without
     // switching the UI; a scope naming the active session (or no scope)
     // takes the regular reduce path so the UI notifies and re-renders.
-    const activeSessionId = store.getSnapshot().sessionId
-    if (scope !== undefined && scope.sessionId !== activeSessionId) {
+    if (targetsInactiveSession) {
       store.reduceFor(scope.sessionId, reducer)
     } else {
       store.reduce(reducer)
@@ -607,20 +625,23 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
     else if (activated !== undefined) safeCall(() => descriptor.onActivate?.(activated!, callbackScope))
   }
 
-  const closeTab = (tabId: string): void => {
+  const closeTab = (tabId: string, scope?: SessionScope): void => {
     let closed: SidebarTab | undefined
     store.reduce((state) => {
+      // Unknown tab ids are a strict no-op: no state churn, no notify, no
+      // pointless localStorage rewrite (mirrors updateTab's short-circuit).
+      if (!tabOpenIn(state, tabId)) return state
       const paneId = findPaneIdOf(state, tabId)
-      if (paneId === '') return state
       const leaf = leafWithTab(state[treeOf(state, paneId)], tabId)
       closed = leaf?.tabs.find(tab => tab.id === tabId)
       return closeTabReducer(state, paneId, tabId)
     })
     if (closed !== undefined) {
-      const sessionId = store.getSnapshot().sessionId
+      const sessionId = scope?.sessionId ?? store.getSnapshot().sessionId
       if (sessionId !== undefined) {
         const descriptor = tabs.get(closed.type)
-        safeCall(() => descriptor?.onClose?.(closed!, { sessionId }))
+        // An explicit scope (with its optional cwd) rides to the callback.
+        safeCall(() => descriptor?.onClose?.(closed!, scope ?? { sessionId }))
       }
     }
   }
@@ -641,20 +662,22 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
   }
 
   /** Activate an open tab (the tab-bar activation path; fires onActivate). */
-  const activateTab = (tabId: string): void => {
+  const activateTab = (tabId: string, scope?: SessionScope): void => {
     let activated: SidebarTab | undefined
     store.reduce((state) => {
+      // Unknown tab ids are a strict no-op (no state churn / notify).
+      if (!tabOpenIn(state, tabId)) return state
       const paneId = findPaneIdOf(state, tabId)
-      if (paneId === '') return state
       const leaf = leafWithTab(state[treeOf(state, paneId)], tabId)
       activated = leaf?.tabs.find(tab => tab.id === tabId)
       return activateTabReducer(state, paneId, tabId)
     })
     if (activated !== undefined) {
-      const sessionId = store.getSnapshot().sessionId
+      const sessionId = scope?.sessionId ?? store.getSnapshot().sessionId
       if (sessionId !== undefined) {
         const descriptor = tabs.get(activated.type)
-        safeCall(() => descriptor?.onActivate?.(activated!, { sessionId }))
+        // An explicit scope (with its optional cwd) rides to the callback.
+        safeCall(() => descriptor?.onActivate?.(activated!, scope ?? { sessionId }))
       }
     }
   }

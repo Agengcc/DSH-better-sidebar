@@ -108,11 +108,6 @@ function viewerOrder(a: FileViewerDescriptor, b: FileViewerDescriptor): number {
   return (b.priority ?? 0) - (a.priority ?? 0)
 }
 
-/** Read one boolean pref by declarative key (missing = false). */
-function prefBool(prefs: SidebarPrefs, key: string): boolean {
-  return (prefs as unknown as Record<string, boolean>)[key] === true
-}
-
 /** Whether a feature declares any secondary settings (gear button shows). */
 function hasSettings(feature: TabDescriptor | FileViewerDescriptor): boolean {
   const settings = feature.settings
@@ -210,8 +205,15 @@ export function FeatureSettingsRows(props: {
    *  display (clamped for numbers, the current pref when the input is
    *  invalid). Optional: rows with no handler keep their draft. */
   onCommit?: (toggle: SidebarSettingToggle, raw: string) => string
+  /** Explicit value source (v0.12.0+): when given, rows read their values
+   *  from it instead of the `prefs` face — plugin-owned rows read their
+   *  own blob, so a plugin key can never collide with (or silently read)
+   *  a host pref of the same name. (Named `valueSource`, not `valueOf`:
+   *  the latter collides with the inherited Object.prototype.valueOf.) */
+  valueSource?: (key: string) => unknown
 }) {
-  const { toggles, prefs, onToggle, onCommit } = props
+  const { toggles, prefs, onToggle, onCommit, valueSource } = props
+  const read = valueSource ?? ((key: string): unknown => (prefs as unknown as Record<string, unknown>)[key])
   return (
     <div className={css.popupRows}>
       {toggles.map(toggle => {
@@ -225,13 +227,13 @@ export function FeatureSettingsRows(props: {
               </span>
               <Switch
                 label={title}
-                checked={prefBool(prefs, toggle.key)}
+                checked={read(toggle.key) === true}
                 onChange={(next) => { onToggle(toggle, next) }}
               />
             </div>
           )
         }
-        const value = String((prefs as unknown as Record<string, unknown>)[toggle.key] ?? '')
+        const value = String(read(toggle.key) ?? '')
         // Keyed by the committed value: a failed commit reverts prefs, the
         // key changes, and the row remounts with the stored value (typing
         // never changes the key, so mid-edit drafts survive re-renders).
@@ -337,9 +339,11 @@ export function SettingsBody(props: {
   const toggles = feature.settings?.toggles ?? []
   const pluginToggles = feature.settings?.pluginToggles ?? []
   if (toggles.length === 0 && pluginToggles.length === 0) return null
-  // Plugin rows read/write their values through a projected prefs face so
-  // the shared row renderer works unchanged (its rows read prefs[key]).
-  const effectivePrefs = { ...prefs, ...(prefs.pluginSettings[feature.id] ?? {}) } as SidebarPrefs
+  // Plugin rows read their values from the descriptor's OWN blob through
+  // an explicit value source — no projection onto the prefs face, so a
+  // plugin key can never collide with (or silently read) a host pref of
+  // the same name.
+  const pluginBlob = prefs.pluginSettings[feature.id] ?? {}
   return (
     <div className={css.popupRows}>
       {toggles.length > 0 && (
@@ -353,9 +357,10 @@ export function SettingsBody(props: {
       {pluginToggles.length > 0 && (
         <FeatureSettingsRows
           toggles={pluginToggles}
-          prefs={effectivePrefs}
+          prefs={prefs}
           onToggle={onPluginToggle}
           onCommit={onPluginCommit}
+          valueSource={(key) => pluginBlob[key]}
         />
       )}
     </div>

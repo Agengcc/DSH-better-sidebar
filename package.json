@@ -79,7 +79,8 @@
     "bundle": "tsdown",
     "watch": "tsdown --watch",
     "prepare": "tsdown",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:consumer-types": "bash scripts/check-consumer-types.sh"
   },
   "license": "MIT",
   "peerDependencies": {
@@ -104,7 +105,9 @@
     "react-dom": "^18.2.0"
   },
   "peerDependenciesMeta": {
-    "cordis": { "optional": true }
+    "cordis": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.2.4",

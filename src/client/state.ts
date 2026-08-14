@@ -1025,6 +1025,11 @@ export class SidebarStore {
     const state = this.snapshot.state
     if (sessionId === undefined || state === undefined) return
     const next = reducer(state)
+    // A reducer returning the SAME reference means "no change": skip the
+    // persist + notify entirely — strict no-op paths (unknown tab ids,
+    // patchTab on a missing tab) must not churn the state or rewrite
+    // localStorage.
+    if (next === state) return
     this.bySession.set(sessionId, next)
     this.snapshot = { sessionId, state: next, prefs: this.prefs }
     this.schedulePersist(sessionId, next)
@@ -1056,8 +1061,11 @@ export class SidebarStore {
       nextIdCounter = maxCounterId(state)
     }
     const next = reducer(state)
-    this.bySession.set(sessionId, next)
+    // Same-reference result = no change: keep the counter restore (it may
+    // have been seeded down) but skip the write.
     nextIdCounter = Math.max(nextIdCounter, counterBefore)
+    if (next === state) return
+    this.bySession.set(sessionId, next)
     this.schedulePersist(sessionId, next)
   }
 

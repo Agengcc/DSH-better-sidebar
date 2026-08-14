@@ -127,7 +127,7 @@ interface TabDescriptor {
    * 返回 undefined 表示不去重（每次都新开，但同 id 会被 id 安全网聚焦）。
    * 内置策略：explorer/git/subagent 用 single: true；editor 用 tab => tab.path；diff 用 tab => tab.id。
    */
-  dedupeKey?: (tab: SidebarTab) => string | undefined
+  dedupeKey?: (tab: SidebarTab) => string | undefined  // 必须保持纯函数：每次 open 会求值两次，抛错会向外传播
   /**
    * 自定义 tab 创建（minting SidebarTab + 状态 patch）。
    * 返回 null 拒绝创建。terminal 用它生成 terminal:<n> id 并递增 nextTerminal。
@@ -198,7 +198,10 @@ interface TabDescriptor {
    * - onClose：closeTab 关闭 tab 后。
    * 内置专属流程（diff 拆分放置、agent 终端 reconcile）直接改 state，不触发回调——
    * 但它们只作用于内置类型（diff/terminal），外部插件的 tab 永远走 service 路径。
-   * 回调抛错只 console.error，绝不打断打开/关闭流程。scope 携带 { sessionId, cwd? }。
+   * 回调抛错只 console.error，绝不打断打开/关闭流程。openTab 的回调 scope
+   * 携带调用者传入的 { sessionId, cwd? }（+ 菜单路径带 cwd；无 scope 的自动
+   * 打开路径只有 sessionId）；closeTab/activateTab 的回调 scope 只在显式传入
+   * scope 参数时带 cwd。
    */
   onOpen?: (tab: SidebarTab, scope: SessionScope) => void
   onActivate?: (tab: SidebarTab, scope: SessionScope) => void
@@ -436,19 +439,22 @@ interface BetterSidebarService {
    * 打开一个 tab（+ 菜单和外部触发都用它；走 descriptor.dedupeKey 去重）。
    * title 可选：给出时优先于 descriptor.title（editor 显示文件名）；
    * 有 createTab 的 descriptor（terminal）会忽略 title/path/id。
-   * url 可选：落地后把 tab 的 path 预填为 URL（侧边栏浏览器导航种子，
-   * 通常配合 hostname title；对 createTab 铸造的 tab 同样生效）。
+   * url 可选：把**新建** tab 的 path 预填为 URL（侧边栏浏览器导航种子，
+   * 通常配合 hostname title；对 createTab 铸造的 tab 同样生效）。聚焦既有
+   * tab 时 url 不会覆写其 path。
    * 被设置禁用的类型是 no-op（console.warn 提示）。
    * scope（v0.12.0+）定向到指定 session：给出且非当前 session 时，打开落在
    * 该 session 的侧边栏状态里（没有则按 prefs 新建），不切换 UI 的激活 session；
+   * 定向打开**不自动展开**目标 session 的面板（用户看不见，展开无意义）；
    * 缺省或指向当前 session 时行为与之前完全一致。注意：available 不拦截 openTab。
    * 内容型打开（带 path/url seed）必须落在视野内：承载落点 pane 的面板
    * 折叠时自动展开（右侧面板；落点 pane 在底部树则展开底部面板；窄视口
    * 展开合并抽屉）；类型型打开（+ 菜单、agent 终端自动补 tab）不展开。
    */
   openTab(seed: OpenTabSeed, scope?: SessionScope): void
-  /** 关闭一个 tab */
-  closeTab(tabId: string): void
+  /** 关闭一个 tab（未知 id 严格 no-op，无状态搅动）；scope（v0.12.0+）
+   *  随回调传递（含可选 cwd），缺省为 { sessionId: 当前 } */
+  closeTab(tabId: string, scope?: SessionScope): void
   /** 订阅注册表变化（register/dispose 时触发） */
   subscribe(listener: () => void): () => void
   // ── v0.12.0+ ──────────────────────────────────────────────────────────
@@ -465,8 +471,9 @@ interface BetterSidebarService {
   subscribeState(listener: () => void): () => void
   /** 更新一个已打开 tab 的显示字段（title/path/meta）；tab 不存在时 no-op */
   updateTab(tabId: string, patch: { title?: string; path?: string; meta?: unknown }): void
-  /** 激活一个已打开的 tab（tab 栏点击路径；触发 descriptor.onActivate） */
-  activateTab(tabId: string): void
+  /** 激活一个已打开的 tab（tab 栏点击路径；触发 descriptor.onActivate；
+   *  未知 id 严格 no-op）；scope（v0.12.0+）随回调传递，同 closeTab */
+  activateTab(tabId: string, scope?: SessionScope): void
   /** 在 scope.sessionId 的侧边栏编辑器打开一个文件（title 缺省为文件名；
    *  id 按路径派生，与内置 open-path 拦截一致，不同文件可并排打开） */
   openFile(scope: SessionScope, path: string, title?: string): void
@@ -480,7 +487,8 @@ interface OpenTabSeed {
   diff?: SidebarTab['diff']
   id?: string
   url?: string
-  /** JSON 可序列化的自定义状态，随 tab 持久化（刷新后原样恢复） */
+  /** JSON 可序列化的自定义状态，随 tab 持久化（刷新后原样恢复）；
+   *  updateTab/seed 传 undefined 表示「不改」，传 null 可显式清除 */
   meta?: unknown
 }
 ```
