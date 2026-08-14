@@ -37,11 +37,12 @@ describe('PluginListBody (render)', () => {
     const html = renderToString(createElement(PluginListBody, { service, kind: 'viewer' }))
     // The topic is a BUTTON (window.open in a new tab), not an anchor.
     expect(html).toContain('Browse more plugins on GitHub')
-    expect(html).not.toContain(`href="${PLUGIN_TOPIC_URL}"`)
-    // The seeded catalog entry: name as a link, description, install script,
+    // The name is a BUTTON on the same window.open path (an anchor would be
+    // caught by the sidebar link takeover) — no href anywhere in the body.
+    expect(html).not.toContain('href=')
+    // The seeded catalog entry: name, description, install script,
     // a jump button (opens the repo in a NEW browser tab) and a copy button.
     expect(html).toContain(officeEntry.name)
-    expect(html).toContain(`href="${officeEntry.url}"`)
     expect(html).toContain(officeEntry.install.replaceAll('&', '&amp;'))
     expect(html).toContain('Open')
     expect(html).toContain('Copy')
@@ -93,9 +94,9 @@ function mountBody(service: ReturnType<typeof createBetterSidebarService>, kind:
     root.render(createElement(PluginListBody, { service, kind }))
   })
   return {
-    clickCopy: () => {
+    clickCopy: async () => {
       const button = container.querySelector('button[aria-label^="Copy install command:"]')!
-      act(() => { (button as HTMLButtonElement).click() })
+      await act(async () => { (button as HTMLButtonElement).click() })
     },
     buttonLabel: () => {
       const button = container.querySelector('button[aria-label^="Copy install command:"]')
@@ -109,14 +110,14 @@ function mountBody(service: ReturnType<typeof createBetterSidebarService>, kind:
 }
 
 describe('PluginListBody copy click (interactive)', () => {
-  it('clicking Copy writes the install script to the clipboard and flashes "Copied"', () => {
+  it('clicking Copy writes the install script to the clipboard and flashes "Copied"', async () => {
     vi.spyOn(primitives, 'writeClipboard').mockResolvedValue(true)
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
 
     const body = mountBody(service)
     expect(body.buttonLabel()).toBe('Copy')
-    body.clickCopy()
+    await body.clickCopy()
 
     expect(primitives.writeClipboard).toHaveBeenCalledWith(officeEntry.install)
     expect(body.buttonLabel()).toBe('Copied')
@@ -124,13 +125,13 @@ describe('PluginListBody copy click (interactive)', () => {
     vi.restoreAllMocks()
   })
 
-  it('copying does NOT close anything and the modal body stays mounted', () => {
+  it('copying does NOT close anything and the modal body stays mounted', async () => {
     vi.spyOn(primitives, 'writeClipboard').mockResolvedValue(true)
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
 
     const body = mountBody(service)
-    body.clickCopy()
+    await body.clickCopy()
 
     // The entry is still rendered (nothing closed, no navigation, no open).
     expect(body.buttonLabel()).toBe('Copied')
@@ -139,7 +140,21 @@ describe('PluginListBody copy click (interactive)', () => {
     vi.restoreAllMocks()
   })
 
-  it('the jump button opens the plugin repo in a NEW browser tab (window.open, not a link)', () => {
+  it('a DENIED clipboard write shows no "Copied" feedback (never claims a copy that did not happen)', async () => {
+    vi.spyOn(primitives, 'writeClipboard').mockResolvedValue(false)
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+
+    const body = mountBody(service)
+    await body.clickCopy()
+
+    expect(primitives.writeClipboard).toHaveBeenCalledWith(officeEntry.install)
+    expect(body.buttonLabel()).toBe('Copy')
+    body.unmount()
+    vi.restoreAllMocks()
+  })
+
+  it('both the name button and the jump button open the repo in a NEW browser tab (window.open, not a link)', () => {
     const store = createSidebarStore()
     const service = createBetterSidebarService(store)
     const opened: Array<[string, string, string]> = []
@@ -155,9 +170,14 @@ describe('PluginListBody copy click (interactive)', () => {
       act(() => {
         root.render(createElement(PluginListBody, { service, kind: 'viewer' }))
       })
-      const button = container.querySelector('button[aria-label^="Open:"]')!
-      act(() => { (button as HTMLButtonElement).click() })
-      expect(opened).toEqual([[officeEntry.url, '_blank', 'noopener']])
+      const jumpButtons = [...container.querySelectorAll('button[aria-label^="Open:"]')]
+      expect(jumpButtons).toHaveLength(2) // the name + the jump button
+      act(() => { (jumpButtons[0] as HTMLButtonElement).click() })
+      act(() => { (jumpButtons[1] as HTMLButtonElement).click() })
+      expect(opened).toEqual([
+        [officeEntry.url, '_blank', 'noopener'],
+        [officeEntry.url, '_blank', 'noopener'],
+      ])
       act(() => { root.unmount() })
       container.remove()
     } finally {

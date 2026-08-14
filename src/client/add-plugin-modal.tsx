@@ -47,19 +47,23 @@ export function PluginListBody(props: { service: BetterSidebarService; kind: Plu
   // Which entry's copy button currently shows the "已复制" feedback.
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  /** Copy the entry's install script to the clipboard (best-effort) and
-   *  flash the button's "已复制" label for a moment. Never closes anything,
-   *  never throws outward. */
-  const copy = (entry: PluginEntry): void => {
-    void writeClipboard(entry.install)
+  /** Copy the entry's install script to the clipboard and flash the button's
+   *  "已复制" label for a moment. The feedback ONLY appears after a
+   *  successful write — when the clipboard is unavailable or denied
+   *  (writeClipboard resolves false) nothing is shown, so the user is never
+   *  told to paste a command that was not placed on the clipboard. Never
+   *  closes anything, never throws outward. */
+  const copy = async (entry: PluginEntry): Promise<void> => {
+    const written = await writeClipboard(entry.install)
+    if (!written) return
     setCopiedId(entry.id)
     window.setTimeout(() => {
       setCopiedId(current => (current === entry.id ? null : current))
     }, COPIED_FEEDBACK_MS)
   }
 
-  /** Open the plugin's repo in a REAL new browser tab (a button, so the
-   *  sidebar link takeover cannot reroute it). */
+  /** Open the plugin's repo in a REAL new browser tab (window.open — a
+   *  button, so the sidebar link takeover cannot reroute it). */
   const jump = (entry: PluginEntry): void => {
     window.open(entry.url, '_blank', 'noopener')
   }
@@ -84,9 +88,18 @@ export function PluginListBody(props: { service: BetterSidebarService; kind: Plu
           {catalogOf(kind).map(entry => (
             <div key={entry.id} className={css.pluginEntry}>
               <div className={css.pluginEntryHead}>
-                <a className={css.pluginName} href={entry.url} target="_blank" rel="noreferrer">
+                {/* The name is a BUTTON on the same window.open path as the
+                    jump button: as an anchor it would be caught by the
+                    document-capture link takeover (which ignores
+                    target=_blank) and land in the sidebar browser. */}
+                <button
+                  type="button"
+                  className={css.pluginName}
+                  aria-label={`${t('openPlugin')}: ${entry.name}`}
+                  onClick={() => { jump(entry) }}
+                >
                   {entry.name}
-                </a>
+                </button>
                 <span className={css.pluginEntryActions}>
                   <button
                     type="button"

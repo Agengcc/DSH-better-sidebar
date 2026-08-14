@@ -555,16 +555,26 @@
   outline-offset: 1px;
 }
 
+/* The plugin name: a BUTTON (not an anchor — an anchor would be caught by
+   the sidebar link takeover at document capture, ignoring target=_blank)
+   styled like a link; opens the repo in a real new browser tab. */
 .pluginName {
+  appearance: none;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 13px;
   line-height: 20px;
   font-weight: 600;
   color: var(--dsw-alias-label-primary);
+  text-align: left;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .pluginName:hover {
