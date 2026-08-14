@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/s
 irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
 ```
 
-装完**重启 DSH 并硬刷新**（Cmd/Ctrl+Shift+R）即可看到侧边栏。
+装完**硬刷新浏览器**（Cmd/Ctrl+Shift+R）即可看到侧边栏（DSH 对 client 改动热加载，无需重启；仅 host 半更新时需要重启）。
 
 <details>
 <summary><b>指定版本 / 装完自动重启（可选）</b></summary>
@@ -127,7 +127,7 @@ npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sideba
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-或重跑一次一键脚本；也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**重启 DSH 并硬刷新**（Cmd/Ctrl+Shift+R）。
+或重跑一次一键脚本；也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**硬刷新浏览器**（Cmd/Ctrl+Shift+R）即可（client 改动无需重启 DSH）。
 
 </details>
 
@@ -159,10 +159,10 @@ dsh plugin --profile web add dsh-better-sidebar
        - id: better-sidebar
          name: 'dsh-better-sidebar'
 4. 在 ~/.dsh/profiles/web 执行 pnpm install
-5. 重启 DSH 并硬刷新
+5. 硬刷新浏览器（Cmd/Ctrl+Shift+R）即可看到效果（client 改动无需重启 DSH；host 半改动才需重启）
 ```
 
-更新：`git pull && pnpm install && pnpm build` → 重启 DSH（仅 client 改动可硬刷新）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.10.3"` 再 `pnpm install`。
+更新：`git pull && pnpm install && pnpm build` → 硬刷新浏览器即可（client 改动热加载生效，无需重启 DSH；host 半改动才需重启）。切回 npm 通道时，把依赖改回 `"dsh-better-sidebar": "^0.10.3"` 再 `pnpm install`。
 
 </details>
 

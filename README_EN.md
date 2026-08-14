@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/s
 irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
 ```
 
-Then **restart DSH and hard-refresh** (Cmd/Ctrl+Shift+R) to see the sidebar.
+Then **hard-refresh the browser** (Cmd/Ctrl+Shift+R) to see the sidebar (DSH hot-reloads client changes; only host-half updates need a restart).
 
 <details>
 <summary><b>Pin a version / auto-restart (optional)</b></summary>
@@ -127,7 +127,7 @@ The one-click script does four things, all idempotent (safe to re-run):
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.10.3"`) and run `pnpm install`. Then restart DSH and hard-refresh (Cmd/Ctrl+Shift+R).
+or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.10.3"`) and run `pnpm install`. Then hard-refresh the browser (Cmd/Ctrl+Shift+R) — client changes do not need a DSH restart.
 
 </details>
 
@@ -162,7 +162,7 @@ To debug local changes or track the dev branch, point the dependency at a local 
 5. Restart DSH and hard-refresh
 ```
 
-Update: `git pull && pnpm install && pnpm build` → restart DSH (client-only changes can just hard-refresh). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.10.3"` and re-run `pnpm install`.
+Update: `git pull && pnpm install && pnpm build` → just hard-refresh the browser (client changes hot-reload; only host-half changes need a DSH restart). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.10.3"` and re-run `pnpm install`.
 
 </details>
 

@@ -484,7 +484,7 @@ function CsvGrid(props: { rows: string[][]; path: string }): React.ReactNode { /
 function parseCsv(text: string): string[][] { /* ... */ }
 ```
 
-**注册到 profile**：在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 加 `"my-plugin": "link:<你的插件路径>"`，在 `cordis.patch.yml` 加挂载行，`pnpm install`，重启 `dsh web` + 浏览器硬刷新。
+**注册到 profile**：在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 加 `"my-plugin": "link:<你的插件路径>"`，在 `cordis.patch.yml` 加挂载行，`pnpm install`，浏览器硬刷新即可（DSH 对 client 改动热加载，无需重启 `dsh web`；仅 host 半改动需要重启）。
 
 ---
 
