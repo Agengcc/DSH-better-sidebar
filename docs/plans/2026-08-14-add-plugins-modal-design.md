@@ -27,7 +27,7 @@
 ### 3.1 数据层：两个目录文件 + 共享词汇
 
 - `src/client/plugins-shared.ts`：`PluginEntry { id, name, url, description, install }` + `PLUGIN_TOPIC_URL`。
-- `src/client/plugins-tabs.ts`：`builtinTabPlugins`（当前为空，空态展示）。
+- `src/client/plugins-tabs.ts`：`builtinTabPlugins`（收录 dsh-sentinel——条件驱动的 agent 唤醒系统，注册 `dsh-sentinel:watches` Tab；install 用官方 github: 源一键命令）。
 - `src/client/plugins-viewers.ts`：`builtinViewerPlugins`（种子：office 插件，install = `cd ~/.dsh && dsh plugin --profile web add @huanlin/dsh-plugin-better-sidebar-plugin-office`）。
 
 ### 3.2 UI 层：`src/client/add-plugin-modal.tsx` + `SideCardSection`
@@ -47,7 +47,7 @@
 ## 4. 边界情况与失败模式
 
 - **复制失败**：`writeClipboard` 尽力而为（navigator.clipboard → execCommand 兜底），失败静默；按钮反馈照常闪现。无会话/无终端/配额等一切前置条件均不涉及——复制与它们无关。
-- **空目录**：Tab 目录当前为空，弹窗渲染空态 + topic 按钮。
+- **空目录**：目录可为空（弹窗渲染空态 + topic 按钮）；当前 Tab/Viewer 目录各有 1 条。
 - **版本号**：v0.12.0（`package.json` / `dsh.plugin.json` / `service.ts` 的 `SIDEBAR_SERVICE_VERSION` 三处一致，manifest-consistency 测试守护）。
 
 ## 5. 实施偏差记录
