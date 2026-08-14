@@ -119,6 +119,20 @@ describe('SideCardSection declarative inventory', () => {
     expect(html.match(/aria-label="[^"]*Feature settings"/g)?.length).toBe(1)
   })
 
+  it('renders the two dashed "add plugin" cards (tab grid + viewer grid)', () => {
+    const { store, service } = mount()
+    const html = renderSection(store, service)
+    // The tab grid's dashed card (tab registration).
+    expect(html).toContain('Add tab plugins')
+    expect(html).toContain('Register a new sidebar page')
+    // The viewer grid's dashed card (file-previewer registration).
+    expect(html).toContain('Add preview plugins')
+    expect(html).toContain('Register a file-type preview')
+    // The add cards are plain buttons (open the modals), never switches:
+    // they carry no aria-pressed, so the pressed-card counts stay untouched.
+    expect(pressedCount(html, 'true')).toBe(3)
+  })
+
   it('a disabled feature renders pressed=false', () => {
     const { store, service } = mount()
     store.setPrefs({ ...store.getPrefs(), tabsEnabled: { subagent: false }, viewersEnabled: { image: false } })

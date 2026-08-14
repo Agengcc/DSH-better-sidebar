@@ -41,6 +41,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconCheckOutline16,
+  IconPlusOutline16,
   IconSettingsOutline16,
   Input,
   Modal,
@@ -57,6 +58,7 @@ import {
 } from '../prefs-shared.ts'
 import { api } from './api.ts'
 import { parsePrefs } from './prefs.ts'
+import { AddPluginModal, type PluginKind } from './add-plugin-modal.tsx'
 import { t } from './locales.ts'
 import type { SidebarStore } from './state.ts'
 import type {
@@ -378,6 +380,10 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   const [error, setError] = useState<string | null>(null)
   // Which feature's secondary settings popup is open (null = closed).
   const [settingsFor, setSettingsFor] = useState<TabDescriptor | FileViewerDescriptor | null>(null)
+  // Whether the "add plugin" modal (a dashed card at the end of the
+  // 侧边栏内容 / 文件预览 grids) is open, and for which extension point
+  // (null = closed).
+  const [addPluginsOpen, setAddPluginsOpen] = useState<PluginKind | null>(null)
   // The LATEST optimistic prefs, kept in sync with the state. Nested-map
   // merges (tabsEnabled / viewersEnabled / pluginSettings) MUST build from
   // this ref, not from the render-time `prefs`: two same-tick writes (e.g.
@@ -681,6 +687,22 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
               })}
             </Fragment>
           ))}
+          {/* The "add tab plugin" entry: same card size as the inventory,
+              but a dashed border — it opens the TAB-registration plugin
+              modal instead of toggling a feature. */}
+          <button
+            type="button"
+            className={clsx(css.card, css.addCard)}
+            onClick={() => { setAddPluginsOpen('tab') }}
+          >
+            <span className={css.cardTop}>
+              <span className={css.cardIconChip}>
+                <IconPlusOutline16 size={16} />
+              </span>
+              <span className={css.cardTitle}>{t('addPluginsTabCard')}</span>
+            </span>
+            <span className={css.cardDesc}>{t('addPluginsTabCardDesc')}</span>
+          </button>
         </div>
       </div>
 
@@ -705,6 +727,21 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
               })}
             </Fragment>
           ))}
+          {/* The "add preview plugin" entry: dashed card opening the
+              FILE-PREVIEWER registration modal. */}
+          <button
+            type="button"
+            className={clsx(css.card, css.addCard)}
+            onClick={() => { setAddPluginsOpen('viewer') }}
+          >
+            <span className={css.cardTop}>
+              <span className={css.cardIconChip}>
+                <IconPlusOutline16 size={16} />
+              </span>
+              <span className={css.cardTitle}>{t('addPluginsViewerCard')}</span>
+            </span>
+            <span className={css.cardDesc}>{t('addPluginsViewerCardDesc')}</span>
+          </button>
         </div>
       </div>
 
@@ -744,6 +781,21 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             service={service}
           />
         </Modal>
+      )}
+
+      {/* The "add plugin" modal (opened by the dashed cards above): declares
+          the extension point of the clicked kind, opens the GitHub topic,
+          and lists the matching recommended plugin catalog with per-entry
+          install buttons (the install flow opens a ~/.dsh terminal with
+          the command pre-typed; failures render inline here, in settings
+          only). Mounted only while open (Modal runs hooks unconditionally
+          — same SSR rule as the settings popup above). */}
+      {addPluginsOpen !== null && (
+        <AddPluginModal
+          service={service}
+          onClose={() => { setAddPluginsOpen(null) }}
+          kind={addPluginsOpen}
+        />
       )}
 
       {error !== null && (
