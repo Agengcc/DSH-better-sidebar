@@ -24,6 +24,7 @@ import { Terminal, type ITheme } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { t } from './locales.ts'
+import { openWhenSized } from './open-when-sized.ts'
 import type { SessionScope } from './api.ts'
 import { agentUuidOf, isAgentTabId, type SidebarStore } from './state.ts'
 import { isDarkScheme, subscribeColorScheme, tokenValue } from './theme.ts'
@@ -97,8 +98,6 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
-    term.open(host)
-    fit.fit()
     // Re-theme in place when the app's scheme flips (tokens + palette).
     const applyTheme = (): void => {
       term.options.theme = xtermTheme()
@@ -208,9 +207,30 @@ export function TerminalView(props: { scope: SessionScope; tabId: string; store:
       }
     })
 
+    // The terminal must not be opened in a zero-size container: xterm's
+    // renderer creation fails there and the next Viewport refresh crashes
+    // reading `.dimensions` off the undefined renderer (blank terminal on
+    // WKWebView when the bottom panel's expand slide leaves the host at
+    // height 0; any display:none-hidden ancestor does the same). Defer
+    // open+fit until the host has a real size — writes arriving meanwhile
+    // are buffered by xterm's WriteBuffer and render once open, and
+    // FitAddon.fit() is a safe no-op before open. sendResize() here covers
+    // the deferred path where the socket may already be open with the
+    // default 80x24 dims.
+    const cancelOpen = openWhenSized(host, () => {
+      try {
+        term.open(host)
+        fit.fit()
+        sendResize()
+      } catch (error) {
+        console.error('[dsh-better-sidebar] xterm open failed:', error)
+      }
+    })
+
     connect()
     return () => {
       closed = true
+      cancelOpen()
       window.clearTimeout(retry)
       observer.disconnect()
       fontSub()
