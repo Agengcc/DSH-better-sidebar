@@ -24,4 +24,13 @@ export const builtinTabPlugins: readonly PluginEntry[] = [
     // context consistent with the other entries.
     install: 'cd ~/.dsh && dsh plugin --profile web add "github:fuhefei/dsh-sentinel#v0.7.0"',
   },
+  {
+    id: 'dsh-sidebar-qa',
+    name: 'dsh-sidebar-qa 划选追问',
+    url: 'https://github.com/ChenRuoT/dsh-sidebar-qa',
+    description: () => t('pluginSidebarQaDesc'),
+    // dsh-sidebar-qa hard-depends on dsh-better-sidebar (required peer), so
+    // the install line installs the prerequisite first, then the plugin.
+    install: 'cd ~/.dsh && dsh plugin --profile web add dsh-better-sidebar && dsh plugin --profile web add git+https://github.com/ChenRuoT/dsh-sidebar-qa.git',
+  },
 ]

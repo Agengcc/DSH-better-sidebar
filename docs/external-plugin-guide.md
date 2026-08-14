@@ -783,4 +783,6 @@ better-sidebar 的内置 tab 和 viewer 就是参考实现（"吃狗粮"）：
 - **类型处理**：未 value-import `dsh-better-sidebar`，构建零耦合；与 §2 的 `import type {}` 方案可互换；
 - **实测**：v0.3.0 起，真实 web profile 验证通过。
 
+通过 `ctx.betterSidebar` 的三方插件[dsh-sidebar-qa](https://github.com/ChenRuoT/dsh-sidebar-qa) —— 基于 better-sidebar 的划选提问。tab分页: 对话划选 → 右侧面板提问 → 同工作区独立追问会话（❓追问·主题）：快速无思考模型压缩主对话上下文后与引文一起注入，不打断主对话；追问可嵌套、可继续、可归档
+
 更多插件接入后欢迎在此登记（一句话 + 链接）。
