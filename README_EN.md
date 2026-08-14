@@ -215,7 +215,9 @@ export function apply(ctx: Context) {
 }
 ```
 
-Full integration docs (`TabDescriptor` / `FileViewerDescriptor` full fields, matching algorithm, HMR pitfalls, declarative settings): see [`AGENTS.md`](./AGENTS.md).
+v0.12.0+ base capabilities: complete type exports (consumers can name `SidebarTab`/`SidebarState` etc.; the client declaration graph is Node-free), `version`/`features` capability detection, `getSnapshot`/`subscribeState` state subscription, tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted `openTab(seed, scope)`, `SidebarTab.meta` persisted across reloads, and an opened settings seam (`settings.pluginToggles` / `settings.render`, stored in `pluginSettings[id]`).
+
+Full integration docs (`TabDescriptor` / `FileViewerDescriptor` full fields, matching algorithm, HMR pitfalls, declarative settings, version detection): see [`AGENTS.md`](./AGENTS.md).
 
 ## 🛠️ Development & Build
 

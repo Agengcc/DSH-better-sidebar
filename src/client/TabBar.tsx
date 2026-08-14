@@ -63,9 +63,12 @@ export function TabBar(props: {
   onDropTab: (payload: TabDragPayload, before: string | null) => void
   /** Icon resolver for tab labels (reads from the tab descriptor registry). */
   getTabIcon?: (tab: SidebarTab) => ReactNode
+  /** Badge resolver for tab labels (reads the descriptor's `badge`; the
+   *  resolver returns the rendered pill or null). */
+  getTabBadge?: (tab: SidebarTab) => ReactNode
 }) {
   const {
-    paneId, tabs, active, onActivate, onClose, onNewTab, newTabOptions, onDropTab, getTabIcon,
+    paneId, tabs, active, onActivate, onClose, onNewTab, newTabOptions, onDropTab, getTabIcon, getTabBadge,
   } = props
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -136,6 +139,7 @@ export function TabBar(props: {
             }}
           >
             {getTabIcon?.(tab) ?? null}
+            {getTabBadge?.(tab) ?? null}
             <span className={css.tabTitle}>{tab.title}</span>
             <button
               type="button"

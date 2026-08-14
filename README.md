@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/23187822-047e-45cc-b480-fe997bd55b86
 - **🔧 分栏工作台**：拖 Tab 拆分/合并（可跨面板）、分隔线调比例；右上角按钮一键折叠/展开面板
 - **🔁 会话隔离**：布局 / Tab / 面板状态按会话持久化，陈旧状态自动净化；「产出文件」在侧边栏打开
 - **⚙️ 声明式设置**：设置页「侧边卡片」按注册表渲染开关网格，逐项独立开/关；二级设置（自动展开、终端工具、沙箱等）经齿轮弹窗编辑
-- **🔌 服务化**：暴露 `ctx.betterSidebar`，其他插件可注册 tab 与文件预览器（内置 7 tab + 9 viewer 同走一服务，见 [AGENTS.md](./AGENTS.md)）
+- **🔌 服务化（基座）**：暴露 `ctx.betterSidebar`，其他插件可注册 tab 与文件预览器（内置 7 tab + 9 viewer 同走一服务）；v0.12.0 起支持角标/生命周期回调/状态订阅/定向打开/插件自有设置（见 [AGENTS.md](./AGENTS.md)）
 - **🌏 多语言**：界面文案跟随 DSH 语言（zh/en）实时切换，无需刷新
 
 ## 🚀 安装
@@ -214,7 +214,9 @@ export function apply(ctx: Context) {
 }
 ```
 
-完整接入文档（`TabDescriptor` / `FileViewerDescriptor` 全字段、匹配算法、HMR 陷阱、声明式设置）：见 [`AGENTS.md`](./AGENTS.md)。
+v0.12.0 起补齐基座能力：类型导出完整（消费者可直接命名 `SidebarTab`/`SidebarState` 等，client 声明图零 Node 依赖）、`version`/`features` 能力探测、`getSnapshot`/`subscribeState` 状态订阅、tab 角标 `badge`、`onOpen`/`onActivate`/`onClose` 生命周期回调、`updateTab`/`activateTab`/`openFile`、定向 `openTab(seed, scope)`、`SidebarTab.meta` 跨刷新持久化、设置 seam 开放（`settings.pluginToggles` / `settings.render`，值存 `pluginSettings[id]`）。
+
+完整接入文档（`TabDescriptor` / `FileViewerDescriptor` 全字段、匹配算法、HMR 陷阱、声明式设置、版本探测）：见 [`AGENTS.md`](./AGENTS.md)。
 
 ## 🛠️ 开发与构建
 

@@ -62,6 +62,7 @@ import type { SidebarStore } from './state.ts'
 import type {
   BetterSidebarService,
   FileViewerDescriptor,
+  SidebarSettingsRenderProps,
   SidebarSettingToggle,
   TabDescriptor,
 } from './service.ts'
@@ -110,6 +111,43 @@ function viewerOrder(a: FileViewerDescriptor, b: FileViewerDescriptor): number {
 /** Read one boolean pref by declarative key (missing = false). */
 function prefBool(prefs: SidebarPrefs, key: string): boolean {
   return (prefs as unknown as Record<string, boolean>)[key] === true
+}
+
+/** Whether a feature declares any secondary settings (gear button shows). */
+function hasSettings(feature: TabDescriptor | FileViewerDescriptor): boolean {
+  const settings = feature.settings
+  return settings !== undefined && (
+    (settings.toggles?.length ?? 0) > 0
+    || (settings.pluginToggles?.length ?? 0) > 0
+    || settings.render !== undefined
+  )
+}
+
+/** A feature's display name (viewers fall back to their id). */
+function featureNameOf(feature: TabDescriptor | FileViewerDescriptor): string {
+  return textOf('title' in feature ? feature.title : undefined) || feature.id
+}
+
+/**
+ * Render a custom settings panel (`settings.render`) with error containment:
+ * a throwing panel shows an inline error line instead of breaking the whole
+ * settings page.
+ */
+function SettingsRender(props: {
+  render: (renderProps: SidebarSettingsRenderProps) => ReactNode
+  renderProps: SidebarSettingsRenderProps
+}) {
+  let content: ReactNode
+  try {
+    content = props.render(props.renderProps)
+  } catch (error) {
+    content = (
+      <div className={css.error} role="alert">
+        {t('settingsSaveFailed')} {error instanceof Error ? error.message : String(error)}
+      </div>
+    )
+  }
+  return <>{content}</>
 }
 
 /**
@@ -241,6 +279,72 @@ function TypedRow(props: {
 }
 
 /**
+ * The secondary settings popup body of one feature (tab or viewer):
+ * - `settings.render` (custom panel) when declared — rendered with the
+ *   shared store/service, the live prefs, the descriptor's own plugin
+ *   settings blob, a persistence helper, and a close callback;
+ * - otherwise the host-prefs `toggles` rows, then the plugin-owned
+ *   `pluginToggles` rows (their values live in `pluginSettings[feature.id]`,
+ *   projected onto the prefs face so the shared row renderer reads them).
+ */
+export function SettingsBody(props: {
+  feature: TabDescriptor | FileViewerDescriptor
+  prefs: SidebarPrefs
+  store: SidebarStore
+  service: BetterSidebarService
+  onToggle: (toggle: SidebarSettingToggle, next: boolean) => void
+  onCommit: (toggle: SidebarSettingToggle, raw: string) => string
+  onPluginToggle: (toggle: SidebarSettingToggle, next: boolean) => void
+  onPluginCommit: (toggle: SidebarSettingToggle, raw: string) => string
+  onPluginWrite: (key: string, value: unknown) => void
+  onClose: () => void
+}) {
+  const { feature, prefs, store, service, onToggle, onCommit, onPluginToggle, onPluginCommit, onPluginWrite, onClose } = props
+  const render = feature.settings?.render
+  if (render !== undefined) {
+    return (
+      <SettingsRender
+        render={render}
+        renderProps={{
+          store,
+          service,
+          prefs,
+          pluginSettings: prefs.pluginSettings[feature.id] ?? {},
+          updatePluginSetting: onPluginWrite,
+          close: onClose,
+        }}
+      />
+    )
+  }
+  const toggles = feature.settings?.toggles ?? []
+  const pluginToggles = feature.settings?.pluginToggles ?? []
+  if (toggles.length === 0 && pluginToggles.length === 0) return null
+  // Plugin rows read/write their values through a projected prefs face so
+  // the shared row renderer works unchanged (its rows read prefs[key]).
+  const effectivePrefs = { ...prefs, ...(prefs.pluginSettings[feature.id] ?? {}) } as SidebarPrefs
+  return (
+    <div className={css.popupRows}>
+      {toggles.length > 0 && (
+        <FeatureSettingsRows
+          toggles={toggles}
+          prefs={prefs}
+          onToggle={onToggle}
+          onCommit={onCommit}
+        />
+      )}
+      {pluginToggles.length > 0 && (
+        <FeatureSettingsRows
+          toggles={pluginToggles}
+          prefs={effectivePrefs}
+          onToggle={onPluginToggle}
+          onCommit={onPluginCommit}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
  * Render the Side card preferences section.
  * @param props - composed slot props (runtime share + injected store/service).
  * @returns the section element tree.
@@ -250,7 +354,7 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   const [widthDraft, setWidthDraft] = useState<string>(String(store.getPrefs().defaultWidthPercent))
   const [error, setError] = useState<string | null>(null)
   // Which feature's secondary settings popup is open (null = closed).
-  const [settingsFor, setSettingsFor] = useState<TabDescriptor | null>(null)
+  const [settingsFor, setSettingsFor] = useState<TabDescriptor | FileViewerDescriptor | null>(null)
 
   // The declarative inventory: the registered tab types and file viewers.
   // Local state + service.subscribe (registry changes are rare — plugin
@@ -365,6 +469,38 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
       return String(clamped)
     }
     applyPref({ [toggle.key]: raw })
+    return raw
+  }
+
+  /** Persist one plugin-owned setting of one descriptor (merged into the pluginSettings blob). */
+  const applyPluginSetting = (descriptorId: string, key: string, value: unknown): void => {
+    applyPref({
+      pluginSettings: {
+        ...prefs.pluginSettings,
+        [descriptorId]: { ...(prefs.pluginSettings[descriptorId] ?? {}), [key]: value },
+      },
+    })
+  }
+
+  /** Flip one plugin-owned switch row (same row shape, plugin-scoped key). */
+  const onPluginToggle = (descriptorId: string, toggle: SidebarSettingToggle, next: boolean): void => {
+    applyPluginSetting(descriptorId, toggle.key, next)
+  }
+
+  /** Commit one plugin-owned text/number row (clamped like the host rows). */
+  const onPluginCommitSetting = (descriptorId: string, toggle: SidebarSettingToggle, raw: string): string => {
+    if (toggle.type === 'number') {
+      const parsed = Number(raw)
+      const blob = prefs.pluginSettings[descriptorId] ?? {}
+      const fallback = String(blob[toggle.key] ?? '')
+      if (!Number.isFinite(parsed)) return fallback
+      let clamped = Math.round(parsed)
+      if (toggle.min !== undefined) clamped = Math.max(toggle.min, clamped)
+      if (toggle.max !== undefined) clamped = Math.min(toggle.max, clamped)
+      applyPluginSetting(descriptorId, toggle.key, clamped)
+      return String(clamped)
+    }
+    applyPluginSetting(descriptorId, toggle.key, raw)
     return raw
   }
 
@@ -511,8 +647,7 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
                 onToggle: (next) => { onToggleTab(tab.id, next) },
                 // The settings gear only while the feature is enabled: its
                 // related settings are dormant while the feature is off.
-                onOpenSettings: prefs.tabsEnabled[tab.id] !== false
-                  && (tab.settings?.toggles?.length ?? 0) > 0
+                onOpenSettings: prefs.tabsEnabled[tab.id] !== false && hasSettings(tab)
                   ? () => { setSettingsFor(tab) }
                   : undefined,
               })}
@@ -536,6 +671,9 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
                 icon: iconOf(viewer.icon, 16),
                 enabled: prefs.viewersEnabled[viewer.id] !== false,
                 onToggle: (next) => { onToggleViewer(viewer.id, next) },
+                onOpenSettings: prefs.viewersEnabled[viewer.id] !== false && hasSettings(viewer)
+                  ? () => { setSettingsFor(viewer) }
+                  : undefined,
               })}
             </Fragment>
           ))}
@@ -547,13 +685,16 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
           Done footer (Modal chrome is the app's own). Mounted only while a
           feature is open — the Modal primitive runs hooks unconditionally,
           so a closed-but-mounted Modal would break SSR (and the
-          renderToString spec) under the test dual-react split. */}
+          renderToString spec) under the test dual-react split.
+          Content: `settings.render` (custom panel) when declared, else the
+          host-prefs `toggles` rows followed by the plugin-owned
+          `pluginToggles` rows (their values live in pluginSettings[id]). */}
       {settingsFor !== null && (
         <Modal
           open
           onClose={() => { setSettingsFor(null) }}
-          title={textOf(settingsFor.title)}
-          description={t('settingsPopupDesc', { feature: textOf(settingsFor.title) })}
+          title={featureNameOf(settingsFor)}
+          description={t('settingsPopupDesc', { feature: featureNameOf(settingsFor) })}
           closeLabel={t('close')}
           className={css.popupDialog}
           footer={(
@@ -562,11 +703,17 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             </button>
           )}
         >
-          <FeatureSettingsRows
-            toggles={settingsFor.settings?.toggles ?? []}
+          <SettingsBody
+            feature={settingsFor}
             prefs={prefs}
             onToggle={onToggleSetting}
             onCommit={onCommitSetting}
+            onPluginToggle={(toggle, next) => { onPluginToggle(settingsFor.id, toggle, next) }}
+            onPluginCommit={(toggle, raw) => onPluginCommitSetting(settingsFor.id, toggle, raw)}
+            onPluginWrite={(key, value) => { applyPluginSetting(settingsFor.id, key, value) }}
+            onClose={() => { setSettingsFor(null) }}
+            store={store}
+            service={service}
           />
         </Modal>
       )}
