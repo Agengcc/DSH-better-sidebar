@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import clsx from 'clsx'
 import {
   IconCodeOutline16, IconCopyOutline16, IconDownloadOutline16, IconFolderClose16, IconFolderOpen16,
-  IconFolderOpenOutline16, IconRefreshOutline16, Menu, writeClipboard,
+  IconFolderOpenOutline16, IconRefreshOutline16, IconRightUpOutline16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, downloadUrl, type FsEntry } from './api.ts'
 import { relativeTo } from './paths.ts'
@@ -53,8 +53,8 @@ export function ExplorerView(props: {
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
   /** Open context menu: the row path (and whether it is a directory) plus the cursor position. */
   const [rowMenu, setRowMenu] = useState<{ path: string; isDir: boolean; x: number; y: number } | null>(null)
-  /** Transient "reveal in file manager" failure (rendered as an error row, auto-clears). */
-  const [revealError, setRevealError] = useState<string | null>(null)
+  /** Transient OS-action failure (rendered as an error row, auto-clears). */
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const storeLevel = useCallback((path: string, level: LevelData) => {
     dataRef.current = { ...dataRef.current, [path]: level }
@@ -129,13 +129,25 @@ export function ExplorerView(props: {
     anchor.remove()
   }
 
-  /** Reveal a row in the OS file manager via the host route; surface failures
-   *  as a transient error row (Finder/Explorer opens on the host machine). */
+  /** Show a transient error row (auto-clears after 4s). */
+  const showActionError = (prefix: string, error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error)
+    setActionError(`${prefix}: ${message}`)
+    window.setTimeout(() => { setActionError(null) }, 4000)
+  }
+
+  /** Reveal a row in the OS file manager via the host route (Finder/Explorer
+   *  opens on the host machine with the row selected). */
   const revealInFileManager = (path: string): void => {
     api.fsReveal({ sessionId, cwd }, path).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error)
-      setRevealError(`${t('revealFailed')}: ${message}`)
-      window.setTimeout(() => { setRevealError(null) }, 4000)
+      showActionError(t('revealFailed'), error)
+    })
+  }
+
+  /** Open a file with the OS default application via the host route. */
+  const openWithDefaultApp = (path: string): void => {
+    api.fsOpen({ sessionId, cwd }, path).catch((error: unknown) => {
+      showActionError(t('openFailed'), error)
     })
   }
 
@@ -225,9 +237,9 @@ export function ExplorerView(props: {
         </button>
       </div>
       <div className={css.explorerBody}>
-        {revealError !== null && (
+        {actionError !== null && (
           <div className={clsx(css.explorerRow, css.explorerError)} style={{ paddingLeft: 6 }}>
-            {revealError}
+            {actionError}
           </div>
         )}
         {root === undefined ? (
@@ -273,9 +285,13 @@ export function ExplorerView(props: {
           // Reveal works for files and directories alike (the host selects
           // the row in the OS file manager).
           { id: 'reveal', label: t('revealInFinder'), icon: <IconFolderOpenOutline16 size={14} /> },
-          // Download applies to files only (the host route refuses directories).
+          // Open-with-default-app and download apply to files only (the host
+          // routes refuse directories).
           ...(rowMenu?.isDir === false
-            ? [{ id: 'download', label: t('download'), icon: <IconDownloadOutline16 size={14} /> }]
+            ? [
+              { id: 'open', label: t('openWithDefaultApp'), icon: <IconRightUpOutline16 size={14} /> },
+              { id: 'download', label: t('download'), icon: <IconDownloadOutline16 size={14} /> },
+            ]
             : []),
           { id: 'relative', label: t('copyRelative'), icon: <IconCopyOutline16 size={14} /> },
           { id: 'absolute', label: t('copyAbsolute'), icon: <IconCopyOutline16 size={14} /> },
@@ -286,6 +302,10 @@ export function ExplorerView(props: {
           setRowMenu(null)
           if (id === 'reveal') {
             revealInFileManager(target.path)
+            return
+          }
+          if (id === 'open') {
+            openWithDefaultApp(target.path)
             return
           }
           if (id === 'download') {

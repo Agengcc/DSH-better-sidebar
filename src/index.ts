@@ -27,7 +27,7 @@ import {
   type SidebarPrefs,
 } from './config.ts'
 import { isWithin, messageOf, parentOf, requireAbsolute, listDirectory, rootLabel } from './fs-tree.ts'
-import { revealInFileManager } from './reveal.ts'
+import { openWithDefaultApp, revealInFileManager } from './reveal.ts'
 import { decodeHtmlUrl } from './html-route.ts'
 import { extractFrameAncestors } from './browser-probe.ts'
 import { isTrustedApiRequest, isLoopbackHostname } from './trust-fence.ts'
@@ -258,6 +258,26 @@ function buildApi(
       })
       await revealInFileManager(path, info.isDirectory())
       return { ok: true, revealed: path }
+    },
+    // Open a file with the OS default application ("用默认应用打开"): same
+    // host-executed, workspace-confined shape as fs.reveal, but opens the
+    // file in its default app (Preview, Pages, Numbers, …) instead of
+    // selecting it in the file manager. Files only — directories have no
+    // single default handler.
+    'fs.open': async (payload) => {
+      const { cwd } = cwdOf(payload)
+      const path = requireAbsolute(requireString(payload, 'path'))
+      if (!isWithin(cwd, path)) {
+        throw new SidebarError('fs-error', 'path outside the session working directory', 403)
+      }
+      const info = await stat(path).catch((error: unknown) => {
+        throw new SidebarError('fs-error', `cannot access "${path}": ${messageOf(error)}`, 400)
+      })
+      if (info.isDirectory()) {
+        throw new SidebarError('fs-error', 'only files can be opened with the default application', 400)
+      }
+      await openWithDefaultApp(path)
+      return { ok: true, opened: path }
     },
     'git.status': async (payload) => {
       const { cwd } = cwdOf(payload)

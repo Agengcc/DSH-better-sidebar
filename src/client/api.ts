@@ -123,6 +123,9 @@ export const api = {
   /** Reveal a file or directory in the OS file manager (host runs the command). */
   fsReveal: (scope: SessionScope, path: string) =>
     call<{ ok: true }>('fs.reveal', scopePayload(scope, { path })),
+  /** Open a file with the OS default application (host runs the command). */
+  fsOpen: (scope: SessionScope, path: string) =>
+    call<{ ok: true }>('fs.open', scopePayload(scope, { path })),
   gitStatus: (scope: SessionScope, signal?: AbortSignal) =>
     call<GitStatusResult>('git.status', scopePayload(scope, {}), signal),
   gitDiff: (scope: SessionScope, path: string | undefined, staged: boolean, signal?: AbortSignal) =>

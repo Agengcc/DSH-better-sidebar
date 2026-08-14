@@ -1,10 +1,10 @@
 /**
- * Tests for the reveal-in-file-manager command builder: each platform maps to
+ * Tests for the reveal/open-in-OS command builders: each platform maps to
  * the right command, files and directories are handled differently where the
  * platform requires it, and unsupported platforms are refused.
  */
 import { describe, expect, it } from 'vitest'
-import { revealCommandFor } from '../src/reveal.ts'
+import { openCommandFor, revealCommandFor } from '../src/reveal.ts'
 
 describe('revealCommandFor', () => {
   it('darwin reveals files and directories with `open -R`', () => {
@@ -31,5 +31,27 @@ describe('revealCommandFor', () => {
   it('refuses platforms without a file manager', () => {
     expect(revealCommandFor('freebsd' as NodeJS.Platform, '/x', false)).toBeNull()
     expect(revealCommandFor('aix' as NodeJS.Platform, '/x', true)).toBeNull()
+  })
+})
+
+describe('openCommandFor', () => {
+  it('darwin opens with `open <path>`', () => {
+    expect(openCommandFor('darwin', '/Users/me/work/报告.docx'))
+      .toEqual({ cmd: 'open', args: ['/Users/me/work/报告.docx'] })
+  })
+
+  it('win32 opens with `explorer <path>` (default handler)', () => {
+    expect(openCommandFor('win32', 'C:\\Users\\me\\report.xlsx'))
+      .toEqual({ cmd: 'explorer', args: ['C:\\Users\\me\\report.xlsx'] })
+  })
+
+  it('linux opens with `xdg-open <path>`', () => {
+    expect(openCommandFor('linux', '/home/me/work/notes.md'))
+      .toEqual({ cmd: 'xdg-open', args: ['/home/me/work/notes.md'] })
+  })
+
+  it('refuses platforms without a default-app handler', () => {
+    expect(openCommandFor('freebsd' as NodeJS.Platform, '/x')).toBeNull()
+    expect(openCommandFor('aix' as NodeJS.Platform, '/x')).toBeNull()
   })
 })
