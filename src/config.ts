@@ -100,4 +100,9 @@ export const PrefsSchema: z<SidebarPrefs> = z.object({
   // (everything on) with no migration. Non-boolean values fail validation.
   tabsEnabled: z.dict(z.boolean()).default({}),
   viewersEnabled: z.dict(z.boolean()).default({}),
+  // Plugin-owned settings blobs (v0.12.0+) are an OPEN nested map: any
+  // descriptor id may carry any JSON-serializable values. This is the
+  // "settings seam" opening — without it the seam would drop third-party
+  // keys as unknown schema fields.
+  pluginSettings: z.dict(z.dict(z.any())).default({}),
 })

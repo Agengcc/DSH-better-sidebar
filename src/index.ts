@@ -15,8 +15,9 @@
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join } from 'node:path'
 import type { IncomingMessage } from 'node:http'
+import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer } from 'ws'
-import type { Context } from './context-types.ts'
+import type { Context, SidebarHttpRequest } from './context-types.ts'
 import {
   Config,
   PrefsSchema,
@@ -436,7 +437,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
   ensureSpawnHelper()
   const resolved = resolveSidebarConfig(config)
   const trustedHosts = trustedHostsOf(ctx)
-  const fence = (req: IncomingMessage): boolean => isTrustedApiRequest(req, trustedHosts)
+  const fence = (req: SidebarHttpRequest): boolean => isTrustedApiRequest(req, trustedHosts)
   const ptyManager = new PtyManager(defaultShell(), resolved.terminalsPerSession)
   // The agent-owned terminal registry: parallel to the UI-tab ptyManager,
   // keyed by uuid (the model's opaque handle) instead of `${sessionId}:${tabId}`,
@@ -669,7 +670,9 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         socket.destroy()
         return
       }
-      wss.handleUpgrade(req, socket, head, (ws) => {
+      // The structural request/socket/head faces satisfy the shared fence;
+      // the `ws` package wants the real Node types — cast at this boundary.
+      wss.handleUpgrade(req as unknown as IncomingMessage, socket as unknown as Duplex, head as Buffer, (ws) => {
         void attachTerminal(ctx, ptyManager, agentPtyRegistry, ws, req, resolved)
       })
     },
@@ -691,7 +694,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         socket.destroy()
         return
       }
-      agentListWss.handleUpgrade(req, socket, head, (ws) => {
+      agentListWss.handleUpgrade(req as unknown as IncomingMessage, socket as unknown as Duplex, head as Buffer, (ws) => {
         void attachAgentList(agentPtyRegistry, ws, req)
       })
     },
@@ -710,7 +713,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
 async function attachAgentList(
   registry: AgentPtyRegistry,
   ws: WebSocket,
-  req: IncomingMessage,
+  req: SidebarHttpRequest,
 ): Promise<void> {
   try {
     const url = new URL(req.url ?? '/', 'http://dsh.internal')
@@ -750,7 +753,7 @@ async function attachTerminal(
   ptyManager: PtyManager,
   agentPtyRegistry: AgentPtyRegistry,
   ws: WebSocket,
-  req: IncomingMessage,
+  req: SidebarHttpRequest,
   resolved: ResolvedSidebarConfig,
 ): Promise<void> {
   try {

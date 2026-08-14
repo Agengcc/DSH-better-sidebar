@@ -527,6 +527,8 @@ describe('side card settings routes', () => {
         // The enable-switch maps default to {} (everything on).
         tabsEnabled: {},
         viewersEnabled: {},
+        // The plugin-owned settings map defaults to {} too.
+        pluginSettings: {},
       },
       revision: 0,
     })
