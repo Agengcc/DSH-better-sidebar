@@ -10,7 +10,6 @@ import {
 import { loadPrefs, type SidebarSettingsClient } from '../src/client/prefs.ts'
 import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
 import { extOf, languageKeyForExt } from '../src/client/lang.ts'
-import { officeKindForExt } from '../src/client/office-types.ts'
 import { isPdfExt } from '../src/client/pdf-types.ts'
 import { isImageExt } from '../src/client/image-types.ts'
 import { relativeTo } from '../src/client/paths.ts'
@@ -1085,28 +1084,6 @@ describe('editor language mapping', () => {
     expect(languageKeyForExt('txt')).toBeNull()
     expect(languageKeyForExt('log')).toBeNull()
     expect(languageKeyForExt('')).toBeNull()
-  })
-})
-
-describe('office preview kind', () => {
-  it('routes docx/xlsx to their renderers', () => {
-    expect(officeKindForExt('.docx')).toBe('docx')
-    expect(officeKindForExt('.xlsx')).toBe('xlsx')
-  })
-
-  it('routes pptx to its renderer and legacy OLE formats to download-only', () => {
-    expect(officeKindForExt('.pptx')).toBe('pptx')
-    expect(officeKindForExt('.doc')).toBe('download-only')
-    expect(officeKindForExt('.xls')).toBe('download-only')
-    expect(officeKindForExt('.ppt')).toBe('download-only')
-  })
-
-  it('returns null for non-Office extensions and empty input', () => {
-    expect(officeKindForExt('.txt')).toBeNull()
-    expect(officeKindForExt('.md')).toBeNull()
-    expect(officeKindForExt('.png')).toBeNull()
-    expect(officeKindForExt('.pdf')).toBeNull()
-    expect(officeKindForExt('')).toBeNull()
   })
 })
 
