@@ -543,13 +543,24 @@ export function createBetterSidebarService(store: SidebarStore): BetterSidebarSe
         landed = next
       }
       // Lifecycle capture (before the auto-expand block, which early-returns).
-      if (!tabOpenIn(state, tab.id)) {
+      // Classify the landing against the INPUT state: a FOCUS fires
+      // onActivate with the tab that is active NOW; a real creation fires
+      // onOpen with the minted tab. Both the dedupeKey match AND the id
+      // match count as a focus — a descriptor deduping by key (e.g. editor
+      // by path) can focus an existing tab for a NEW requested id, and
+      // classifying that as a creation would fire onOpen with a phantom
+      // tab that never closes.
+      const dedupeKey = descriptor.dedupeKey ?? (descriptor.single === true ? () => descriptor.id : undefined)
+      const key = dedupeKey?.(tab)
+      const inputTabs = allLeaves(state.splits).concat(allLeaves(state.bottomSplits)).flatMap(leaf => leaf.tabs)
+      const existedByKey = key !== undefined
+        && inputTabs.some(candidate => candidate.type === tab.type && dedupeKey!(candidate) === key)
+      const existedById = tabOpenIn(state, tab.id)
+      if (!existedByKey && !existedById) {
         created = tab
       } else {
-        // A focus happened (dedupeKey or the id safety net): resolve the
-        // tab that is actually active now and report THAT to onActivate.
-        const dedupeKey = descriptor.dedupeKey ?? (descriptor.single === true ? () => descriptor.id : undefined)
-        const key = dedupeKey?.(tab)
+        // A focus happened: resolve the tab that is actually active now and
+        // report THAT to onActivate (never the caller's un-inserted seed).
         const candidates = allLeaves(landed.splits).concat(allLeaves(landed.bottomSplits)).flatMap(leaf => leaf.tabs)
         activated = key !== undefined
           ? candidates.find(candidate => candidate.type === tab.type && dedupeKey!(candidate) === key)

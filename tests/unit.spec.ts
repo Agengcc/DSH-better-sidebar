@@ -1690,6 +1690,57 @@ describe('store.reduceFor (targeted opens, v0.12.0)', () => {
     expect(store.getSnapshot().state?.panelOpen).toBe(false)
     expect(store.getSnapshot().state?.splits).toBeDefined()
   })
+
+  it('reduceFor never lowers the shared uid counter below the active session needs (no pane-id collision)', () => {
+    const store = createSidebarStore()
+    // Session 'b' is cached FIRST with a LOW id range (pane:1 / tab:2).
+    store.setSession('b')
+    // Session 'a' then loads and its operations raise the shared counter
+    // well above b's max (default pane, plus fresh pane ids from splits).
+    store.setSession('a')
+    store.reduce(s => splitPane(s, 'row'))
+    const before = allLeaves(store.getSnapshot().state!.splits).map(leaf => leaf.id).sort()
+    // A targeted reduce into the OLD, low-id session must not lower the
+    // counter: the next split in the ACTIVE session would otherwise mint
+    // an id that already exists (mapLeaf visits both leaves → corruption).
+    store.reduceFor('b', (state) => state)
+    store.reduce(s => splitPane(s, 'row'))
+    const after = allLeaves(store.getSnapshot().state!.splits).map(leaf => leaf.id)
+    expect(new Set(after).size).toBe(after.length)
+    // The active session's pre-existing pane ids all survived untouched.
+    for (const id of before) expect(after).toContain(id)
+  })
+
+  it('persists each session independently (per-session debounce timers)', () => {
+    const g = globalThis as Record<string, unknown>
+    let seq = 0
+    const timers = new Map<number, () => void>()
+    const writes: string[] = []
+    g.window = {
+      clearTimeout: (id: number) => { timers.delete(id) },
+      setTimeout: (fn: () => void) => { const id = ++seq; timers.set(id, fn); return id },
+      innerWidth: 1024,
+      innerHeight: 800,
+    }
+    g.localStorage = {
+      getItem: () => null,
+      setItem: (key: string) => { writes.push(key) },
+    }
+    try {
+      const store = createSidebarStore()
+      store.setSession('a')
+      store.reduce(s => ({ ...s, expanded: ['/a'] })) // schedules persist(a)
+      store.reduceFor('b', s => ({ ...s, expanded: ['/b'] })) // schedules persist(b)
+      // A shared timer would have cancelled persist(a) — with per-session
+      // timers BOTH writes are pending and both land when they fire.
+      expect(timers.size).toBe(2)
+      for (const [, fn] of [...timers]) fn()
+      expect(writes).toEqual(['dsh-sidebar:v1:a', 'dsh-sidebar:v1:b'])
+    } finally {
+      delete g.window
+      delete g.localStorage
+    }
+  })
 })
 
 describe('tab meta persistence (v0.12.0)', () => {

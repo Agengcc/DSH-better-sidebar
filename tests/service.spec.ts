@@ -849,3 +849,51 @@ describe('tab meta (v0.12.0)', () => {
     expect(tabs[0]?.meta).toBeUndefined()
   })
 })
+
+describe('lifecycle classification vs dedupe (codex review fixes)', () => {
+  it('a key-dedupe focus with a NEW id fires onActivate with the REAL tab (no phantom onOpen)', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    const events: Array<{ kind: string; tabId?: string }> = []
+    service.registerTab({
+      id: 'doc',
+      title: 'Doc',
+      // Dedupe by PATH like the editor builtin — the focused tab's id
+      // differs from the newly requested id.
+      dedupeKey: (tab) => tab.path ?? '',
+      onOpen: (tab) => { events.push({ kind: 'open', tabId: tab.id }) },
+      onActivate: (tab) => { events.push({ kind: 'activate', tabId: tab.id }) },
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'doc', title: 'Doc', id: 'doc:1', path: '/a.md' })
+    expect(events).toEqual([{ kind: 'open', tabId: 'doc:1' }])
+    // Same path, NEW id: the existing tab is focused — onActivate must
+    // carry the EXISTING tab, and onOpen must NOT fire with doc:2.
+    service.openTab({ type: 'doc', title: 'Doc', id: 'doc:2', path: '/a.md' })
+    expect(events).toEqual([
+      { kind: 'open', tabId: 'doc:1' },
+      { kind: 'activate', tabId: 'doc:1' },
+    ])
+    const tabs = allLeaves(store.getSnapshot().state!.splits).flatMap(l => l.tabs).filter(t => t.type === 'doc')
+    expect(tabs.map(t => t.id)).toEqual(['doc:1'])
+  })
+
+  it('an id safety-net focus (same id) fires onActivate, not onOpen', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    const events: string[] = []
+    service.registerTab({
+      id: 'multi',
+      title: 'Multi',
+      onOpen: () => { events.push('open') },
+      onActivate: () => { events.push('activate') },
+      component: () => null,
+    })
+    store.setSession('s1')
+    service.openTab({ type: 'multi', title: 'Multi', id: 'm:1' })
+    expect(events).toEqual(['open'])
+    service.openTab({ type: 'multi', title: 'Multi', id: 'm:1' })
+    expect(events).toEqual(['open', 'activate'])
+  })
+})

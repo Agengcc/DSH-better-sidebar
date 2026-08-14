@@ -129,6 +129,24 @@ function featureNameOf(feature: TabDescriptor | FileViewerDescriptor): string {
 }
 
 /**
+ * Merge one plugin-owned setting into a pluginSettings map (pure, v0.12.0+).
+ * Sequential merges are additive: each call spreads the map it was GIVEN,
+ * so building from the latest optimistic map keeps earlier keys intact
+ * (two same-tick writes must not drop each other).
+ */
+export function mergePluginSetting(
+  pluginSettings: Record<string, Record<string, unknown>>,
+  descriptorId: string,
+  key: string,
+  value: unknown,
+): Record<string, Record<string, unknown>> {
+  return {
+    ...pluginSettings,
+    [descriptorId]: { ...(pluginSettings[descriptorId] ?? {}), [key]: value },
+  }
+}
+
+/**
  * Render a custom settings panel (`settings.render`) with error containment:
  * a throwing panel shows an inline error line instead of breaking the whole
  * settings page.
@@ -355,6 +373,14 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   const [error, setError] = useState<string | null>(null)
   // Which feature's secondary settings popup is open (null = closed).
   const [settingsFor, setSettingsFor] = useState<TabDescriptor | FileViewerDescriptor | null>(null)
+  // The LATEST optimistic prefs, kept in sync with the state. Nested-map
+  // merges (tabsEnabled / viewersEnabled / pluginSettings) MUST build from
+  // this ref, not from the render-time `prefs`: two same-tick writes (e.g.
+  // a settings panel updating several plugin keys at once) would otherwise
+  // both spread the stale map and the later patch would drop the earlier
+  // key even though the commits are serialized.
+  const optimisticRef = useRef(prefs)
+  useEffect(() => { optimisticRef.current = prefs }, [prefs])
 
   // The declarative inventory: the registered tab types and file viewers.
   // Local state + service.subscribe (registry changes are rare — plugin
@@ -425,8 +451,10 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
 
   /** Optimistically apply one pref patch, then commit (revert on failure). */
   const applyPref = (patch: Record<string, unknown>): void => {
-    const previous = prefs
-    setPrefs({ ...previous, ...patch } as SidebarPrefs)
+    const previous = optimisticRef.current
+    const next = { ...previous, ...patch } as SidebarPrefs
+    optimisticRef.current = next
+    setPrefs(next)
     setError(null)
     void commit(patch).then(outcome => applyOutcome(previous, outcome))
   }
@@ -437,12 +465,12 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
 
   /** Flip one per-tab enable switch (merge into the tabsEnabled map). */
   const onToggleTab = (id: string, next: boolean): void => {
-    applyPref({ tabsEnabled: { ...prefs.tabsEnabled, [id]: next } })
+    applyPref({ tabsEnabled: { ...optimisticRef.current.tabsEnabled, [id]: next } })
   }
 
   /** Flip one per-viewer enable switch (merge into the viewersEnabled map). */
   const onToggleViewer = (id: string, next: boolean): void => {
-    applyPref({ viewersEnabled: { ...prefs.viewersEnabled, [id]: next } })
+    applyPref({ viewersEnabled: { ...optimisticRef.current.viewersEnabled, [id]: next } })
   }
 
   /** Flip one declaratively-declared toggle (a SidebarPrefs boolean field). */
@@ -474,12 +502,7 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
 
   /** Persist one plugin-owned setting of one descriptor (merged into the pluginSettings blob). */
   const applyPluginSetting = (descriptorId: string, key: string, value: unknown): void => {
-    applyPref({
-      pluginSettings: {
-        ...prefs.pluginSettings,
-        [descriptorId]: { ...(prefs.pluginSettings[descriptorId] ?? {}), [key]: value },
-      },
-    })
+    applyPref({ pluginSettings: mergePluginSetting(optimisticRef.current.pluginSettings, descriptorId, key, value) })
   }
 
   /** Flip one plugin-owned switch row (same row shape, plugin-scoped key). */

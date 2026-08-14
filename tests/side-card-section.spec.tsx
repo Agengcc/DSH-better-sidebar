@@ -20,7 +20,7 @@ import { createElement } from 'react'
 import { createSidebarStore, type SidebarStore } from '../src/client/state.ts'
 import { createBetterSidebarService, type BetterSidebarService } from '../src/client/service.ts'
 import { SIDEBAR_PREFS_DEFAULTS } from '../src/prefs-shared.ts'
-import { FeatureSettingsRows, SideCardSection, type SideCardSectionProps } from '../src/client/SideCardSection.tsx'
+import { FeatureSettingsRows, mergePluginSetting, SideCardSection, type SideCardSectionProps } from '../src/client/SideCardSection.tsx'
 
 /** One tab + one viewer + the subagent-style nested toggle under a tab. */
 function mount(): { store: SidebarStore; service: BetterSidebarService } {
@@ -214,5 +214,25 @@ describe('FeatureSettingsRows (the secondary settings popup body)', () => {
     expect(html).toContain('max="32"')
     expect(html).toContain('px')
     expect(html).not.toContain('type="checkbox"')
+  })
+})
+
+describe('mergePluginSetting (v0.12.0, codex review fix)', () => {
+  it('sequential merges are additive — a later write never drops an earlier key', () => {
+    // Simulates two same-tick updatePluginSetting calls: each merge spreads
+    // the map it was GIVEN, so building from the latest optimistic map
+    // preserves both keys (the pre-fix code spread the stale render-time
+    // prefs twice and the second write dropped the first key).
+    let map: Record<string, Record<string, unknown>> = {}
+    map = mergePluginSetting(map, 'my-plugin:db', 'pageSize', 25)
+    map = mergePluginSetting(map, 'my-plugin:db', 'theme', 'dark')
+    expect(map['my-plugin:db']).toEqual({ pageSize: 25, theme: 'dark' })
+    // A second descriptor's blob stays independent.
+    map = mergePluginSetting(map, 'other:view', 'refresh', true)
+    expect(map['my-plugin:db']).toEqual({ pageSize: 25, theme: 'dark' })
+    expect(map['other:view']).toEqual({ refresh: true })
+    // Overwriting one key keeps the sibling keys.
+    map = mergePluginSetting(map, 'my-plugin:db', 'pageSize', 50)
+    expect(map['my-plugin:db']).toEqual({ pageSize: 50, theme: 'dark' })
   })
 })

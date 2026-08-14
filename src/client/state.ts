@@ -938,7 +938,9 @@ export class SidebarStore {
     prefs: { ...SIDEBAR_PREFS_DEFAULTS },
   }
   private readonly listeners = new Set<() => void>()
-  private persistTimer: number | undefined
+  /** Per-session persist debounce timers (v0.12.0+: one per session, so a
+   *  targeted open never cancels another session's pending write). */
+  private readonly persistTimers = new Map<string, number>()
   /** User-facing side card prefs seeding brand-new session states (defaults until the settings RPC resolves). */
   private prefs: SidebarPrefs = { ...SIDEBAR_PREFS_DEFAULTS }
 
@@ -1037,6 +1039,13 @@ export class SidebarStore {
    * session's layout and is visible whenever the user switches to it.
    */
   reduceFor(sessionId: string, reducer: (state: SidebarState) => SidebarState): void {
+    // The uid counter is SHARED across sessions, and the ACTIVE session's
+    // safety requires it to never drop below the ids IT minted. Seeding it
+    // from the target's max may LOWER it (a cached target older than the
+    // active session): restoring the pre-call level afterwards keeps the
+    // active session's next mint collision-free — ids minted for the target
+    // only need to exceed the target's own max, which the seed guaranteed.
+    const counterBefore = nextIdCounter
     let state = this.bySession.get(sessionId)
     if (state === undefined) {
       state = loadState(sessionId, this.prefs)
@@ -1048,18 +1057,27 @@ export class SidebarStore {
     }
     const next = reducer(state)
     this.bySession.set(sessionId, next)
+    nextIdCounter = Math.max(nextIdCounter, counterBefore)
     this.schedulePersist(sessionId, next)
   }
 
   private schedulePersist(sessionId: string, state: SidebarState): void {
-    window.clearTimeout(this.persistTimer)
-    this.persistTimer = window.setTimeout(() => {
+    // Per-session debounce timers: one session's pending write must never
+    // cancel another's (targeted opens schedule writes for INACTIVE
+    // sessions while the active session may already have one pending —
+    // a shared timer would drop the earlier write and the reload would
+    // lose that session's layout).
+    const existing = this.persistTimers.get(sessionId)
+    if (existing !== undefined) window.clearTimeout(existing)
+    const timer = window.setTimeout(() => {
+      this.persistTimers.delete(sessionId)
       try {
         localStorage.setItem(`${STORAGE_PREFIX}:${sessionId}`, JSON.stringify(state))
       } catch {
         // Storage full or unavailable: layout memory is best-effort.
       }
     }, 200)
+    this.persistTimers.set(sessionId, timer)
   }
 
   private notify(): void {
