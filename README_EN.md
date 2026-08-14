@@ -3,11 +3,9 @@
 <!-- Hero -->
 <div align="center">
   <b style="font-size: 1.15em;">A service-oriented sidebar framework, and a complete workbench out of the box</b><br /><br />
-  <code>File management</code> <code>Edit &amp; preview</code> <code>Embedded browser</code> <code>Real terminal</code> <code>Git panel</code> <code>Background tasks</code><br /><br />
+  <code>File management</code> <code>Edit &amp; preview</code> <code>Embedded browser</code> <code>Real terminal</code> <code>Git panel</code> <code>Background tasks</code> <code>Plugin integration</code><br /><br />
   <b>A dual workbench (right sidebar + bottom panel)</b> that opens its <code>ctx.betterSidebar</code> service to every plugin —<br />
-  register new pages and file viewers via <code>registerTab</code> / <code>registerFileViewer</code>.<br />
-  The 7 built-in tabs + 6 viewers go through <b>the same service</b> as third-party plugins: we eat our own dog food.<br /><br />
-  <b>🧩 Ecosystem plugins</b>: tag your repo with the <a href="https://github.com/topics/dsh-better-sidebar"><code>dsh-better-sidebar</code> topic</a> to join the ecosystem.
+  register new sidebar pages and file viewers via <code>registerTab</code> / <code>registerFileViewer</code>.
 </div>
 
 <div align="center">
@@ -32,7 +30,7 @@
 - **⚡ On-demand Loading**: only ~325KB core at startup; heavy deps (terminal / editor) load on demand ([design](docs/plans/2026-08-12-lazy-chunks-design.md))
 - **🌏 i18n**: UI text follows DSH's language (zh / en) with live switching
 
-> 🔌 **Our stance**: build a plugin like a service, and use it like a user. The 7 built-in tabs + 6 viewers hold no special privileges — they register through the same `ctx.betterSidebar` API as third-party plugins; whatever the ecosystem can do better, we hand off. See the "🔌 Service" section below and the [external plugin guide](./docs/external-plugin-guide.md).
+> 🔌 **Core principle**: service-first — the 7 built-in tabs + 6 viewers register through the same `ctx.betterSidebar` API as third-party plugins, with fully equal capabilities; anything the ecosystem can provide better is delegated to ecosystem plugins. See the "🔌 Service" section below and the [external plugin guide](./docs/external-plugin-guide.md).
 
 ## 🆕 Recent Updates
 
@@ -40,8 +38,8 @@
 
 | Feature | Description | Screenshot |
 |---|---|---|
-| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="320" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
-| ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="320" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
+| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
+| ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="480" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
 | 🖱️ Tab-bar scroll | Mouse-wheel horizontal scrolling on the tab bar | |
 | 🐛 Fixes | Remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path | |
 
@@ -208,7 +206,7 @@ Update: `git pull && pnpm install && pnpm build` → `node scripts/package-regis
 
 ## 🔌 Service: register tabs & file viewers
 
-Since v0.4.0 the plugin exposes the `ctx.betterSidebar` service — other plugins can register sidebar pages and file viewers (the 7 built-in tabs + 6 viewers go through the same service, eating our own dog food):
+Since v0.4.0 the plugin exposes the `ctx.betterSidebar` service — other plugins can register sidebar pages and file viewers (the 7 built-in tabs + 6 viewers register through the same service):
 
 ```ts
 import type {} from 'dsh-better-sidebar'  // triggers the ctx.betterSidebar type merge
