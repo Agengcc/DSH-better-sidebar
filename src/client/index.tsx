@@ -8,7 +8,7 @@
  * bundle itself is a module-table consumer only (react + ui-primitives +
  * xterm, all provided or inlined).
  */
-import { Component, createElement, type ErrorInfo, type ReactNode } from 'react'
+import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { Context } from '../context-types.ts'
 import { createSidebarStore } from './state.ts'
@@ -16,6 +16,7 @@ import { createBetterSidebarService } from './service.ts'
 import { resetChunks } from './chunk-loader.ts'
 import { registerBuiltins } from './builtins/index.ts'
 import { Sidebar } from './Sidebar.tsx'
+import { RenderBoundary } from './RenderBoundary.tsx'
 import { registerOpenPathInterception, registerTurnTailInterception } from './intercept.tsx'
 import { registerLinkInterception } from './link-intercept.ts'
 import { registerImeGuard } from './ime-guard.ts'
@@ -31,40 +32,12 @@ import './layout.css'
 export const inject = ['slots', 'sessions', 'connection', 'workspaces', 'locale']
 
 /**
- * Error boundary over the sidebar tree: a render error must never blank the
- * whole panel silently — it shows a dismissible error strip and logs the
- * stack for diagnosis.
+ * Error boundary over the sidebar tree (root scope): a render error in the
+ * sidebar SHELL itself must never blank the page silently — the shared
+ * RenderBoundary shows a dismissible error strip and logs the stack. The
+ * per-tab scope (Sidebar.tsx) catches viewer/editor crashes first; this root
+ * boundary stays as the last resort for Workbench/shell errors.
  */
-class SidebarBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
-  state = { error: null as string | null }
-
-  static getDerivedStateFromError(error: unknown): { error: string } {
-    return { error: error instanceof Error ? error.message : String(error) }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[dsh-better-sidebar] render error:', error, info.componentStack)
-  }
-
-  render(): ReactNode {
-    if (this.state.error !== null) {
-      return (
-        <div className={css.boundaryError}>
-          <span>dsh-better-sidebar: {this.state.error}</span>
-          <button
-            type="button"
-            className={css.terminalRetry}
-            onClick={() => { this.setState({ error: null }) }}
-          >
-            {t('terminalRetry')}
-          </button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
 /**
  * Client plugin body.
  * @param ctx - the client cordis context (slots, sessions).
@@ -141,7 +114,7 @@ export function apply(ctx: Context): void {
           host.setAttribute('data-dsh-better-sidebar', '')
           document.body.appendChild(host)
           root = createRoot(host)
-          root.render(createElement(SidebarBoundary, null, createElement(Sidebar, { ctx, store: sidebarStore })))
+          root.render(createElement(RenderBoundary, { className: css.boundaryError }, createElement(Sidebar, { ctx, store: sidebarStore })))
         } catch (error) {
           fail('mount', error)
         }
