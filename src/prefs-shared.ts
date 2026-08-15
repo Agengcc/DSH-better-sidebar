@@ -85,13 +85,31 @@ export interface SidebarPrefs {
    */
   browserNoSandbox: boolean
   /**
-   * Whether clicking an http(s) EXTERNAL link in the GUI (chat messages,
-   * tool rows, prose mentions) opens the sidebar browser instead of a new
-   * browser tab. On by default; gated on the browser tab's own enable
-   * switch (both must be on for the takeover). Ctrl/Cmd+click always
-   * bypasses the takeover.
+   * MASTER switch: whether clicking an EXTERNAL link in the GUI (chat
+   * messages, tool rows, prose mentions) is taken over into the sidebar at
+   * all. On by default; the per-protocol granularity lives in
+   * `browserInterceptHttp` / `browserInterceptHttps` (the protocol flag
+   * must also be on), and the target tab's own enable switch gates it too.
+   * Ctrl/Cmd+click always bypasses the takeover. Kept as the master so old
+   * documents keep their meaning with no migration (an explicit `false`
+   * stays "never take over").
    */
   browserInterceptLinks: boolean
+  /**
+   * Whether clicking an http EXTERNAL link in the GUI opens the sidebar
+   * (the built-in browser tab, or a plugin tab that declares `urlTarget`)
+   * instead of a new browser tab. On by default; gated on the
+   * `browserInterceptLinks` master and the target tab's own enable switch.
+   */
+  browserInterceptHttp: boolean
+  /**
+   * Whether clicking an https EXTERNAL link in the GUI opens the sidebar
+   * instead of a new browser tab. OFF by default — most https sites (e.g.
+   * GitHub) refuse iframe embedding, so the system browser is the smoother
+   * default; gated on the `browserInterceptLinks` master and the target
+   * tab's own enable switch.
+   */
+  browserInterceptHttps: boolean
   /**
    * Per-tab enable switches, keyed by tab descriptor id (`'explorer'`,
    * `'my-plugin:db'`). An ABSENT key means enabled — only an explicit
@@ -145,6 +163,8 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   htmlViewerDefaultUnsafe: false,
   browserNoSandbox: false,
   browserInterceptLinks: true,
+  browserInterceptHttp: true,
+  browserInterceptHttps: false,
   tabsEnabled: {},
   viewersEnabled: {},
   pluginSettings: {},

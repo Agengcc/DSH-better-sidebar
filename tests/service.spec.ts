@@ -20,7 +20,7 @@ if (g.localStorage === undefined) {
   }
 }
 
-import { createBetterSidebarService, SIDEBAR_FEATURES, SIDEBAR_SERVICE_VERSION } from '../src/client/service.ts'
+import { createBetterSidebarService, matchUrlTarget, SIDEBAR_FEATURES, SIDEBAR_SERVICE_VERSION } from '../src/client/service.ts'
 import { createSidebarStore, allLeaves, makeDefaultState, openDiffTab, sanitizeState } from '../src/client/state.ts'
 
 describe('BetterSidebar service', () => {
@@ -220,6 +220,55 @@ describe('matchFileViewer', () => {
     const service = createBetterSidebarService(store)
     service.registerFileViewer({ id: 'img', exts: ['png'], fetchStrategy: 'mediaUrl', component: () => null })
     expect(service.matchFileViewer('doc.txt')).toBeUndefined()
+  })
+})
+
+describe('matchUrlTarget (v0.13.0)', () => {
+  /** A tab descriptor that claims a URL host. */
+  const claimingTab = (id: string, host: string) => ({
+    id,
+    title: id,
+    urlTarget: (url: URL): boolean => url.hostname === host,
+    component: () => null,
+  })
+
+  it('returns undefined when no tab declares urlTarget', () => {
+    const tabs = [
+      { id: 'explorer', title: 'E', component: () => null },
+      { id: 'git', title: 'G', component: () => null },
+    ]
+    expect(matchUrlTarget(tabs, new URL('http://example.com/'))).toBeUndefined()
+  })
+
+  it('returns the first REGISTRATION-ORDER claim (first match wins)', () => {
+    const tabs = [
+      claimingTab('my:one', 'example.com'),
+      claimingTab('my:two', 'example.com'),
+    ]
+    expect(matchUrlTarget(tabs, new URL('https://example.com/x'))?.id).toBe('my:one')
+    // A non-matching earlier tab yields to the next match.
+    const tabs2 = [
+      claimingTab('my:one', 'other.com'),
+      claimingTab('my:two', 'example.com'),
+    ]
+    expect(matchUrlTarget(tabs2, new URL('https://example.com/x'))?.id).toBe('my:two')
+  })
+
+  it('skips a throwing predicate (the next claim still wins)', () => {
+    const tabs = [
+      { id: 'my:broken', title: 'B', urlTarget: () => { throw new Error('boom') }, component: () => null },
+      claimingTab('my:ok', 'example.com'),
+    ]
+    expect(matchUrlTarget(tabs, new URL('https://example.com/x'))?.id).toBe('my:ok')
+  })
+
+  it('never matches the built-in browser (no urlTarget declared — the caller falls back)', () => {
+    const tabs = [
+      { id: 'browser', title: 'Browser', component: () => null },
+      { id: 'my:ok', title: 'OK', urlTarget: () => true, component: () => null },
+    ]
+    expect(matchUrlTarget(tabs, new URL('http://example.com/'))?.id).toBe('my:ok')
+    expect(matchUrlTarget([{ id: 'browser', title: 'Browser', component: () => null }], new URL('http://example.com/'))).toBeUndefined()
   })
 })
 

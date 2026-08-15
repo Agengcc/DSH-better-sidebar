@@ -95,6 +95,8 @@ export const PrefsSchema: z<SidebarPrefs> = z.object({
   htmlViewerDefaultUnsafe: z.boolean().default(false),
   browserNoSandbox: z.boolean().default(false),
   browserInterceptLinks: z.boolean().default(true),
+  browserInterceptHttp: z.boolean().default(true),
+  browserInterceptHttps: z.boolean().default(false),
   // Per-feature enable switches are OPEN maps (any tab/viewer id, built-in or
   // external): an absent key means enabled, so old documents resolve to {}
   // (everything on) with no migration. Non-boolean values fail validation.

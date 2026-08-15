@@ -67,14 +67,19 @@ describe('built-in tab registrations', () => {
     expect(toggles[1]?.type ?? 'switch').toBe('switch')
   })
 
-  it('the browser tab declares its sandbox and link-takeover related settings', () => {
+  it('the browser tab declares its sandbox, link-takeover master and per-protocol settings', () => {
     const { service } = setup()
     const toggles = service.getTab('browser')?.settings?.toggles ?? []
-    expect(toggles.map(t => t.key)).toEqual(['browserNoSandbox', 'browserInterceptLinks'])
-    expect(toggles[0]?.title).toBeDefined()
-    expect(toggles[0]?.desc).toBeDefined()
-    expect(toggles[1]?.title).toBeDefined()
-    expect(toggles[1]?.desc).toBeDefined()
+    expect(toggles.map(t => t.key)).toEqual([
+      'browserNoSandbox',
+      'browserInterceptLinks',
+      'browserInterceptHttp',
+      'browserInterceptHttps',
+    ])
+    for (const toggle of toggles) {
+      expect(toggle.title).toBeDefined()
+      expect(toggle.desc).toBeDefined()
+    }
   })
 
   it('the browser createTab mints browser:<n> ids and bumps nextBrowser', () => {

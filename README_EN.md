@@ -20,7 +20,7 @@
 ## ✨ Features
 
 - **🗂️ File Workbench**: file explorer (lazy-loading tree) + CodeMirror editor; inline preview for images / Markdown / HTML / PDF / Office
-- **🌐 Embedded Browser**: multiple web tabs with back / forward / refresh; content runs in a sandboxed iframe; external links open in the sidebar by default
+- **🌐 Embedded Browser**: multiple web tabs with back / forward / refresh; content runs in a sandboxed iframe; external links are routed by protocol by default — HTTP opens in the sidebar, HTTPS goes to the system browser (both adjustable in settings)
 - **💻 Real Terminal**: xterm.js + node-pty real shell, reconnect with transcript replay; optionally injects `terminal_*` tools for the model
 - **🌿 Git Panel**: real diff + VSCode-style diff tabs, history, right-click to stage / commit / revert
 - **🧩 Background Tasks**: agent topology + background tasks (exit codes / live output / force-kill)
@@ -38,7 +38,7 @@
 
 | Feature | Description | Screenshot |
 |---|---|---|
-| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
+| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
 | ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="480" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
 | 🖱️ Tab-bar scroll | Mouse-wheel horizontal scrolling on the tab bar | |
 | 🐛 Fixes | Remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path | |

@@ -187,9 +187,10 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
       title: () => t('browser'),
       icon: (size: number) => <IconGlobeOutline16 size={size} />,
       order: 50,
-      // Declarative settings: the sandbox escape hatch and the link
-      // takeover render under this tab's row in the Side card settings
-      // page (the sandbox one is warned on).
+      // Declarative settings: the sandbox escape hatch, the link-takeover
+      // MASTER switch, and the per-protocol takeover switches (http on /
+      // https off by default) render under this tab's row in the Side card
+      // settings page (the sandbox one is warned on).
       settings: {
         toggles: [{
           key: 'browserNoSandbox',
@@ -199,6 +200,14 @@ export function builtinTabs(ctx: Context): readonly TabDescriptor[] {
           key: 'browserInterceptLinks',
           title: () => t('settingsBrowserLinksTitle'),
           desc: () => t('settingsBrowserLinksDesc'),
+        }, {
+          key: 'browserInterceptHttp',
+          title: () => t('settingsBrowserHttpTitle'),
+          desc: () => t('settingsBrowserHttpDesc'),
+        }, {
+          key: 'browserInterceptHttps',
+          title: () => t('settingsBrowserHttpsTitle'),
+          desc: () => t('settingsBrowserHttpsDesc'),
         }],
       },
       createTab: (state) => ({
