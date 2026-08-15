@@ -24,6 +24,7 @@ import { nginx } from '@codemirror/legacy-modes/mode/nginx'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { csharp, kotlin } from '@codemirror/legacy-modes/mode/clike'
+import { swift } from '@codemirror/legacy-modes/mode/swift'
 
 /** The lowercased file extension of a path ('' when none). */
 export function extOf(path: string): string {
@@ -51,6 +52,7 @@ export function languageKeyForExt(ext: string): string | null {
     case 'java': return 'java'
     case 'cs': return 'csharp'
     case 'kt': case 'kts': return 'kotlin'
+    case 'swift': return 'swift'
     case 'c': case 'h': return 'c'
     case 'cc': case 'cpp': case 'cxx': case 'hpp': case 'hh': case 'hxx': return 'cpp'
     case 'rs': return 'rust'
@@ -81,6 +83,7 @@ const FACTORIES: Record<string, () => Language | LanguageSupport> = {
   java: () => java(),
   csharp: () => StreamLanguage.define(csharp),
   kotlin: () => StreamLanguage.define(kotlin),
+  swift: () => StreamLanguage.define(swift),
   c: () => cpp(),
   cpp: () => cpp(),
   rust: () => rust(),
