@@ -3,7 +3,9 @@
 <!-- Hero -->
 <div align="center">
   <b style="font-size: 1.15em;">A service-oriented sidebar framework, and a complete workbench out of the box</b><br /><br />
-  <code>File management</code> <code>Edit &amp; preview</code> <code>Embedded browser</code> <code>Real terminal</code> <code>Git panel</code> <code>Background tasks</code> <code>Plugin integration</code><br /><br />
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
+  <a href="https://dshfind.com/en/plugins/omdsh-dev/DSH-better-sidebar?ref=badge"><img alt="dshfind" src="https://dshfind.com/api/badge/omdsh-dev/DSH-better-sidebar?lang=en" /></a><br /><br />
+  <img alt="File management" src="https://img.shields.io/badge/-File%20management-4d6bfe" /> <img alt="Edit &amp; preview" src="https://img.shields.io/badge/-Edit%20%26%20preview-4d6bfe" /> <img alt="Embedded browser" src="https://img.shields.io/badge/-Embedded%20browser-4d6bfe" /> <img alt="Real terminal" src="https://img.shields.io/badge/-Real%20terminal-4d6bfe" /> <img alt="Git panel" src="https://img.shields.io/badge/-Git%20panel-4d6bfe" /> <img alt="Background tasks" src="https://img.shields.io/badge/-Background%20tasks-4d6bfe" /> <img alt="Plugin integration" src="https://img.shields.io/badge/-Plugin%20integration-4d6bfe" /><br /><br />
   <b>A dual workbench (right sidebar + bottom panel)</b> that opens its <code>ctx.betterSidebar</code> service to every plugin —<br />
   register new sidebar pages and file viewers via <code>registerTab</code> / <code>registerFileViewer</code>.
 </div>
@@ -35,6 +37,8 @@
 ## 🆕 Recent Updates
 
 <small>v0.12.2</small>
+
+> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the table below for details.
 
 | Feature | Description | Screenshot |
 |---|---|---|

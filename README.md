@@ -3,7 +3,9 @@
 <!-- Hero -->
 <div align="center">
   <b style="font-size: 1.15em;">一个服务化的侧边栏框架，一套开箱即用的完整工作台</b><br /><br />
-  <code>文件管理</code> <code>编辑预览</code> <code>内嵌浏览器</code> <code>真实终端</code> <code>Git 面板</code> <code>后台任务</code> <code>插件接入</code><br /><br />
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
+  <a href="https://dshfind.com/zh/plugins/omdsh-dev/DSH-better-sidebar?ref=badge"><img alt="dshfind" src="https://dshfind.com/api/badge/omdsh-dev/DSH-better-sidebar?lang=zh" /></a><br /><br />
+  <img alt="文件管理" src="https://img.shields.io/badge/-文件管理-4d6bfe" /> <img alt="编辑预览" src="https://img.shields.io/badge/-编辑预览-4d6bfe" /> <img alt="内嵌浏览器" src="https://img.shields.io/badge/-内嵌浏览器-4d6bfe" /> <img alt="真实终端" src="https://img.shields.io/badge/-真实终端-4d6bfe" /> <img alt="Git 面板" src="https://img.shields.io/badge/-Git%20面板-4d6bfe" /> <img alt="后台任务" src="https://img.shields.io/badge/-后台任务-4d6bfe" /> <img alt="插件接入" src="https://img.shields.io/badge/-插件接入-4d6bfe" /><br /><br />
   <b>右侧栏 + 底部面板双工作台</b>，并把 <code>ctx.betterSidebar</code> 服务开放给所有插件——<br />
   通过 <code>registerTab</code> / <code>registerFileViewer</code> 注册新的侧边栏页面与文件预览器。
 </div>
@@ -35,6 +37,8 @@
 ## 🆕 最近更新
 
 <small>v0.12.2</small>
+
+> 📝 **说明**：本版新增「位置兼容模式」——为 Windows 右上角原生标题栏预留顶部空间，侧边栏整体下移，距离可在齿轮弹窗自定义（0–120px）。随 0.12.0 起的服务化基座一同发布：能力探测、状态订阅、tab 角标、生命周期回调、外链认领（`urlTarget`）与插件自有设置均已就绪，第三方插件可深度接入；设置页新增「添加插件」推荐目录。详细条目见下表。
 
 | 功能 | 说明 | 截图 |
 |---|---|---|
