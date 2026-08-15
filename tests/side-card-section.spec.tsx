@@ -151,6 +151,24 @@ describe('SideCardSection declarative inventory', () => {
     const html = renderSection(store, service)
     expect(html).not.toContain('Feature settings')
   })
+
+  it('renders the position-compat mode general row: off by default, checked when the pref is on', () => {
+    const { store, service } = mount()
+    let html = renderSection(store, service)
+    // The general row renders its title and description.
+    expect(html).toContain('Position compatibility mode')
+    expect(html).toContain('Reserve space for the native Windows title bar')
+    // Three general rows now: openByDefault + interceptOpenPath checked,
+    // the new titleBarCompat row UNCHECKED (default off) — the checked
+    // checkbox count stays at 2 while the total checkbox count is 3.
+    expect(html.match(/type="checkbox"/g)?.length).toBe(3)
+    expect(html.match(/checked=""/g)?.length).toBe(2)
+
+    // When the pref is on, the new switch is checked too.
+    store.setPrefs({ ...store.getPrefs(), titleBarCompat: true })
+    html = renderSection(store, service)
+    expect(html.match(/checked=""/g)?.length).toBe(3)
+  })
 })
 
 describe('FeatureSettingsRows (the secondary settings popup body)', () => {

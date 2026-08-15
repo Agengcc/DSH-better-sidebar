@@ -209,6 +209,28 @@
   padding-right: 40px;
 }
 
+/* ── Position compatibility mode (Windows native title bar) ────────────── */
+
+/* Windows frameless / hidden-title-bar windows draw the native caption
+   strip (minimize / maximize / close) at the window's top-right corner,
+   OVER the web content. When the user enables the "position compatibility"
+   pref, the sidebar yields the strip: the toggle cluster drops below it and
+   the right panel's content starts below it — the panel's surface still
+   spans the full height, so the caption buttons float over empty sidebar
+   fill (the VSCode hidden-title-bar look). The bottom panel is unaffected:
+   it sits at the window's bottom, never under the top strip. The Sidebar
+   shell toggles the body attribute from the prefs. */
+:global(body[data-dsh-title-bar-compat]) .toggleCluster {
+  top: 43px; /* 40px caption strip + the original 3px inset */
+}
+
+:global(body[data-dsh-title-bar-compat]) .panel {
+  /* The caption strip is drawn over the panel's own top edge: keep the
+     surface full-height and push the content (the tab strip) below the
+     strip instead. .panelResize is absolutely positioned and unaffected. */
+  padding-top: 40px;
+}
+
 /* The shared corner (both panels open): the intersection of the right
    panel's left edge and the bottom panel's top edge. Horizontal drags
    resize the width, vertical drags the height — the two panels drag

@@ -59,6 +59,9 @@ export function parsePrefs(value: unknown): SidebarPrefs {
     interceptOpenPath: typeof record.interceptOpenPath === 'boolean'
       ? record.interceptOpenPath
       : SIDEBAR_PREFS_DEFAULTS.interceptOpenPath,
+    titleBarCompat: typeof record.titleBarCompat === 'boolean'
+      ? record.titleBarCompat
+      : SIDEBAR_PREFS_DEFAULTS.titleBarCompat,
     htmlViewerNoSandbox: typeof record.htmlViewerNoSandbox === 'boolean'
       ? record.htmlViewerNoSandbox
       : SIDEBAR_PREFS_DEFAULTS.htmlViewerNoSandbox,
