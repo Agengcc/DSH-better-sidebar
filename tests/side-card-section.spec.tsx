@@ -163,11 +163,15 @@ describe('SideCardSection declarative inventory', () => {
     // checkbox count stays at 2 while the total checkbox count is 3.
     expect(html.match(/type="checkbox"/g)?.length).toBe(3)
     expect(html.match(/checked=""/g)?.length).toBe(2)
+    // The row's gear (customize the shift distance) is dormant while the
+    // mode is off — the feature-card convention.
+    expect(html).not.toContain('Position compatibility mode Feature settings')
 
-    // When the pref is on, the new switch is checked too.
+    // When the pref is on, the new switch is checked and the gear appears.
     store.setPrefs({ ...store.getPrefs(), titleBarCompat: true })
     html = renderSection(store, service)
     expect(html.match(/checked=""/g)?.length).toBe(3)
+    expect(html).toContain('aria-label="Position compatibility mode Feature settings"')
   })
 })
 
@@ -244,6 +248,31 @@ describe('FeatureSettingsRows (the secondary settings popup body)', () => {
     expect(html).toContain('value="18"')
     expect(html).toContain('min="9"')
     expect(html).toContain('max="32"')
+    expect(html).toContain('px')
+    expect(html).not.toContain('type="checkbox"')
+  })
+
+  it('renders the title-bar strip row: the pref value, the 0–120 bounds and the px suffix', () => {
+    const html = renderToString(createElement(FeatureSettingsRows, {
+      toggles: [{
+        key: 'titleBarStripPx',
+        type: 'number',
+        title: () => 'Shift distance',
+        desc: () => 'Title-bar strip height in px',
+        min: 0,
+        max: 120,
+        unit: 'px',
+      }],
+      prefs: { ...prefs, titleBarStripPx: 64 },
+      onToggle: () => {},
+      onCommit: () => '64',
+    }))
+    expect(html).toContain('Shift distance')
+    expect(html).toContain('Title-bar strip height in px')
+    expect(html).toContain('type="number"')
+    expect(html).toContain('value="64"')
+    expect(html).toContain('min="0"')
+    expect(html).toContain('max="120"')
     expect(html).toContain('px')
     expect(html).not.toContain('type="checkbox"')
   })

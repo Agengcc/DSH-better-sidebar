@@ -69,6 +69,13 @@ export interface SidebarPrefs {
    */
   titleBarCompat: boolean
   /**
+   * The reserved top strip height in px when `titleBarCompat` is on
+   * (0–120, default 40). Drives the `--dsh-title-bar-strip` CSS variable:
+   * the toggle cluster drops `strip + 3px` and the right panel's content
+   * starts `strip` px below its top edge.
+   */
+  titleBarStripPx: number
+  /**
    * Whether the HTML previewer drops its sandboxed iframe. Sandbox ON (the
    * default) renders previewed HTML in an opaque-origin iframe that cannot
    * touch the GUI; turning it OFF runs the previewed page with the GUI's
@@ -156,6 +163,11 @@ export const TERMINAL_FONT_SIZE_MIN = 9
 export const TERMINAL_FONT_SIZE_MAX = 32
 export const TERMINAL_FONT_SIZE_DEFAULT = 13
 
+/** Range contract of {@link SidebarPrefs.titleBarStripPx}. */
+export const TITLE_BAR_STRIP_MIN = 0
+export const TITLE_BAR_STRIP_MAX = 120
+export const TITLE_BAR_STRIP_DEFAULT = 40
+
 /** Fallback prefs used whenever the settings document is unreachable or malformed. */
 export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   openByDefault: true,
@@ -168,6 +180,7 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   interceptOpenPath: true,
   titleBarCompat: false,
+  titleBarStripPx: TITLE_BAR_STRIP_DEFAULT,
   htmlViewerNoSandbox: false,
   htmlViewerDefaultUnsafe: false,
   browserNoSandbox: false,
@@ -187,4 +200,9 @@ export function clampWidthPercent(value: number): number {
 /** Clamp one terminal font size into the contract range (shared by schema and client reads). */
 export function clampTerminalFontSize(value: number): number {
   return Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(value)))
+}
+
+/** Clamp one title-bar strip height into the contract range (shared by schema and client reads). */
+export function clampTitleBarStrip(value: number): number {
+  return Math.min(TITLE_BAR_STRIP_MAX, Math.max(TITLE_BAR_STRIP_MIN, Math.round(value)))
 }

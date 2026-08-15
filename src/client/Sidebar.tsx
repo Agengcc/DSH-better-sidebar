@@ -172,15 +172,27 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
   // window's top-right corner, OVER the web content. When the user enables
   // the pref, the body attribute lets sidebar.module.css drop the toggle
   // cluster below the strip and push the right panel's content below it.
-  // The attribute rides the snapshot's prefs, so flipping the setting
-  // re-renders and re-applies immediately; the cleanup removes it on
-  // unmount/boundary swap so a crashed sidebar never leaves it behind.
+  // The strip height is user-tunable (titleBarStripPx) and rides a CSS
+  // variable so the rules stay declarative. The attribute rides the
+  // snapshot's prefs, so flipping the setting re-renders and re-applies
+  // immediately; the cleanup removes both on unmount/boundary swap so a
+  // crashed sidebar never leaves them behind.
   const titleBarCompat = snapshot.prefs.titleBarCompat
+  const titleBarStrip = snapshot.prefs.titleBarStripPx
   useEffect(() => {
-    if (titleBarCompat) document.body.setAttribute('data-dsh-title-bar-compat', '')
-    else document.body.removeAttribute('data-dsh-title-bar-compat')
-    return () => { document.body.removeAttribute('data-dsh-title-bar-compat') }
-  }, [titleBarCompat])
+    const root = document.documentElement
+    if (titleBarCompat) {
+      document.body.setAttribute('data-dsh-title-bar-compat', '')
+      root.style.setProperty('--dsh-title-bar-strip', `${titleBarStrip}px`)
+    } else {
+      document.body.removeAttribute('data-dsh-title-bar-compat')
+      root.style.removeProperty('--dsh-title-bar-strip')
+    }
+    return () => {
+      document.body.removeAttribute('data-dsh-title-bar-compat')
+      root.style.removeProperty('--dsh-title-bar-strip')
+    }
+  }, [titleBarCompat, titleBarStrip])
 
   /**
    * Bottom-panel merge on narrow viewports: whenever a session is current
