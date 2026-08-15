@@ -548,6 +548,8 @@ describe('side card settings routes', () => {
         terminalFontFamily: '',
         terminalFontSize: 13,
         interceptOpenPath: true,
+        titleBarCompat: false,
+        titleBarStripPx: 40,
         htmlViewerNoSandbox: false,
         htmlViewerDefaultUnsafe: false,
         browserNoSandbox: false,

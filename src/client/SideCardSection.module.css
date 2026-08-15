@@ -126,7 +126,8 @@
 }
 
 .cardMain:focus-visible,
-.cardGear:focus-visible {
+.cardGear:focus-visible,
+.rowGear:focus-visible {
   outline: 2px solid var(--dsw-alias-border-l4);
   outline-offset: 2px;
 }
@@ -262,6 +263,29 @@
 }
 
 .cardGear:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The gear icon button on a general settings ROW (the position-compat
+   row's "customize the strip height" entry): the same 16px icon-button
+   recipe as the card gear, sitting in the row's control area. */
+.rowGear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  flex: none;
+}
+
+.rowGear:hover {
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-interactive-bg-hover);
 }

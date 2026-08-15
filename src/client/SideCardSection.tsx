@@ -52,6 +52,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   clampWidthPercent,
+  TITLE_BAR_STRIP_MAX,
+  TITLE_BAR_STRIP_MIN,
   WIDTH_PERCENT_MAX,
   WIDTH_PERCENT_MIN,
   type SidebarPrefs,
@@ -380,6 +382,8 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
   const [error, setError] = useState<string | null>(null)
   // Which feature's secondary settings popup is open (null = closed).
   const [settingsFor, setSettingsFor] = useState<TabDescriptor | FileViewerDescriptor | null>(null)
+  // Whether the position-compat strip popup (the gear on the 常规 row) is open.
+  const [stripSettingsOpen, setStripSettingsOpen] = useState(false)
   // Whether the "add plugin" modal (a dashed card at the end of the
   // 侧边栏内容 / 文件预览 grids) is open, and for which extension point
   // (null = closed).
@@ -660,6 +664,36 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             onChange={(next) => { applyPref({ interceptOpenPath: next }) }}
           />
         </div>
+        <div className={css.row}>
+          <span className={css.rowText}>
+            <span className={css.title}>{t('settingsTitleBarTitle')}</span>
+            <span className={css.desc}>{t('settingsTitleBarDesc')}</span>
+          </span>
+          <span className={css.control}>
+            {/*
+              The position-compat row's gear (same popup pattern as the
+              feature cards): opens a Modal with the strip-height number row.
+              Hidden while the mode is off — its related setting is dormant
+              then (the feature-card convention).
+            */}
+            {prefs.titleBarCompat && (
+              <button
+                type="button"
+                className={css.rowGear}
+                aria-label={`${t('settingsTitleBarTitle')} ${t('settingsPopup')}`}
+                title={t('settingsPopup')}
+                onClick={() => { setStripSettingsOpen(true) }}
+              >
+                <IconSettingsOutline16 size={14} />
+              </button>
+            )}
+            <Switch
+              label={t('settingsTitleBarTitle')}
+              checked={prefs.titleBarCompat}
+              onChange={(next) => { applyPref({ titleBarCompat: next }) }}
+            />
+          </span>
+        </div>
       </div>
 
       {/* 侧边栏内容: one small card per registered tab type in a responsive
@@ -779,6 +813,41 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             onClose={() => { setSettingsFor(null) }}
             store={store}
             service={service}
+          />
+        </Modal>
+      )}
+
+      {/* The position-compat strip popup (opened by the gear on the 常规
+          row): one number row for the reserved strip height in px. Same
+          Modal chrome and row machinery as the feature popups — mounted
+          only while open (the Modal SSR rule above). */}
+      {stripSettingsOpen && (
+        <Modal
+          open
+          onClose={() => { setStripSettingsOpen(false) }}
+          title={t('settingsTitleBarTitle')}
+          description={t('settingsPopupDesc', { feature: t('settingsTitleBarTitle') })}
+          closeLabel={t('close')}
+          className={css.popupDialog}
+          footer={(
+            <button type="button" className={css.done} onClick={() => { setStripSettingsOpen(false) }}>
+              {t('settingsDone')}
+            </button>
+          )}
+        >
+          <FeatureSettingsRows
+            toggles={[{
+              key: 'titleBarStripPx',
+              type: 'number',
+              title: () => t('settingsTitleBarStripTitle'),
+              desc: () => t('settingsTitleBarStripDesc'),
+              min: TITLE_BAR_STRIP_MIN,
+              max: TITLE_BAR_STRIP_MAX,
+              unit: 'px',
+            }]}
+            prefs={prefs}
+            onToggle={onToggleSetting}
+            onCommit={onCommitSetting}
           />
         </Modal>
       )}
