@@ -34,10 +34,11 @@
 
 ## 🆕 Recent Updates
 
-<small>v0.12.1</small>
+<small>v0.12.2</small>
 
 | Feature | Description | Screenshot |
 |---|---|---|
+| 📐 Position compat mode | New "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default) | |
 | 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
 | ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="480" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
 | 🖱️ Tab-bar scroll | Mouse-wheel horizontal scrolling on the tab bar | |
@@ -66,10 +67,10 @@ Then **hard-refresh the browser** (Cmd/Ctrl+Shift+R) to see the sidebar (DSH hot
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.1 --restart
+curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.2 --restart
 
 # Windows PowerShell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.1 -Restart
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.2 -Restart
 ```
 
 Not sure? Add `--dry-run` (`-DryRun` in PowerShell) to preview before running.
@@ -95,7 +96,7 @@ minimumReleaseAgeExclude:
   - dsh-better-sidebar
 EOF
 
-# ③ Install and auto-mount (no @version = npm's latest; pin with dsh-better-sidebar@0.12.1)
+# ③ Install and auto-mount (no @version = npm's latest; pin with dsh-better-sidebar@0.12.2)
 npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
 ```
 
@@ -126,7 +127,7 @@ The one-click script does four things, all idempotent (safe to re-run):
 3. Runs `dsh plugin --profile web add dsh-better-sidebar`: registers the dependency → detects `dsh.bundle.patch` → auto-appends the plugin to `dsh.profile.bundles`;
 4. Removes any leftover hand-written mount line to avoid double-mounting (two sidebars on the page).
 
-`curl | bash` / `irm | iex` executes remote code — the scripts are open source in the repo (`scripts/install.sh` / `scripts/install.ps1`); download and review them first if you prefer. The plugin ships as npm package `dsh-better-sidebar@0.12.1` and mounts via `dsh.bundle.patch` (the shipped `cordis.patch.yml`), so the DSH source is never modified.
+`curl | bash` / `irm | iex` executes remote code — the scripts are open source in the repo (`scripts/install.sh` / `scripts/install.ps1`); download and review them first if you prefer. The plugin ships as npm package `dsh-better-sidebar@0.12.2` and mounts via `dsh.bundle.patch` (the shipped `cordis.patch.yml`), so the DSH source is never modified.
 
 </details>
 
@@ -137,7 +138,7 @@ The one-click script does four things, all idempotent (safe to re-run):
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.12.1"`) and run `pnpm install`. Then hard-refresh the browser (Cmd/Ctrl+Shift+R) — client changes do not need a DSH restart.
+or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.12.2"`) and run `pnpm install`. Then hard-refresh the browser (Cmd/Ctrl+Shift+R) — client changes do not need a DSH restart.
 
 </details>
 
@@ -172,7 +173,7 @@ To debug local changes or track the dev branch, point the dependency at a local 
 5. Restart DSH and hard-refresh
 ```
 
-Update: `git pull && pnpm install && pnpm build` → just hard-refresh the browser (client changes hot-reload; only host-half changes need a DSH restart). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.12.1"` and re-run `pnpm install`.
+Update: `git pull && pnpm install && pnpm build` → just hard-refresh the browser (client changes hot-reload; only host-half changes need a DSH restart). To switch back to the npm channel, restore `"dsh-better-sidebar": "^0.12.2"` and re-run `pnpm install`.
 
 </details>
 
