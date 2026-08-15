@@ -167,6 +167,21 @@ export function Sidebar(props: { ctx: Context; store: SidebarStore }) {
     return () => { document.body.removeAttribute('data-dsh-sidebar-collapsed') }
   }, [collapsed])
 
+  // Position compatibility mode (titleBarCompat pref): Windows frameless
+  // windows draw the native title bar (minimize/maximize/close) at the
+  // window's top-right corner, OVER the web content. When the user enables
+  // the pref, the body attribute lets sidebar.module.css drop the toggle
+  // cluster below the strip and push the right panel's content below it.
+  // The attribute rides the snapshot's prefs, so flipping the setting
+  // re-renders and re-applies immediately; the cleanup removes it on
+  // unmount/boundary swap so a crashed sidebar never leaves it behind.
+  const titleBarCompat = snapshot.prefs.titleBarCompat
+  useEffect(() => {
+    if (titleBarCompat) document.body.setAttribute('data-dsh-title-bar-compat', '')
+    else document.body.removeAttribute('data-dsh-title-bar-compat')
+    return () => { document.body.removeAttribute('data-dsh-title-bar-compat') }
+  }, [titleBarCompat])
+
   /**
    * Bottom-panel merge on narrow viewports: whenever a session is current
    * while narrow (mount, session switch, or a desktop→narrow transition),
