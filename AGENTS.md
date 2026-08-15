@@ -145,6 +145,16 @@ interface TabDescriptor {
    */
   createTab?: (state: SidebarState) => { tab: SidebarTab; patch?: Partial<SidebarState> } | null
   /**
+   * 外链点击目标认领（v0.13.0+）：聊天/界面外链被接管（`browserInterceptLinks`
+   * 总闸 + URL 对应协议开关均开）时，第一个 `urlTarget(url)` 命中且未被设置
+   * 禁用的注册 tab 类型以 `openTab({ type, url, title: hostname })` 打开——
+   * URL 即全部载荷（tab 从 `tab.path` 读取）。注册顺序先到先得；谓词抛错被
+   * 吞掉（跳过该类型）。内置 browser 不声明 urlTarget，永远是隐式兜底，不会
+   * 遮蔽插件声明。要同时容纳多个 URL 需用 createTab 铸造 per-URL id（browser
+   * 同款模式）；否则同类型二次点击被 id 安全网聚焦，新 URL 不会覆写既有 path。
+   */
+  urlTarget?: (url: URL) => boolean
+  /**
    * 声明式设置（v0.4.1+）：每个注册的 tab 都会在 Side card 设置页获得一行
    * 开关（图标 + 标题 + 类型 id），`settings.toggles` 在其行下追加嵌套设置行，
    * 绑定 SidebarPrefs 字段。嵌套设置仅父级启用时显示（v0.11.0 起行控件不限于
@@ -156,7 +166,7 @@ interface TabDescriptor {
    */
   settings?: {
     toggles?: readonly {
-      /** SidebarPrefs 字段名（内置键：'autoOpenSubagent' / 'agentTerminalTools' / 'terminalFontFamily' / 'htmlViewerNoSandbox' / 'htmlViewerDefaultUnsafe' / 'browserNoSandbox' / 'browserInterceptLinks'） */
+      /** SidebarPrefs 字段名（内置键：'autoOpenSubagent' / 'agentTerminalTools' / 'terminalFontFamily' / 'htmlViewerNoSandbox' / 'htmlViewerDefaultUnsafe' / 'browserNoSandbox' / 'browserInterceptLinks' / 'browserInterceptHttp' / 'browserInterceptHttps'） */
       key: string
       title: string | (() => string)
       desc?: string | (() => string)
@@ -286,6 +296,24 @@ ctx.effect(() =>
     component: ({ scope }) => <CommitsView sessionId={scope.sessionId} />,
   })
 )
+```
+
+**认领外链点击**（v0.13.0+，`features.includes('urlTarget')` gate）：聊天/界面里被拦截的 HTTP(S) 外链（协议开关开启时）路由到第一个 `urlTarget` 命中的 tab 类型，URL 作为 seed 预填 `tab.path`；内置浏览器是隐式兜底。多 URL 并存需用 `createTab` 铸造 per-URL id（browser 同款模式），否则同类型二次点击聚焦既有 tab、不覆写 path：
+```ts
+ctx.effect(() => {
+  if (!ctx.betterSidebar.features.includes('urlTarget')) return
+  return ctx.betterSidebar.registerTab({
+    id: 'my-plugin:web-docs',
+    title: () => 'Docs',
+    order: 80,
+    urlTarget: (url) => url.hostname === 'docs.my-site.com',  // 只有该域名被点击时认领
+    createTab: (state) => ({
+      tab: { id: `my-plugin:web-docs:${state.nextBrowser}`, type: 'my-plugin:web-docs', title: 'Docs' },
+      patch: { nextBrowser: state.nextBrowser + 1 },
+    }),
+    component: ({ tab, scope }) => <WebDocsView url={tab.path} sessionId={scope.sessionId} />,
+  })
+})
 ```
 
 ### 3.4 内置 tab（不可重复注册）
@@ -472,7 +500,7 @@ interface BetterSidebarService {
   readonly version: string
   /** 单调能力清单（只增不删）：'badge' | 'tabLifecycle' | 'updateTab' |
    *  'openFile' | 'targetedOpen' | 'stateSubscription' | 'tabMeta' |
-   *  'pluginSettings'——消费插件用 `features.includes('xxx')` 按能力 gate。 */
+   *  'pluginSettings' | 'urlTarget'——消费插件用 `features.includes('xxx')` 按能力 gate。 */
   readonly features: readonly string[]
   /** 当前快照：激活 sessionId + 其状态（面板几何/打开的 tabs/展开集）+ prefs。
    *  session 未激活时 state/sessionId 为 undefined。 */
@@ -503,7 +531,7 @@ interface OpenTabSeed {
 }
 ```
 
-> **声明式设置（v0.4.1+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里——响应式网格中的**小卡片**（图标 + 标题 + 类型 id + **高亮 = 启用**，勾选徽标钉在卡片最右端，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的相关设置（如子代理的 `autoOpenSubagent`、终端的 `terminalFontFamily`/`terminalFontSize`）通过卡片右下角的齿轮按钮在**原生弹窗**中编辑——`type: 'switch'` 行是复选框，`type: 'text'`/`'number'` 行是输入框（v0.11.0+）——父级卡片关闭时齿轮隐藏；`settings.toggles` 的 **key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools` / `terminalFontFamily` / `terminalFontSize` / `htmlViewerNoSandbox` / `htmlViewerDefaultUnsafe` / `browserNoSandbox` / `browserInterceptLinks`）。**v0.12.0 起设置 seam 已开放**：外部插件用 `settings.pluginToggles`（同款行控件，key 插件局部）或 `settings.render`（自定义面板）声明自己的设置，值持久化在 prefs 文档的 `pluginSettings[<descriptor id>]`（开放 map，宿主 schema 已有字段，无需注册）——齿轮弹窗对 tab 与 viewer 都可用（viewer 卡片 v0.12.0 起也有齿轮）。
+> **声明式设置（v0.4.1+）**：每个注册的 tab/viewer 自动出现在 DSH 设置页「侧边卡片」分区的清单里——响应式网格中的**小卡片**（图标 + 标题 + 类型 id + **高亮 = 启用**，勾选徽标钉在卡片最右端，viewer 卡片还显示扩展名），开关持久化到 `SidebarPrefs.tabsEnabled / viewersEnabled`（开放 map，缺省 = 启用）。关闭语义：tab 从 `+` 菜单消失、`openTab` 拒绝新开、子代理自动展开 / agent 终端自动补 tab 等派生流程停止，**已打开的 tab 保留**；viewer 被 `matchFileViewer` 跳过，文件落到下一个匹配。`settings.toggles` 声明的相关设置（如子代理的 `autoOpenSubagent`、终端的 `terminalFontFamily`/`terminalFontSize`）通过卡片右下角的齿轮按钮在**原生弹窗**中编辑——`type: 'switch'` 行是复选框，`type: 'text'`/`'number'` 行是输入框（v0.11.0+）——父级卡片关闭时齿轮隐藏；`settings.toggles` 的 **key 必须是宿主 PrefsSchema 的字段**（内置键：`autoOpenSubagent` / `agentTerminalTools` / `terminalFontFamily` / `terminalFontSize` / `htmlViewerNoSandbox` / `htmlViewerDefaultUnsafe` / `browserNoSandbox` / `browserInterceptLinks` / `browserInterceptHttp` / `browserInterceptHttps`）。**v0.12.0 起设置 seam 已开放**：外部插件用 `settings.pluginToggles`（同款行控件，key 插件局部）或 `settings.render`（自定义面板）声明自己的设置，值持久化在 prefs 文档的 `pluginSettings[<descriptor id>]`（开放 map，宿主 schema 已有字段，无需注册）——齿轮弹窗对 tab 与 viewer 都可用（viewer 卡片 v0.12.0 起也有齿轮）。
 
 ---
 

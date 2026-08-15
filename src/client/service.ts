@@ -170,6 +170,22 @@ export interface TabDescriptor {
    */
   createTab?: (state: SidebarState) => { tab: SidebarTab; patch?: Partial<SidebarState> } | null
   /**
+   * External-link target claim (v0.13.0+): when a GUI external-link click
+   * is taken over (the `browserInterceptLinks` master AND the URL's
+   * protocol flag — `browserInterceptHttp` / `browserInterceptHttps` —
+   * are on), the first registered tab whose `urlTarget(url)` returns true
+   * is opened with `openTab({ type, url, title: hostname })` — the URL is
+   * the whole payload (the tab reads it from `tab.path`). Registration
+   * order wins (first claim first served); a disabled tab type is skipped;
+   * a throwing predicate is swallowed (console.error, the type is skipped).
+   * The built-in browser tab declares NO urlTarget — it stays the implicit
+   * fallback target, so plugins can never be shadowed by it. To host more
+   * than one URL at a time, mint per-URL ids through `createTab` (the
+   * browser builtin's pattern); otherwise the id safety net focuses the
+   * existing tab of the same type and the new URL is not applied.
+   */
+  urlTarget?: (url: URL) => boolean
+  /**
    * Declarative settings shown in the Side card settings page: every
    * registered tab gets an enable/disable switch (icon + title + id), and
    * `settings.toggles` adds nested switches tied to SidebarPrefs fields
@@ -374,6 +390,33 @@ function baseNameOf(path: string): string {
 }
 
 /**
+ * Find the tab type that claims an intercepted external-link URL (v0.13.0+).
+ * Walks the descriptors in REGISTRATION order and returns the first one
+ * that declares `urlTarget` and matches `url`; a throwing predicate is
+ * swallowed (console.error, type skipped) so one broken plugin can never
+ * break the whole link pipeline. The caller passes the ENABLED tab
+ * descriptors (enablement is the caller's prefs domain — filter
+ * `service.getTabs()` through `tabsEnabled` before matching) and falls
+ * back to the built-in browser tab when nothing claims the URL (the
+ * browser never declares `urlTarget` itself, so it can never shadow a
+ * plugin claim).
+ */
+export function matchUrlTarget(tabs: readonly TabDescriptor[], url: URL): TabDescriptor | undefined {
+  for (const tab of tabs) {
+    if (tab.urlTarget === undefined) continue
+    let claimed = false
+    try {
+      claimed = tab.urlTarget(url) === true
+    } catch (error) {
+      console.error('[dsh-better-sidebar] urlTarget error:', error)
+      continue
+    }
+    if (claimed) return tab
+  }
+  return undefined
+}
+
+/**
  * The plugin version this service instance reports. Keep in lockstep with
  * `package.json`'s version — `tests/service.spec.ts` asserts the pair.
  */
@@ -390,6 +433,7 @@ export const SIDEBAR_SERVICE_VERSION = '0.12.1'
  * - 'stateSubscription': getSnapshot/subscribeState
  * - 'tabMeta': SidebarTab.meta (seeds, createTab, updateTab, persistence)
  * - 'pluginSettings': SidebarSettingsDeclaration.pluginToggles/render
+ * - 'urlTarget' (v0.13.0): TabDescriptor.urlTarget (external-link claims)
  */
 export const SIDEBAR_FEATURES = [
   'badge',
@@ -400,6 +444,7 @@ export const SIDEBAR_FEATURES = [
   'stateSubscription',
   'tabMeta',
   'pluginSettings',
+  'urlTarget',
 ] as const
 
 /** Run one plugin callback; a throw is logged and never breaks the caller. */

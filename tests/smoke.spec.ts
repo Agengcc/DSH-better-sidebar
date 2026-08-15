@@ -524,6 +524,8 @@ describe('side card settings routes', () => {
         htmlViewerDefaultUnsafe: false,
         browserNoSandbox: false,
         browserInterceptLinks: true,
+        browserInterceptHttp: true,
+        browserInterceptHttps: false,
         // The enable-switch maps default to {} (everything on).
         tabsEnabled: {},
         viewersEnabled: {},
