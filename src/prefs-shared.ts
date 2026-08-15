@@ -61,14 +61,6 @@ export interface SidebarPrefs {
    */
   interceptOpenPath: boolean
   /**
-   * Position compatibility mode: reserves space at the top for the native
-   * Windows title bar (drawn at the window's top-right corner over the web
-   * content in frameless/hidden-title-bar windows). When on, the toggle
-   * cluster drops below the strip and the right panel's content starts
-   * below it. Off by default — the sidebar layout is untouched.
-   */
-  titleBarCompat: boolean
-  /**
    * Whether the HTML previewer drops its sandboxed iframe. Sandbox ON (the
    * default) renders previewed HTML in an opaque-origin iframe that cannot
    * touch the GUI; turning it OFF runs the previewed page with the GUI's
@@ -167,7 +159,6 @@ export const SIDEBAR_PREFS_DEFAULTS: SidebarPrefs = {
   terminalFontFamily: '',
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   interceptOpenPath: true,
-  titleBarCompat: false,
   htmlViewerNoSandbox: false,
   htmlViewerDefaultUnsafe: false,
   browserNoSandbox: false,

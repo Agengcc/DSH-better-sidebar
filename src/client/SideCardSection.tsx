@@ -660,17 +660,6 @@ export function SideCardSection({ store, service }: SideCardSectionProps) {
             onChange={(next) => { applyPref({ interceptOpenPath: next }) }}
           />
         </div>
-        <div className={css.row}>
-          <span className={css.rowText}>
-            <span className={css.title}>{t('settingsTitleBarTitle')}</span>
-            <span className={css.desc}>{t('settingsTitleBarDesc')}</span>
-          </span>
-          <Switch
-            label={t('settingsTitleBarTitle')}
-            checked={prefs.titleBarCompat}
-            onChange={(next) => { applyPref({ titleBarCompat: next }) }}
-          />
-        </div>
       </div>
 
       {/* 侧边栏内容: one small card per registered tab type in a responsive

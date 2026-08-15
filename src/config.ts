@@ -91,7 +91,6 @@ export const PrefsSchema: z<SidebarPrefs> = z.object({
   terminalFontFamily: z.string().default(''),
   terminalFontSize: z.number().step(1).min(TERMINAL_FONT_SIZE_MIN).max(TERMINAL_FONT_SIZE_MAX).default(TERMINAL_FONT_SIZE_DEFAULT),
   interceptOpenPath: z.boolean().default(true),
-  titleBarCompat: z.boolean().default(false),
   htmlViewerNoSandbox: z.boolean().default(false),
   htmlViewerDefaultUnsafe: z.boolean().default(false),
   browserNoSandbox: z.boolean().default(false),
