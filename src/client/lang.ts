@@ -23,7 +23,7 @@ import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { nginx } from '@codemirror/legacy-modes/mode/nginx'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
-import { csharp } from '@codemirror/legacy-modes/mode/clike'
+import { csharp, kotlin } from '@codemirror/legacy-modes/mode/clike'
 
 /** The lowercased file extension of a path ('' when none). */
 export function extOf(path: string): string {
@@ -50,6 +50,7 @@ export function languageKeyForExt(ext: string): string | null {
     case 'sql': return 'sql'
     case 'java': return 'java'
     case 'cs': return 'csharp'
+    case 'kt': case 'kts': return 'kotlin'
     case 'c': case 'h': return 'c'
     case 'cc': case 'cpp': case 'cxx': case 'hpp': case 'hh': case 'hxx': return 'cpp'
     case 'rs': return 'rust'
@@ -79,6 +80,7 @@ const FACTORIES: Record<string, () => Language | LanguageSupport> = {
   sql: () => sql(),
   java: () => java(),
   csharp: () => StreamLanguage.define(csharp),
+  kotlin: () => StreamLanguage.define(kotlin),
   c: () => cpp(),
   cpp: () => cpp(),
   rust: () => rust(),

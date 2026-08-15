@@ -1103,6 +1103,7 @@ describe('editor language mapping', () => {
     expect(languageKeyForExt('sh')).toBe('shell')
     expect(languageKeyForExt('md')).toBe('md')
     expect(languageKeyForExt('cs')).toBe('csharp')
+    expect(languageKeyForExt('kt')).toBe('kotlin')
     expect(languageKeyForExt('txt')).toBeNull()
     expect(languageKeyForExt('log')).toBeNull()
     expect(languageKeyForExt('')).toBeNull()
