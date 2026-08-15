@@ -188,6 +188,34 @@ describe('host plugin smoke', () => {
     }
   })
 
+  it.skipIf(process.platform === 'win32')('spawns the shell as a login shell (loads ~/.profile)', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-sidebar-login-'))
+    const previousHome = process.env.HOME
+    try {
+      // A login bash reads ~/.profile (a non-login interactive bash reads
+      // ~/.bashrc instead), so this marker proves the spawn used a login
+      // argv — the terminal-emulator behavior the tab should match.
+      writeFileSync(join(home, '.profile'), 'export DSH_LOGIN_MARKER=loaded-from-profile\n')
+      process.env.HOME = home
+      const manager = new PtyManager('/bin/bash', 3)
+      try {
+        const handle = manager.open('s5', 't1', process.cwd(), 80, 24)
+        handle.pty.write('echo $DSH_LOGIN_MARKER\r')
+        const deadline = Date.now() + 5000
+        while (!handle.transcript.includes('loaded-from-profile') && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+        }
+        expect(handle.transcript).toContain('loaded-from-profile')
+      } finally {
+        manager.disposeAll()
+      }
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME
+      else process.env.HOME = previousHome
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('lists the repository root level', async () => {
     const listing = await listDirectory(process.cwd(), 1000)
     expect(listing.entries.some(entry => entry.name === 'src' && entry.isDir)).toBe(true)
