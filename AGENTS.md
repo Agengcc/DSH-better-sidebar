@@ -23,6 +23,15 @@ better-sidebar 从 v0.4.0 起暴露 `ctx.betterSidebar` 服务（Cordis context 
 
 本地跑：`pnpm build && pnpm pack && pnpm exec playwright install chromium && pnpm test:mount`（需 PATH 上有 `dsh` 或可经 npx 拉取）。DSH CLI 版本在 CI 钉住 `@deepseek-ai/dsh@0.1.0-rc.6`（与插件 peer 范围同步）。`tests/e2e` 的 spec 命名 `*.e2e.ts` + vitest `exclude` 双保险与 vitest 隔离；**改动 vitest `exclude` 时必须保留默认排除项**（`exclude` 会整体替换默认值）。
 
+### npm 发版（GitHub Release → npm publish）
+
+`.github/workflows/release.yml` 在 GitHub Release 发布（tag `vX.Y.Z`）时自动发版到 npm：
+
+1. **发版前置**：`package.json` 版本号 bump 到 `X.Y.Z`（manifest 一致性守卫会校验其它副本），CI 全绿后打 tag `vX.Y.Z` 并发布 GitHub Release。tag 必须与 package.json 版本一致——workflow 在发布前校验，不匹配直接失败、不发版。
+2. **流程**：workflow 依次执行 `pnpm build` / `pnpm typecheck` / `pnpm test`，校验 tag，然后 `pnpm publish --provenance --access public`（`prepublishOnly` 会重建产物；产物带 provenance 签名）。
+3. **认证**：走 npm **Trusted Publishing（OIDC）**，不需要也不应配置 `NPM_TOKEN` secret。一次性手动配置（在 npmjs.com 完成）：package `dsh-better-sidebar` → Settings → Publishing access → Trusted Publishers → Add Trusted Publisher，字段为 Provider `GitHub Actions`、Organization `omdsh-dev`、Repository `DSH-better-sidebar`、**Workflow filename `release.yml`**、Environment 留空。未配置前发布会失败（OIDC 交换报错），配置后无需改 workflow。
+4. **调试**：`workflow_dispatch` 手动触发 + `dry_run=true` 只打包验证、不发版。
+
 ---
 
 ## 1. 服务定位
