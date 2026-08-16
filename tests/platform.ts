@@ -8,6 +8,3 @@
 
 /** True when running on Windows (drive letters / UNC path semantics apply). */
 export const isWin32 = process.platform === 'win32'
-
-/** True on every non-Windows host (POSIX path semantics). */
-export const isPosix = !isWin32

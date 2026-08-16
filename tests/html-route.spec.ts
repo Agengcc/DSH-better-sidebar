@@ -21,22 +21,19 @@ describe('encodeHtmlUrl', () => {
       .toBe('/sidebar/html/sess-1/C%3A/Users/me/a.html')
   })
 
-  it('encodes a Windows UNC path with the // marker only for Windows-style sessions', () => {
-    // Backslash UNC is unambiguous: the marker is emitted whenever the
-    // caller declares the session Windows-style.
-    expect(encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html', true))
+  it('encodes a UNC path with the // marker (backslash and forward-slash forms)', () => {
+    expect(encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html'))
       .toBe('/sidebar/html/sess-1//server/share/proj/a.html')
-    // Forward-slash UNC needs the same marker on a Windows-style session.
-    expect(encodeHtmlUrl('sess-1', '//server/share/proj/a.html', true))
+    expect(encodeHtmlUrl('sess-1', '//server/share/proj/a.html'))
       .toBe('/sidebar/html/sess-1//server/share/proj/a.html')
   })
 
-  it('keeps a POSIX // path marker-free (the platform guard)', () => {
-    // A leading // is a legitimate POSIX absolute path: without the
-    // Windows-style flag it must NOT be marked as UNC, or the host would
-    // decode it back into a backslash form it then rejects.
+  it('keeps a POSIX // path marker-encoded (the marker is platform-neutral)', () => {
+    // The decoder rebuilds '//server/share/...', which node:path resolves to
+    // '/server/share/...' on POSIX and '\\server\share\...' on win32 — so the
+    // leading double slash round-trips without any platform signal.
     expect(encodeHtmlUrl('s-1', '//server/share/a.html'))
-      .toBe('/sidebar/html/s-1/server/share/a.html')
+      .toBe('/sidebar/html/s-1//server/share/a.html')
   })
 
   it('percent-encodes special characters in segments', () => {
@@ -74,19 +71,21 @@ describe('decodeHtmlUrl', () => {
     expect(resolve('C:/Users/me/a.html')).toBe('C:\\Users\\me\\a.html')
   })
 
-  it('decodes a UNC round-trip back to the network path', () => {
-    const url = encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html', true)
+  it('decodes a UNC round-trip back to the platform-neutral forward-slash form', () => {
+    const url = encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html')
     expect(decodeHtmlUrl(url)).toEqual({
       ok: true,
-      ref: { sessionId: 'sess-1', path: '\\\\server\\share\\proj\\a.html' },
+      ref: { sessionId: 'sess-1', path: '//server/share/proj/a.html' },
     })
+    // The host's requireAbsolute resolves that form per-platform:
+    // '\\server\share\proj\a.html' on win32, '/server/share/proj/a.html' on POSIX.
   })
 
-  it('decodes a marker-free POSIX // path as a plain absolute path', () => {
+  it('round-trips a POSIX // path through the same marker', () => {
     const url = encodeHtmlUrl('s-1', '//server/share/a.html')
     expect(decodeHtmlUrl(url)).toEqual({
       ok: true,
-      ref: { sessionId: 's-1', path: '/server/share/a.html' },
+      ref: { sessionId: 's-1', path: '//server/share/a.html' },
     })
   })
 
@@ -167,12 +166,12 @@ describe('relative asset resolution stays in-route', () => {
   it('relative assets of a UNC document stay inside the same route', () => {
     // The WHATWG URL preserves the '//' marker during relative resolution,
     // so ./style.css lands back on the route with the UNC prefix intact.
-    const doc = `http://h${encodeHtmlUrl('s', '\\\\server\\share\\proj\\index.html', true)}`
+    const doc = `http://h${encodeHtmlUrl('s', '\\\\server\\share\\proj\\index.html')}`
     expect(new URL('./style.css', doc).pathname)
       .toBe('/sidebar/html/s//server/share/proj/style.css')
     expect(decodeHtmlUrl(new URL('./style.css', doc).pathname)).toEqual({
       ok: true,
-      ref: { sessionId: 's', path: '\\\\server\\share\\proj\\style.css' },
+      ref: { sessionId: 's', path: '//server/share/proj/style.css' },
     })
   })
 })

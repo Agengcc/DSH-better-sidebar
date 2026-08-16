@@ -60,28 +60,49 @@ export async function listDirectory(path: string, maxEntries = 1000): Promise<Si
       }
       // Platform join: on Windows the level path uses '\' — a hardcoded '/'
       // would leak mixed separators into every row's path.
-      const fullPath = join(path, dirent.name)
-      const isSymlink = dirent.isSymbolicLink()
-      // Probe the link's target once so a symlinked directory renders as an
-      // expandable directory row. stat follows the chain; any failure
-      // (missing target, ELOOP, permission) leaves the row as a broken
-      // file-shaped link the editor will refuse to read. Non-symlink entries
-      // skip the syscall entirely — dirent already classified them.
-      const info = isSymlink ? await stat(fullPath).catch(() => undefined) : undefined
       rows.push({
         name: dirent.name,
-        path: fullPath,
-        isDir: info !== undefined ? info.isDirectory() : dirent.isDirectory(),
-        isSymlink,
-        broken: isSymlink && info === undefined,
+        path: join(path, dirent.name),
+        isDir: dirent.isDirectory(),
+        isSymlink: dirent.isSymbolicLink(),
+        broken: false,
         hidden: dirent.name.startsWith('.'),
       })
     }
   } catch (error) {
     throw new SidebarError('fs-error', `cannot list "${path}": ${messageOf(error)}`, 400)
   }
+  // Probe symlink targets AFTER the readdir stream closes, with bounded
+  // concurrency: a symlink-heavy level (UNC/network targets) would otherwise
+  // serialize up to maxEntries stat calls and stall the explorer. Non-symlink
+  // rows are skipped by the probe, so levels without links stay as cheap as
+  // before.
+  await probeSymlinkTargets(rows)
   rows.sort(compareEntries)
   return { path, entries: rows, truncated: overflow > 0 }
+}
+
+/** How many symlink target stats run in flight during one level listing. */
+const SYMLINK_PROBE_CONCURRENCY = 32
+
+/** Probe each symlink row's target once (bounded concurrency, order-preserving). */
+async function probeSymlinkTargets(rows: SidebarFsEntry[], concurrency = SYMLINK_PROBE_CONCURRENCY): Promise<void> {
+  let next = 0
+  const workers = Array.from({ length: Math.min(concurrency, rows.length) }, async () => {
+    for (;;) {
+      const index = next
+      next += 1
+      if (index >= rows.length) return
+      const row = rows[index]!
+      if (!row.isSymlink) continue
+      // stat follows the chain; any failure (missing target, ELOOP, permission)
+      // leaves the row as a broken file-shaped link the editor refuses to read.
+      const info = await stat(row.path).catch(() => undefined)
+      row.isDir = info !== undefined ? info.isDirectory() : row.isDir
+      row.broken = info === undefined
+    }
+  })
+  await Promise.all(workers)
 }
 
 /** The root row label of a listing: the last path segment (or the full path at the filesystem root). */

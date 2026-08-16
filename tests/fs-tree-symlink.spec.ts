@@ -86,4 +86,28 @@ describe.skipIf(!canSymlink)('fs-tree symlink listing', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('classifies every row correctly across a symlink-heavy level (bounded probe)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-sidebar-symlink-many-'))
+    mkdirSync(join(dir, 'real-dir'))
+    writeFileSync(join(dir, 'real-file.txt'), 'content')
+    try {
+      // More links than the probe concurrency cap exercises the worker pool;
+      // every directory link must still classify as a directory and every
+      // file link as a file (order is already checked by the sort assertion).
+      for (let index = 0; index < 48; index += 1) {
+        symlinkSync(join(dir, 'real-dir'), join(dir, `dir-link-${index}`))
+        symlinkSync(join(dir, 'real-file.txt'), join(dir, `file-link-${index}`))
+      }
+      const listing = await listDirectory(dir)
+      for (let index = 0; index < 48; index += 1) {
+        expect(listing.entries.find(entry => entry.name === `dir-link-${index}`))
+          .toMatchObject({ isDir: true, isSymlink: true, broken: false })
+        expect(listing.entries.find(entry => entry.name === `file-link-${index}`))
+          .toMatchObject({ isDir: false, isSymlink: true, broken: false })
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

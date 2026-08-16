@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolve } from 'node:path'
 import { compareEntries, isWithin, parentOf, requireAbsolute, rootLabel } from '../src/fs-tree.ts'
-import { isPosix, isWin32 } from './platform.ts'
+import { isWin32 } from './platform.ts'
 
 describe('fs-tree', () => {
   it('sorts directories first, then names case-insensitively', () => {

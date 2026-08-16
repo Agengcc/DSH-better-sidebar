@@ -8,7 +8,6 @@
  */
 import { encodeHtmlUrl } from '../html-route.ts'
 import type { BrowserProbeResult } from './browser.ts'
-import { isWindowsStylePath } from './paths.ts'
 
 /** One wire failure. */
 export class SidebarApiError extends Error {
@@ -212,29 +211,14 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
   return `/sidebar/file?${params.toString()}`
 }
 
-/** A forward-slash UNC share (`//server/share/...`) — ambiguous with a POSIX
- *  absolute path, so it only counts as Windows-style when the session cwd is
- *  itself a forward-slash UNC (see htmlUrl). */
-function isForwardSlashUnc(path: string): boolean {
-  return /^\/\/[^/]/.test(path)
-}
-
 /**
  * Absolute URL of the HTML preview route (see html-route.ts): the path is
  * fully encoded so the previewed page's relative assets resolve back into
- * the same route with the session scope intact. The platform guard for the
- * UNC marker comes from the session cwd's shape (the browser OS may differ
- * from the host OS, so no client-side platform detection is used), extended
- * by the file path itself: an unambiguous backslash UNC path keeps its '//'
- * marker even while the cwd is still hydrating or arrives in forward-slash
- * form. A forward-slash `//` path is only marked when the cwd is itself a
- * forward-slash UNC — a POSIX session keeps `//server/share/...` as an
- * ordinary absolute path.
+ * the same route with the session scope intact. The UNC marker is
+ * platform-neutral — the host's requireAbsolute resolves the decoded
+ * forward-slash `//server/share/...` form on both win32 and POSIX — so no
+ * client-side platform signal is needed.
  */
 export function htmlUrl(scope: SessionScope, path: string): string {
-  const cwd = scope.cwd ?? ''
-  const windowsPathStyle = isWindowsStylePath(cwd)
-    || isWindowsStylePath(path)
-    || (isForwardSlashUnc(path) && isForwardSlashUnc(cwd))
-  return encodeHtmlUrl(scope.sessionId, path, windowsPathStyle)
+  return encodeHtmlUrl(scope.sessionId, path)
 }

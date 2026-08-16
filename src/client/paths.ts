@@ -5,24 +5,13 @@
  * to '/' before comparison.
  *
  * This module is dependency-free (no node:path in the client bundle): the
- * host is the authority for path semantics, so these mirrors deliberately
- * accept a SUPERSET of absolute forms — anything a Windows host would emit
+ * host is the authority for path semantics, so this mirror deliberately
+ * accepts a SUPERSET of absolute forms — anything a Windows host would emit
  * (drive letters, UNC) plus POSIX roots. A form the host would reject
  * (e.g. a backslash UNC path on a POSIX host) passes through here and then
  * fails loudly in the host's requireAbsolute instead of being silently
  * joined onto the cwd.
  */
-
-/**
- * Whether a path looks like it belongs to a Windows-style session: a drive
- * letter or any backslash (UNC shares, and drive paths in general).
- * Used as the platform signal for the html route's UNC marker — the client
- * cannot read process.platform (the browser OS may differ from the host),
- * but the session cwd shape is authoritative.
- */
-export function isWindowsStylePath(path: string): boolean {
-  return path.includes('\\') || /^[A-Za-z]:[\\/]/.test(path)
-}
 
 /**
  * Mirror of the host's absolute-path notion (see fs-tree.requireAbsolute):
