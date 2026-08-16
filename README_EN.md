@@ -36,19 +36,36 @@
 
 ## 🆕 Recent Updates
 
-<small>v0.12.3</small>
-
 <div align="center">
   <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="45%" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a>
   <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="45%" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a>
 </div>
 
-> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the update notes below.
+### v0.12.3
 
-**v0.12.\* update notes**:
+- 🐛 **node-pty load failure no longer crashes the server** ([#140](https://github.com/omdsh-dev/DSH-better-sidebar/issues/140)): the host half now lazy-loads node-pty — when it is missing the plugin still mounts, the terminal shows a repair banner (copyable command + Retry button), and agent terminal tools are skipped
+- 🚀 **Release pipeline**: npm publishing is now wired to GitHub Releases (Trusted Publishing, provenance-attached tarballs); tagging a release publishes automatically from this version on
+
+### v0.12.2
 
 - 📐 **Position compat mode**: new "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default); the shift distance is customizable in the gear popup (0–120px)
 - 🔌 **Service API base**: complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`)
+- ➕ **Add Plugins**: recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin
+- 🖱️ **Tab-bar scroll**: mouse-wheel horizontal scrolling on the tab bar
+- 🐛 **Fixes**: remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path
+
+### v0.12.1
+
+- 🔌 **Service API base**: complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`)
+- ➕ **Add Plugins**: recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin
+- 🖱️ **Tab-bar scroll**: mouse-wheel horizontal scrolling on the tab bar
+- 🐛 **Fixes**: remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path
+
+> 📝 Note: the 0.12.0 final could not be reused (npm reported the version as already published), so the public release became 0.12.1 — both carry identical content.
+
+### v0.12.0
+
+- 🔌 **Service API base**: complete type exports + `version`/`features` capability detection, state subscription, tab badges, lifecycle callbacks, targeted open, `meta` persisted across reloads, plugin-owned settings
 - ➕ **Add Plugins**: recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin
 - 🖱️ **Tab-bar scroll**: mouse-wheel horizontal scrolling on the tab bar
 - 🐛 **Fixes**: remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path
