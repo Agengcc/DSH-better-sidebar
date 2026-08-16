@@ -3,7 +3,37 @@
  * the session cwd (for the @-reference button and "copy relative path").
  * The fs-tree joins with '/' even on Windows, so both separators normalize
  * to '/' before comparison.
+ *
+ * This module is dependency-free (no node:path in the client bundle): the
+ * host is the authority for path semantics, so these mirrors deliberately
+ * accept a SUPERSET of absolute forms — anything a Windows host would emit
+ * (drive letters, UNC) plus POSIX roots. A form the host would reject
+ * (e.g. a backslash UNC path on a POSIX host) passes through here and then
+ * fails loudly in the host's requireAbsolute instead of being silently
+ * joined onto the cwd.
  */
+
+/**
+ * Whether a path looks like it belongs to a Windows-style session: a drive
+ * letter or any backslash (UNC shares, and drive paths in general).
+ * Used as the platform signal for the html route's UNC marker — the client
+ * cannot read process.platform (the browser OS may differ from the host),
+ * but the session cwd shape is authoritative.
+ */
+export function isWindowsStylePath(path: string): boolean {
+  return path.includes('\\') || /^[A-Za-z]:[\\/]/.test(path)
+}
+
+/**
+ * Mirror of the host's absolute-path notion (see fs-tree.requireAbsolute):
+ * POSIX roots, Windows drive letters, and Windows UNC network shares in
+ * both backslash (`\\server\share\...`) and forward-slash
+ * (`//server/share/...`) form. Deliberately a superset — see the module
+ * comment — so a produced UNC path is never joined onto the cwd.
+ */
+export function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path) || /^[\\/]{2}[^\\/]/.test(path)
+}
 
 /**
  * The path relative to the session's working directory.

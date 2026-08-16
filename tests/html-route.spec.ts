@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolve } from 'node:path'
 import { decodeHtmlUrl, encodeHtmlUrl } from '../src/html-route.ts'
+import { isWin32 } from './platform.ts'
 
 describe('encodeHtmlUrl', () => {
   it('encodes a POSIX absolute path into route segments', () => {
@@ -18,6 +19,24 @@ describe('encodeHtmlUrl', () => {
   it('encodes a Windows absolute path (drive colon percent-encoded)', () => {
     expect(encodeHtmlUrl('sess-1', 'C:\\Users\\me\\a.html'))
       .toBe('/sidebar/html/sess-1/C%3A/Users/me/a.html')
+  })
+
+  it('encodes a Windows UNC path with the // marker only for Windows-style sessions', () => {
+    // Backslash UNC is unambiguous: the marker is emitted whenever the
+    // caller declares the session Windows-style.
+    expect(encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html', true))
+      .toBe('/sidebar/html/sess-1//server/share/proj/a.html')
+    // Forward-slash UNC needs the same marker on a Windows-style session.
+    expect(encodeHtmlUrl('sess-1', '//server/share/proj/a.html', true))
+      .toBe('/sidebar/html/sess-1//server/share/proj/a.html')
+  })
+
+  it('keeps a POSIX // path marker-free (the platform guard)', () => {
+    // A leading // is a legitimate POSIX absolute path: without the
+    // Windows-style flag it must NOT be marked as UNC, or the host would
+    // decode it back into a backslash form it then rejects.
+    expect(encodeHtmlUrl('s-1', '//server/share/a.html'))
+      .toBe('/sidebar/html/s-1/server/share/a.html')
   })
 
   it('percent-encodes special characters in segments', () => {
@@ -45,13 +64,35 @@ describe('decodeHtmlUrl', () => {
       ok: true,
       ref: { sessionId: 'sess-1', path: 'C:/Users/me/a.html' },
     })
+  })
+
+  it.skipIf(!isWin32)('decoded drive paths resolve back verbatim on win32', () => {
     // The host runs requireAbsolute() over the decoded path: with the old
     // '/C:/...' form node's resolve() produced 'C:\C:\Users\...' (drive
     // doubled) on Windows and the isWithin(cwd) fence rejected every drive
     // path. The slash-free form must resolve back to the original path.
-    if (process.platform === 'win32') {
-      expect(resolve('C:/Users/me/a.html')).toBe('C:\\Users\\me\\a.html')
-    }
+    expect(resolve('C:/Users/me/a.html')).toBe('C:\\Users\\me\\a.html')
+  })
+
+  it('decodes a UNC round-trip back to the network path', () => {
+    const url = encodeHtmlUrl('sess-1', '\\\\server\\share\\proj\\a.html', true)
+    expect(decodeHtmlUrl(url)).toEqual({
+      ok: true,
+      ref: { sessionId: 'sess-1', path: '\\\\server\\share\\proj\\a.html' },
+    })
+  })
+
+  it('decodes a marker-free POSIX // path as a plain absolute path', () => {
+    const url = encodeHtmlUrl('s-1', '//server/share/a.html')
+    expect(decodeHtmlUrl(url)).toEqual({
+      ok: true,
+      ref: { sessionId: 's-1', path: '/server/share/a.html' },
+    })
+  })
+
+  it('refuses a marker-only UNC URL and stray double slashes (400)', () => {
+    expect(decodeHtmlUrl('/sidebar/html/s//').ok).toBe(false)
+    expect(decodeHtmlUrl('/sidebar/html/s//server//x.html').ok).toBe(false)
   })
 
   it('decodes a lowercase-drive Windows path without a leading slash', () => {
@@ -121,5 +162,17 @@ describe('relative asset resolution stays in-route', () => {
     const doc = `http://h${encodeHtmlUrl('s', '/a/b/index.html')}`
     expect(new URL('img/x.png', doc).pathname).toBe('/sidebar/html/s/a/b/img/x.png')
     expect(new URL('../c.css', doc).pathname).toBe('/sidebar/html/s/a/c.css')
+  })
+
+  it('relative assets of a UNC document stay inside the same route', () => {
+    // The WHATWG URL preserves the '//' marker during relative resolution,
+    // so ./style.css lands back on the route with the UNC prefix intact.
+    const doc = `http://h${encodeHtmlUrl('s', '\\\\server\\share\\proj\\index.html', true)}`
+    expect(new URL('./style.css', doc).pathname)
+      .toBe('/sidebar/html/s//server/share/proj/style.css')
+    expect(decodeHtmlUrl(new URL('./style.css', doc).pathname)).toEqual({
+      ok: true,
+      ref: { sessionId: 's', path: '\\\\server\\share\\proj\\style.css' },
+    })
   })
 })

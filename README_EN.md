@@ -21,7 +21,7 @@
 
 ## ✨ Features
 
-- **🗂️ File Workbench**: file explorer (lazy-loading tree) + CodeMirror editor; inline preview for images / Markdown / HTML / PDF / Office
+- **🗂️ File Workbench**: file explorer (lazy-loading tree; symlinks show their target kind — directory links expand, dangling links flagged) + CodeMirror editor; inline preview for images / Markdown / HTML / PDF / Office
 - **🌐 Embedded Browser**: multiple web tabs with back / forward / refresh; content runs in a sandboxed iframe; external links are routed by protocol by default — HTTP opens in the sidebar, HTTPS goes to the system browser (both adjustable in settings)
 - **💻 Real Terminal**: xterm.js + node-pty real shell, reconnect with transcript replay; optionally injects `terminal_*` tools for the model
 - **🌿 Git Panel**: real diff + VSCode-style diff tabs, history, right-click to stage / commit / revert
