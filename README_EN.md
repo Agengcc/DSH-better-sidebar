@@ -38,21 +38,32 @@
 
 <small>v0.12.3</small>
 
-> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the table below for details.
+<div align="center">
+  <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="45%" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a>
+  <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="45%" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a>
+</div>
 
-| Feature | Description | Screenshot |
-|---|---|---|
-| 📐 Position compat mode | New "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default); the shift distance is customizable in the gear popup (0–120px) | |
-| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
-| ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="480" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
-| 🖱️ Tab-bar scroll | Mouse-wheel horizontal scrolling on the tab bar | |
-| 🐛 Fixes | Remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path | |
+> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the update notes below.
+
+**v0.12.\* update notes**:
+
+- 📐 **Position compat mode**: new "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default); the shift distance is customizable in the gear popup (0–120px)
+- 🔌 **Service API base**: complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`)
+- ➕ **Add Plugins**: recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin
+- 🖱️ **Tab-bar scroll**: mouse-wheel horizontal scrolling on the tab bar
+- 🐛 **Fixes**: remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path
 
 ## 🚀 Installation
 
 **Prerequisites**: DSH installed (`dsh web` boots), Node.js ≥ 20, pnpm ≥ 10.
 
-**macOS / Linux** (also works in Git Bash / WSL on Windows):
+**Direct install** (the npm publish safety window has passed — no version pin needed; one command on machines with the DSH CLI):
+
+```sh
+dsh plugin --profile web add dsh-better-sidebar
+```
+
+**Or one-click script** (macOS / Linux, also works in Git Bash / WSL on Windows):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
