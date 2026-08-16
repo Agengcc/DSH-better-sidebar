@@ -212,6 +212,13 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
   return `/sidebar/file?${params.toString()}`
 }
 
+/** A forward-slash UNC share (`//server/share/...`) — ambiguous with a POSIX
+ *  absolute path, so it only counts as Windows-style when the session cwd is
+ *  itself a forward-slash UNC (see htmlUrl). */
+function isForwardSlashUnc(path: string): boolean {
+  return /^\/\/[^/]/.test(path)
+}
+
 /**
  * Absolute URL of the HTML preview route (see html-route.ts): the path is
  * fully encoded so the previewed page's relative assets resolve back into
@@ -220,10 +227,14 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
  * from the host OS, so no client-side platform detection is used), extended
  * by the file path itself: an unambiguous backslash UNC path keeps its '//'
  * marker even while the cwd is still hydrating or arrives in forward-slash
- * form. Forward-slash `//` paths stay ambiguous without a Windows-style cwd,
- * so they are deliberately NOT marked on their own — a POSIX session keeps
- * them as ordinary absolute paths.
+ * form. A forward-slash `//` path is only marked when the cwd is itself a
+ * forward-slash UNC — a POSIX session keeps `//server/share/...` as an
+ * ordinary absolute path.
  */
 export function htmlUrl(scope: SessionScope, path: string): string {
-  return encodeHtmlUrl(scope.sessionId, path, isWindowsStylePath(scope.cwd ?? '') || isWindowsStylePath(path))
+  const cwd = scope.cwd ?? ''
+  const windowsPathStyle = isWindowsStylePath(cwd)
+    || isWindowsStylePath(path)
+    || (isForwardSlashUnc(path) && isForwardSlashUnc(cwd))
+  return encodeHtmlUrl(scope.sessionId, path, windowsPathStyle)
 }
