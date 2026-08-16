@@ -38,102 +38,30 @@
 
 <small>v0.12.3</small>
 
-> 📝 **说明**：本版新增「位置兼容模式」——为 Windows 右上角原生标题栏预留顶部空间，侧边栏整体下移，距离可在齿轮弹窗自定义（0–120px）。随 0.12.0 起的服务化基座一同发布：能力探测、状态订阅、tab 角标、生命周期回调、外链认领（`urlTarget`）与插件自有设置均已就绪，第三方插件可深度接入；设置页新增「添加插件」推荐目录。详细条目见下表。
+<div align="center">
+  <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="45%" alt="服务化基座截图" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a>
+  <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="45%" alt="添加插件截图" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a>
+</div>
 
-| 功能 | 说明 | 截图 |
-|---|---|---|
-| 📐 位置兼容模式 | 设置页新增「位置兼容模式」开关：为 Windows 右上角原生标题栏预留顶部空间，侧边栏按钮与内容整体下移（默认关闭）；下移距离可在齿轮弹窗中自定义（0–120px） | |
-| 🔌 服务化基座 | 完整类型导出 + `version`/`features` 能力探测、状态订阅（`getSnapshot`/`subscribeState`）、tab 角标、`onOpen`/`onActivate`/`onClose` 生命周期回调、`updateTab`/`activateTab`/`openFile`、定向打开、`meta` 跨刷新持久化、插件自有设置（`pluginToggles`/`render`）、外链点击目标认领（`urlTarget`） | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="800" alt="服务化基座截图" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
-| ➕ 添加插件 | 设置页「推荐插件目录」+ 一键复制安装命令；内置 Office 预览迁至推荐插件 | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="800" alt="添加插件截图" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
-| 🖱️ 标签页滚轮 | 标签页栏支持鼠标滚轮横向滚动 | |
-| 🐛 修复 | 远程访问 403（信任栅栏改用 `trustedHosts`）、侧边栏崩溃 [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31)、Windows 下 HTML 预览盘符路径 | |
+> 📝 **说明**：本版新增「位置兼容模式」——为 Windows 右上角原生标题栏预留顶部空间，侧边栏整体下移，距离可在齿轮弹窗自定义（0–120px）。随 0.12.0 起的服务化基座一同发布：能力探测、状态订阅、tab 角标、生命周期回调、外链认领（`urlTarget`）与插件自有设置均已就绪，第三方插件可深度接入；设置页新增「添加插件」推荐目录。详见下方更新说明。
+
+**v0.12.\* 更新说明**：
+
+- 📐 **位置兼容模式**：设置页新增「位置兼容模式」开关：为 Windows 右上角原生标题栏预留顶部空间，侧边栏按钮与内容整体下移（默认关闭）；下移距离可在齿轮弹窗中自定义（0–120px）
+- 🔌 **服务化基座**：完整类型导出 + `version`/`features` 能力探测、状态订阅（`getSnapshot`/`subscribeState`）、tab 角标、`onOpen`/`onActivate`/`onClose` 生命周期回调、`updateTab`/`activateTab`/`openFile`、定向打开、`meta` 跨刷新持久化、插件自有设置（`pluginToggles`/`render`）、外链点击目标认领（`urlTarget`）
+- ➕ **添加插件**：设置页「推荐插件目录」+ 一键复制安装命令；内置 Office 预览迁至推荐插件
+- 🖱️ **标签页滚轮**：标签页栏支持鼠标滚轮横向滚动
+- 🐛 **修复**：远程访问 403（信任栅栏改用 `trustedHosts`）、侧边栏崩溃 [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31)、Windows 下 HTML 预览盘符路径
 
 ## 🚀 安装
 
 **前置**：已装好 DSH（`dsh web` 能正常运行），Node.js ≥ 20、pnpm ≥ 10。
 
-**macOS / Linux**（Windows 装了 Git Bash 或 WSL 也可）：
-
 ```sh
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
-```
-
-**Windows（PowerShell 5.1+ / pwsh）**：
-
-```powershell
-irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
+dsh plugin --profile web add dsh-better-sidebar
 ```
 
 装完**硬刷新浏览器**（Cmd/Ctrl+Shift+R）即可看到侧边栏（DSH 对 client 改动热加载，无需重启；仅 host 半更新时需要重启）。
-
-<details>
-<summary><b>指定版本 / 装完自动重启（可选）</b></summary>
-
-```sh
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.3 --restart
-
-# Windows PowerShell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.3 -Restart
-```
-
-不确定的话，可先加 `--dry-run`（PowerShell 用 `-DryRun`）预览步骤再执行。
-
-</details>
-
-<details>
-<summary><b>手动安装（逐步命令，想看清每一步）</b></summary>
-
-与一键脚本等价。**第 ③ 步可重复执行；①② 只需做一次。**
-
-**macOS / Linux（bash）**：
-
-```sh
-cd ~/.dsh/profiles/web
-
-# ① 放行 node-pty / protobufjs 的构建脚本（pnpm 11 默认拦截；pnpm 10 可跳过）
-pnpm approve-builds --all
-
-# ② 放行「发布不足 24h」的新版本（装老版本可跳过；若已有该键，把下面那行并入其下即可）
-cat >> pnpm-workspace.yaml <<'EOF'
-minimumReleaseAgeExclude:
-  - dsh-better-sidebar
-EOF
-
-# ③ 安装并自动挂载（不带 @版本 = npm 的 latest；固定版本写 dsh-better-sidebar@0.12.3）
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-```
-
-**Windows（PowerShell）**：
-
-```powershell
-cd ~\.dsh\profiles\web
-
-# ① 放行构建脚本
-pnpm approve-builds --all
-
-# ② 放行新版本（一次性；若已有该键，把 - dsh-better-sidebar 并入其下即可）
-Add-Content -Path pnpm-workspace.yaml -Value "`nminimumReleaseAgeExclude:`n  - dsh-better-sidebar"
-
-# ③ 安装并自动挂载
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-```
-
-</details>
-
-<details>
-<summary><b>脚本内部做了什么（技术细节）</b></summary>
-
-一键脚本自动完成 4 件事（全部幂等，可安全重复执行）：
-
-1. 预写 `allowBuilds`（node-pty / protobufjs），规避 pnpm 11 的构建脚本拦截；
-2. 预写 `minimumReleaseAgeExclude`，放行「发布不足 24 小时」的新版本；
-3. 执行 `dsh plugin --profile web add dsh-better-sidebar`：登记依赖 → 识别包内 `dsh.bundle.patch` → 自动注册进 `dsh.profile.bundles` 挂载；
-4. 清理旧版残留的手动挂载行，避免「双挂载」（页面出现两个侧边栏）。
-
-`curl | bash` / `irm | iex` 会执行远程代码——脚本已随仓库开源（`scripts/install.sh` / `scripts/install.ps1`），可先下载审阅。插件以 npm 包 `dsh-better-sidebar@0.12.3` 发布，通过 `dsh.bundle.patch`（随包的 `cordis.patch.yml`）由官方 CLI 自动挂载，**不修改 DSH 源码**。
-
-</details>
 
 <details>
 <summary><b>更新</b></summary>
@@ -142,7 +70,7 @@ npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sideba
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-或重跑一次一键脚本；也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**硬刷新浏览器**（Cmd/Ctrl+Shift+R）即可（client 改动无需重启 DSH）。
+也可把 `~/.dsh/profiles/web/package.json` 里的版本号改高后 `pnpm install`。改完**硬刷新浏览器**（Cmd/Ctrl+Shift+R）即可（client 改动无需重启 DSH）。
 
 </details>
 
@@ -151,13 +79,13 @@ dsh plugin --profile web add dsh-better-sidebar
 
 | 现象 | 原因与解决 |
 |---|---|
-| 报 `Ignored build scripts` | pnpm 11 拦截构建脚本。跑 `pnpm approve-builds --all`（一键脚本已自动处理）。 |
-| 报 `minimum release age` / 版本不足 24h | 装的版本发布不足 24 小时。等 24h 或重跑一次（pnpm 会自动补 `minimumReleaseAgeExclude`）；一键脚本已自动处理。 |
+| 报 `Ignored build scripts` | pnpm 11 拦截构建脚本。在 profile 目录（`~/.dsh/profiles/web`）跑 `pnpm approve-builds --all`。 |
+| 报 `minimum release age` / 版本不足 24h | 装的版本发布不足 24 小时。等 24h 或重跑一次（pnpm 会自动补 `minimumReleaseAgeExclude`）。 |
 | 报「找不到 profile 目录」 | 先跑一次 `dsh web`，让它初始化 `~/.dsh/profiles/web`。 |
-| 页面出现**两个侧边栏** | 双挂载：`~/.dsh/profiles/web/cordis.patch.yml` 还留着旧的手动挂载行，删掉那段 `- insert: ... better-sidebar ...`（一键脚本会自动清）。 |
+| 页面出现**两个侧边栏** | 双挂载：`~/.dsh/profiles/web/cordis.patch.yml` 还留着旧的手动挂载行，删掉那段 `- insert: ... better-sidebar ...`。 |
 | Windows 下终端无法使用 | `node-pty` 依赖预编译二进制；若当前 Node 版本没有对应产物，需装编译工具链（VS Build Tools）。主流 Node 版本一般已有预编译。 |
-| 终端提示「node-pty 加载失败」 | `node-pty` 安装缺失/损坏（如 pnpm 拦截了构建脚本）。终端横幅会给出修复命令：复制到 DSH 所在环境的终端/cmd 执行（POSIX 为 `bash "<插件路径>/scripts/install.sh" --repair`，Windows 为对应 `install.ps1 -Repair`；或直接重跑一键安装脚本），完成后重启 DSH 并点重试。插件与 DSH 核心使用同一 `node-pty@^1.1.0`，修复后两者同步恢复。 |
-| Windows 没有 bash / curl | 直接用 PowerShell 一键命令；或安装 Git Bash / WSL 再跑 bash 命令。 |
+| 终端提示「node-pty 加载失败」 | `node-pty` 安装缺失/损坏（如 pnpm 拦截了构建脚本）。终端横幅会给出修复命令：复制到 DSH 所在环境的终端/cmd 执行（在 `~/.dsh/profiles/web` 下 `pnpm approve-builds --all && pnpm rebuild node-pty`），完成后重启 DSH 并点重试。插件与 DSH 核心使用同一 `node-pty@^1.1.0`，修复后两者同步恢复。 |
+| 提示 `dsh: command not found` | 先安装 DSH；或直接用 `npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar`。 |
 
 </details>
 

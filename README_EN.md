@@ -38,102 +38,30 @@
 
 <small>v0.12.3</small>
 
-> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the table below for details.
+<div align="center">
+  <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="45%" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a>
+  <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="45%" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a>
+</div>
 
-| Feature | Description | Screenshot |
-|---|---|---|
-| 📐 Position compat mode | New "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default); the shift distance is customizable in the gear popup (0–120px) | |
-| 🔌 Service API base | Complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`) | <a href="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0"><img width="480" alt="Service API base screenshot" src="https://github.com/user-attachments/assets/946f7028-4967-461e-a750-d1b5056b62d0" /></a> |
-| ➕ Add Plugins | Recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin | <a href="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e"><img width="480" alt="Add Plugins screenshot" src="https://github.com/user-attachments/assets/d4385b7e-aab4-425d-a5c4-2da5da81a34e" /></a> |
-| 🖱️ Tab-bar scroll | Mouse-wheel horizontal scrolling on the tab bar | |
-| 🐛 Fixes | Remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path | |
+> 📝 **Note**: this release adds "Position compat mode" — reserves top space for the native Windows title bar (top-right), shifting the sidebar buttons and content below it (0–120px, customizable in the gear popup). It ships together with the service API base introduced since v0.12.0: capability detection, state subscription, tab badges, lifecycle callbacks, external-link claiming (`urlTarget`) and plugin-owned settings are all in place for deep third-party integration; settings gained the "Add Plugins" recommended catalog. See the update notes below.
+
+**v0.12.\* update notes**:
+
+- 📐 **Position compat mode**: new "Position compatibility mode" setting: reserves top space for the native Windows title bar (top-right) so the sidebar buttons and content sit below it (off by default); the shift distance is customizable in the gear popup (0–120px)
+- 🔌 **Service API base**: complete type exports + `version`/`features` capability detection, state subscription (`getSnapshot`/`subscribeState`), tab `badge`, `onOpen`/`onActivate`/`onClose` lifecycle callbacks, `updateTab`/`activateTab`/`openFile`, targeted open, `meta` persisted across reloads, plugin-owned settings (`pluginToggles`/`render`), external-link claim (`urlTarget`)
+- ➕ **Add Plugins**: recommended plugin catalog in settings + one-click copy install command; built-in Office preview moved to the recommended plugin
+- 🖱️ **Tab-bar scroll**: mouse-wheel horizontal scrolling on the tab bar
+- 🐛 **Fixes**: remote access 403 (trust fence now uses `trustedHosts`), sidebar crash [#31](https://github.com/omdsh-dev/DSH-better-sidebar/issues/31), Windows HTML-preview drive-path
 
 ## 🚀 Installation
 
 **Prerequisites**: DSH installed (`dsh web` boots), Node.js ≥ 20, pnpm ≥ 10.
 
-**macOS / Linux** (also works in Git Bash / WSL on Windows):
-
 ```sh
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash
-```
-
-**Windows (PowerShell 5.1+ / pwsh)**:
-
-```powershell
-irm https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1 | iex
+dsh plugin --profile web add dsh-better-sidebar
 ```
 
 Then **hard-refresh the browser** (Cmd/Ctrl+Shift+R) to see the sidebar (DSH hot-reloads client changes; only host-half updates need a restart).
-
-<details>
-<summary><b>Pin a version / auto-restart (optional)</b></summary>
-
-```sh
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.sh | bash -s 0.12.3 --restart
-
-# Windows PowerShell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/omdsh-dev/DSH-better-sidebar/main/scripts/install.ps1'))) -Version 0.12.3 -Restart
-```
-
-Not sure? Add `--dry-run` (`-DryRun` in PowerShell) to preview before running.
-
-</details>
-
-<details>
-<summary><b>Manual install (step by step)</b></summary>
-
-Equivalent to the one-click script. **Step ③ is repeatable; ①② only need to run once.**
-
-**macOS / Linux (bash)**:
-
-```sh
-cd ~/.dsh/profiles/web
-
-# ① Allow node-pty / protobufjs build scripts (pnpm 11 blocks them by default; skip on pnpm 10)
-pnpm approve-builds --all
-
-# ② Allow versions published less than 24h ago (skip for older releases; if the key already exists, merge the line under it instead)
-cat >> pnpm-workspace.yaml <<'EOF'
-minimumReleaseAgeExclude:
-  - dsh-better-sidebar
-EOF
-
-# ③ Install and auto-mount (no @version = npm's latest; pin with dsh-better-sidebar@0.12.3)
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-```
-
-**Windows (PowerShell)**:
-
-```powershell
-cd ~\.dsh\profiles\web
-
-# ① Allow build scripts
-pnpm approve-builds --all
-
-# ② Allow fresh releases (once; if the key already exists, merge - dsh-better-sidebar under it instead)
-Add-Content -Path pnpm-workspace.yaml -Value "`nminimumReleaseAgeExclude:`n  - dsh-better-sidebar"
-
-# ③ Install and auto-mount
-npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar
-```
-
-</details>
-
-<details>
-<summary><b>What the script does (technical details)</b></summary>
-
-The one-click script does four things, all idempotent (safe to re-run):
-
-1. Pre-writes `allowBuilds` (node-pty / protobufjs) to dodge pnpm 11's build-script block;
-2. Pre-writes `minimumReleaseAgeExclude` to allow versions younger than 24 hours;
-3. Runs `dsh plugin --profile web add dsh-better-sidebar`: registers the dependency → detects `dsh.bundle.patch` → auto-appends the plugin to `dsh.profile.bundles`;
-4. Removes any leftover hand-written mount line to avoid double-mounting (two sidebars on the page).
-
-`curl | bash` / `irm | iex` executes remote code — the scripts are open source in the repo (`scripts/install.sh` / `scripts/install.ps1`); download and review them first if you prefer. The plugin ships as npm package `dsh-better-sidebar@0.12.3` and mounts via `dsh.bundle.patch` (the shipped `cordis.patch.yml`), so the DSH source is never modified.
-
-</details>
 
 <details>
 <summary><b>Updating</b></summary>
@@ -142,7 +70,7 @@ The one-click script does four things, all idempotent (safe to re-run):
 dsh plugin --profile web add dsh-better-sidebar
 ```
 
-or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.12.3"`) and run `pnpm install`. Then hard-refresh the browser (Cmd/Ctrl+Shift+R) — client changes do not need a DSH restart.
+or bump the version in `~/.dsh/profiles/web/package.json` (e.g. `"^0.12.3"`) and run `pnpm install`. Then hard-refresh the browser (Cmd/Ctrl+Shift+R) — client changes do not need a DSH restart.
 
 </details>
 
@@ -151,13 +79,13 @@ or re-run the one-click script; or bump the version in `~/.dsh/profiles/web/pack
 
 | Symptom | Cause & fix |
 |---|---|
-| `Ignored build scripts` | pnpm 11 blocked build scripts. Run `pnpm approve-builds --all` (the one-click script handles it). |
-| `minimum release age` / version `< 24h` | The release is younger than 24 hours. Wait, or re-run once (pnpm auto-adds `minimumReleaseAgeExclude`); the one-click script handles it. |
+| `Ignored build scripts` | pnpm 11 blocked build scripts. Run `pnpm approve-builds --all` in the profile directory (`~/.dsh/profiles/web`). |
+| `minimum release age` / version `< 24h` | The release is younger than 24 hours. Wait, or re-run once (pnpm auto-adds `minimumReleaseAgeExclude`). |
 | "profile directory not found" | Run `dsh web` once so it initializes `~/.dsh/profiles/web`. |
-| Two sidebars on the page | Double-mount: `~/.dsh/profiles/web/cordis.patch.yml` still has the old hand-written `- insert: ... better-sidebar ...` line — delete it (the one-click script cleans it). |
+| Two sidebars on the page | Double-mount: `~/.dsh/profiles/web/cordis.patch.yml` still has the old hand-written `- insert: ... better-sidebar ...` line — delete it. |
 | Terminal fails on Windows | `node-pty` relies on prebuilt binaries; if none match your Node version, install a build toolchain (VS Build Tools). Mainstream Node versions are usually covered. |
-| Terminal shows "node-pty failed to load" | The `node-pty` install is missing or broken (e.g. pnpm skipped its build script). The terminal banner shows a repair command — copy it into a terminal/cmd on the DSH machine and run it (POSIX: `bash "<plugin path>/scripts/install.sh" --repair`; Windows: the matching `install.ps1 -Repair`; or re-run the one-click installer), then restart DSH and click Retry. The plugin and DSH core share the same `node-pty@^1.1.0`, so the repair restores both. |
-| No bash / curl on Windows | Use the PowerShell one-click command, or install Git Bash / WSL and run the bash commands. |
+| Terminal shows "node-pty failed to load" | The `node-pty` install is missing or broken (e.g. pnpm skipped its build script). The terminal banner shows a repair command — copy it into a terminal/cmd on the DSH machine and run it (in `~/.dsh/profiles/web`: `pnpm approve-builds --all && pnpm rebuild node-pty`), then restart DSH and click Retry. The plugin and DSH core share the same `node-pty@^1.1.0`, so the repair restores both. |
+| `dsh: command not found` | Install DSH first, or run `npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar`. |
 
 </details>
 
