@@ -25,6 +25,10 @@ export interface FsEntry {
   path: string
   isDir: boolean
   hidden: boolean
+  /** Whether the row is a symlink; `isDir` then describes the link's target. */
+  isSymlink: boolean
+  /** For symlinks: the target is missing or unreadable (stat failed). */
+  broken: boolean
 }
 
 /** Git status entry (host git shape). */
@@ -207,9 +211,14 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
   return `/sidebar/file?${params.toString()}`
 }
 
-/** Absolute URL of the HTML preview route (see html-route.ts): the path is
- *  fully encoded so the previewed page's relative assets resolve back into
- *  the same route with the session scope intact. */
+/**
+ * Absolute URL of the HTML preview route (see html-route.ts): the path is
+ * fully encoded so the previewed page's relative assets resolve back into
+ * the same route with the session scope intact. The UNC marker is
+ * platform-neutral — the host's requireAbsolute resolves the decoded
+ * forward-slash `//server/share/...` form on both win32 and POSIX — so no
+ * client-side platform signal is needed.
+ */
 export function htmlUrl(scope: SessionScope, path: string): string {
   return encodeHtmlUrl(scope.sessionId, path)
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { relativeTo } from '../src/client/paths.ts'
+import { isAbsolutePath, relativeTo } from '../src/client/paths.ts'
 import { resolveSidebarPath } from '../src/client/produced-files.ts'
+import { htmlUrl } from '../src/client/api.ts'
 
 describe('path helpers', () => {
   it('derives relative paths under the cwd (and "." for the cwd itself)', () => {
@@ -31,5 +32,38 @@ describe('path helpers', () => {
     expect(resolveSidebarPath('C:\\work\\proj', 'src/a.ts')).toBe('C:\\work\\proj\\src/a.ts')
     expect(resolveSidebarPath('C:\\work\\proj', 'C:\\abs\\x.ts')).toBe('C:\\abs\\x.ts')
     expect(resolveSidebarPath('C:\\work\\proj\\', 'C:\\abs\\x.ts')).toBe('C:\\abs\\x.ts')
+  })
+
+  it('keeps UNC produced paths absolute instead of joining them onto the cwd', () => {
+    // Pure client function: UNC detection is platform-independent, so these
+    // assertions run on every host without a platform guard.
+    expect(resolveSidebarPath('C:\\work\\proj', '\\\\server\\share\\abs\\x.ts'))
+      .toBe('\\\\server\\share\\abs\\x.ts')
+    expect(resolveSidebarPath('C:\\work\\proj', '//server/share/abs/x.ts'))
+      .toBe('//server/share/abs/x.ts')
+    // A relative path under a UNC cwd joins with backslashes.
+    expect(resolveSidebarPath('\\\\server\\share\\proj', 'src/a.ts'))
+      .toBe('\\\\server\\share\\proj\\src/a.ts')
+  })
+
+  it('mirrors the host absolute-path notion without node:path', () => {
+    expect(isAbsolutePath('/abs/x.ts')).toBe(true)
+    expect(isAbsolutePath('C:\\abs\\x.ts')).toBe(true)
+    expect(isAbsolutePath('C:/abs/x.ts')).toBe(true)
+    expect(isAbsolutePath('\\\\server\\share\\x.ts')).toBe(true)
+    expect(isAbsolutePath('//server/share/x.ts')).toBe(true)
+    expect(isAbsolutePath('C:relative.ts')).toBe(false)
+    expect(isAbsolutePath('rel/x.ts')).toBe(false)
+  })
+
+  it('htmlUrl always marks UNC paths (platform-neutral marker)', () => {
+    // The marker is platform-neutral now: the host resolves the decoded
+    // '//server/share/...' form per-platform, so no cwd/OS signal is needed.
+    expect(htmlUrl({ sessionId: 's' }, '\\\\server\\share\\proj\\a.html'))
+      .toBe('/sidebar/html/s//server/share/proj/a.html')
+    expect(htmlUrl({ sessionId: 's', cwd: '/home/me' }, '//server/share/a.html'))
+      .toBe('/sidebar/html/s//server/share/a.html')
+    expect(htmlUrl({ sessionId: 's', cwd: '/home/me' }, '/home/me/index.html'))
+      .toBe('/sidebar/html/s/home/me/index.html')
   })
 })
