@@ -215,10 +215,15 @@ function fileUrl(scope: SessionScope, path: string, download: boolean): string {
 /**
  * Absolute URL of the HTML preview route (see html-route.ts): the path is
  * fully encoded so the previewed page's relative assets resolve back into
- * the same route with the session scope intact. The session cwd's shape
- * supplies the platform guard for the UNC marker (the browser OS may differ
- * from the host OS, so no client-side platform detection is used).
+ * the same route with the session scope intact. The platform guard for the
+ * UNC marker comes from the session cwd's shape (the browser OS may differ
+ * from the host OS, so no client-side platform detection is used), extended
+ * by the file path itself: an unambiguous backslash UNC path keeps its '//'
+ * marker even while the cwd is still hydrating or arrives in forward-slash
+ * form. Forward-slash `//` paths stay ambiguous without a Windows-style cwd,
+ * so they are deliberately NOT marked on their own — a POSIX session keeps
+ * them as ordinary absolute paths.
  */
 export function htmlUrl(scope: SessionScope, path: string): string {
-  return encodeHtmlUrl(scope.sessionId, path, isWindowsStylePath(scope.cwd ?? ''))
+  return encodeHtmlUrl(scope.sessionId, path, isWindowsStylePath(scope.cwd ?? '') || isWindowsStylePath(path))
 }
