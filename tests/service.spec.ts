@@ -1031,4 +1031,24 @@ describe('independent CR follow-up fixes', () => {
       { kind: 'close', cwd: '/work' },
     ])
   })
+
+  it('SIDEBAR_FEATURES snapshot and service version checks', () => {
+    expect(SIDEBAR_FEATURES).toContain('urlTarget')
+    expect(SIDEBAR_FEATURES).toContain('pluginSettings')
+    expect(SIDEBAR_FEATURES).toContain('tabLifecycle')
+    expect(SIDEBAR_FEATURES).toContain('badge')
+    expect(SIDEBAR_FEATURES).toContain('updateTab')
+    expect(SIDEBAR_FEATURES).toContain('openFile')
+    expect(SIDEBAR_FEATURES).toContain('targetedOpen')
+    expect(SIDEBAR_FEATURES).toContain('stateSubscription')
+    expect(SIDEBAR_FEATURES).toContain('tabMeta')
+    expect(SIDEBAR_SERVICE_VERSION).toMatch(/^\d+\.\d+\.\d+/)
+  })
+
+  it('registerFileViewer throws on duplicate id', () => {
+    const store = createSidebarStore()
+    const service = createBetterSidebarService(store)
+    service.registerFileViewer({ id: 'csv', exts: ['csv'], fetchStrategy: 'custom', component: () => null })
+    expect(() => service.registerFileViewer({ id: 'csv', exts: ['csv'], fetchStrategy: 'custom', component: () => null })).toThrow(/already registered/)
+  })
 })
